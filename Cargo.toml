@@ -9,6 +9,7 @@ license = "MIT"
 repository = "https://github.com/FirminMoyen/EmeraldMD"
 
 [workspace.dependencies]
+dunce = "1.0"
 emerald-core = { path = "crates/emerald-core" }
 notify = "8.2"
 regex = "1.13"
