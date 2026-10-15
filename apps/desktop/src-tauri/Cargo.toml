@@ -16,6 +16,8 @@ tauri-build = { version = "2.7", features = [] }
 
 [dependencies]
 emerald-core.workspace = true
+# Server tokens: macOS Keychain, Windows Credential Manager, Secret Service on Linux.
+keyring = "4.2"
 notify.workspace = true
 serde.workspace = true
 serde_json.workspace = true
