@@ -3,6 +3,15 @@ export { LinkResolver } from './link-resolver';
 export { getLinkpath, parseLinktext } from './linktext';
 export { MetadataCache } from './metadata-cache';
 export { fileName, joinPath, normalizePath, parentPath, resolveRelative, splitExtension } from './path';
+export {
+	RemoteBackend,
+	RemoteError,
+	normalizeServerUrl,
+	type RemoteBackendOptions,
+	type RemoteStatus,
+	type RemoteVaultInfo,
+	type WebSocketLike,
+} from './remote-backend';
 export * from './types';
 export { TAbstractFile, TFile, TFolder, Vault, type FileStats } from './vault';
 

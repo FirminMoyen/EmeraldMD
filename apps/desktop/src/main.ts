@@ -6,6 +6,7 @@ import {
 	type MetadataCache,
 	type TAbstractFile,
 	type Vault,
+	type VaultBackend,
 	type VaultSnapshot,
 	type VaultUpdate,
 } from '@emeraldmd/core';
@@ -14,6 +15,7 @@ import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { ask, open as openDialog } from '@tauri-apps/plugin-dialog';
+import { RemoteVaults } from './remote';
 import { TauriBackend } from './tauri-backend';
 
 /** Same autosave delay as Obsidian. */
@@ -39,6 +41,7 @@ function isInside(file: TAbstractFile, folder: TAbstractFile): boolean {
 
 class EmeraldApp {
 	private vault: Vault | null = null;
+	private backend: VaultBackend | null = null;
 	private metadataCache: MetadataCache | null = null;
 	private activeFile: TFile | null = null;
 	private saveTimer: ReturnType<typeof setTimeout> | undefined;
@@ -48,6 +51,7 @@ class EmeraldApp {
 	private renderQueued = false;
 	private readonly collapsed = new Set<string>();
 	private readonly editor: MarkdownEditor;
+	private readonly remote: RemoteVaults;
 	private readonly el = {
 		emptyState: $('empty-state'),
 		workspace: $('workspace'),
@@ -95,11 +99,21 @@ class EmeraldApp {
 			}
 		});
 		this.followSystemTheme();
-		void listen<VaultUpdate>('vault-changed', (event) => this.vault?.applyUpdate(event.payload));
+		this.remote = new RemoteVaults({
+			attach: (backend, snapshot, options) => this.attach(backend, snapshot, options),
+			applyUpdate: (update) => this.vault?.applyUpdate(update),
+			showEmptyState: () => this.showEmptyState(),
+			notice: (message) => this.notice(message),
+		});
+		// The local vault's watcher; a remote vault's changes come through RemoteVaults.
+		void listen<VaultUpdate>('vault-changed', (event) => {
+			if (this.backend instanceof TauriBackend) this.vault?.applyUpdate(event.payload);
+		});
 		void getCurrentWindow().onCloseRequested(() => this.flush());
 	}
 
 	async start(): Promise<void> {
+		if (await this.remote.reopenLast()) return;
 		const last = await invoke<string | null>('last_vault');
 		if (last) {
 			try {
@@ -142,7 +156,16 @@ class EmeraldApp {
 	private async open(path: string): Promise<void> {
 		await this.flush();
 		const snapshot = await invoke<VaultSnapshot>('open_vault', { path });
-		const { vault, metadataCache } = openVault(new TauriBackend(), snapshot);
+		await this.attach(new TauriBackend(), snapshot);
+	}
+
+	/** Shows a vault, local or remote. `keepActiveFile`: reopen the same note if it still exists. */
+	private async attach(backend: VaultBackend, snapshot: VaultSnapshot, options: { keepActiveFile?: boolean } = {}): Promise<void> {
+		await this.flush();
+		const keep = options.keepActiveFile ? this.activeFile?.path : undefined;
+		this.remote.vaultOpened(backend);
+		this.backend = backend;
+		const { vault, metadataCache } = openVault(backend, snapshot);
 		this.vault = vault;
 		this.metadataCache = metadataCache;
 		this.activeFile = null;
@@ -163,7 +186,7 @@ class EmeraldApp {
 		this.el.emptyState.hidden = true;
 		this.el.workspace.hidden = false;
 		this.renderTree();
-		const recent = vault.getMarkdownFiles().sort((a, b) => b.stat.mtime - a.stat.mtime)[0];
+		const recent = (keep && vault.getFileByPath(keep)) || vault.getMarkdownFiles().sort((a, b) => b.stat.mtime - a.stat.mtime)[0];
 		if (recent) await this.openFile(recent);
 		else this.closeFile();
 	}

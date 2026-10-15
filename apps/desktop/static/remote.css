@@ -1,0 +1,244 @@
+/*
+ * Remote vaults (src/remote/): the "Connect to server" dialog, the recent
+ * servers on the start screen, and the connection dot next to the vault name.
+ */
+
+/* Start screen */
+
+.empty-card #connect-server {
+	margin-inline-start: 8px;
+}
+
+.mod-cta.mod-secondary {
+	background: var(--background-secondary);
+	color: var(--text-normal);
+	box-shadow: inset 0 0 0 1px var(--background-modifier-border);
+}
+
+.mod-cta.mod-secondary:hover {
+	background: var(--background-modifier-hover);
+}
+
+.emerald-remote-recent {
+	margin-top: 28px;
+	text-align: start;
+}
+
+.emerald-connect-heading {
+	margin: 0 0 6px;
+	color: var(--text-muted);
+	font-size: 12px;
+	font-weight: 600;
+	text-transform: uppercase;
+	letter-spacing: 0.04em;
+}
+
+.emerald-remote-row {
+	display: flex;
+	align-items: center;
+	gap: 4px;
+}
+
+.emerald-remote-item {
+	flex: 1;
+	min-width: 0;
+	display: flex;
+	align-items: baseline;
+	gap: 8px;
+	padding: 6px 8px;
+	border: 0;
+	border-radius: var(--radius-s);
+	background: transparent;
+	text-align: start;
+	cursor: pointer;
+}
+
+.emerald-remote-item:hover,
+.emerald-remote-item:focus-visible {
+	background: var(--background-modifier-hover);
+}
+
+.emerald-remote-name {
+	font-weight: 600;
+	white-space: nowrap;
+}
+
+.emerald-remote-host {
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+	color: var(--text-muted);
+	font-size: 12px;
+}
+
+.emerald-remote-forget {
+	font-size: 16px;
+}
+
+/* Connection dot next to the vault name */
+
+.emerald-remote-status {
+	flex: none;
+	width: 8px;
+	height: 8px;
+	margin-inline-end: 4px;
+	border-radius: 50%;
+	background: var(--text-faint);
+}
+
+.emerald-remote-status[data-status='connected'] {
+	background: var(--interactive-accent);
+}
+
+.emerald-remote-status[data-status='reconnecting'],
+.emerald-remote-status[data-status='connecting'] {
+	background: #d99a1e;
+	animation: emerald-remote-pulse 1.2s ease-in-out infinite;
+}
+
+.emerald-remote-status[data-status='unauthorized'] {
+	background: #d0453a;
+}
+
+@keyframes emerald-remote-pulse {
+	50% {
+		opacity: 0.35;
+	}
+}
+
+/* Dialog */
+
+.emerald-connect-modal.modal-container {
+	position: fixed;
+	inset: 0;
+	z-index: 20;
+	display: grid;
+	place-items: center;
+	padding: 16px;
+}
+
+.emerald-connect-modal .modal-bg {
+	position: absolute;
+	inset: 0;
+	background: rgba(0, 0, 0, 0.45);
+}
+
+.emerald-connect-modal .modal {
+	position: relative;
+	width: min(460px, 100%);
+	max-height: calc(100vh - 32px);
+	overflow: auto;
+	padding: 20px 22px;
+	border: 1px solid var(--background-modifier-border);
+	border-radius: var(--radius-m);
+	background: var(--background-primary);
+	box-shadow: 0 12px 40px rgba(0, 0, 0, 0.3);
+}
+
+.emerald-connect-modal .modal-close-button {
+	position: absolute;
+	top: 10px;
+	right: 10px;
+	width: 28px;
+	height: 28px;
+	border: 0;
+	border-radius: var(--radius-s);
+	background: transparent;
+	color: var(--text-muted);
+	font-size: 20px;
+	line-height: 1;
+	cursor: pointer;
+}
+
+.emerald-connect-modal .modal-close-button:hover {
+	background: var(--background-modifier-hover);
+	color: var(--text-normal);
+}
+
+.emerald-connect-modal .modal-title {
+	margin-bottom: 8px;
+	font-size: 18px;
+	font-weight: 600;
+}
+
+.emerald-connect-intro {
+	margin: 0 0 16px;
+	color: var(--text-muted);
+	line-height: 1.5;
+}
+
+.emerald-connect-recent {
+	margin-bottom: 16px;
+	padding-bottom: 12px;
+	border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.emerald-connect-field {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	margin-bottom: 12px;
+	font-weight: 600;
+}
+
+.emerald-connect-field input {
+	padding: 7px 10px;
+	border: 1px solid var(--background-modifier-border);
+	border-radius: var(--radius-s);
+	background: var(--background-primary);
+	color: var(--text-normal);
+	font: inherit;
+	font-weight: 400;
+}
+
+.emerald-connect-field input:focus {
+	outline: 2px solid var(--interactive-accent);
+	outline-offset: -1px;
+}
+
+.emerald-connect-remember {
+	display: flex;
+	align-items: flex-start;
+	gap: 8px;
+	margin-bottom: 12px;
+	color: var(--text-muted);
+	line-height: 1.4;
+}
+
+.emerald-connect-remember input {
+	margin: 2px 0 0;
+	accent-color: var(--interactive-accent);
+}
+
+.emerald-connect-error {
+	margin-bottom: 12px;
+	padding: 8px 10px;
+	border-radius: var(--radius-s);
+	background: rgba(208, 69, 58, 0.12);
+	color: var(--text-normal);
+	line-height: 1.4;
+}
+
+.emerald-connect-choice {
+	margin-bottom: 12px;
+}
+
+.emerald-connect-modal .modal-button-container {
+	display: flex;
+	justify-content: flex-end;
+	gap: 8px;
+}
+
+.emerald-connect-modal .modal-button-container button:not(.mod-cta) {
+	padding: 8px 14px;
+	border: 1px solid var(--background-modifier-border);
+	border-radius: var(--radius-m);
+	background: transparent;
+	cursor: pointer;
+}
+
+.emerald-connect-form.is-busy .mod-cta {
+	opacity: 0.7;
+	cursor: progress;
+}
