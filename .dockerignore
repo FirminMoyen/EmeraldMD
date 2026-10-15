@@ -1,0 +1,11 @@
+.git
+.claude
+.github
+**/node_modules
+**/dist
+target
+apps/desktop/src-tauri/gen
+docs
+fixtures
+*.log
+.DS_Store
