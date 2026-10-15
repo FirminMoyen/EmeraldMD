@@ -6,7 +6,7 @@ members = ["crates/*", "apps/desktop/src-tauri"]
 version = "0.1.0"
 edition = "2024"
 license = "MIT"
-repository = "https://github.com/emeraldmd/emeraldmd"
+repository = "https://github.com/FirminMoyen/EmeraldMD"
 
 [workspace.dependencies]
 emerald-core = { path = "crates/emerald-core" }
