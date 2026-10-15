@@ -1,6 +1,7 @@
 //! Tauri shell: exposes `emerald-core` to the webview as commands, and pushes
 //! changes made outside the app as `vault-changed` events.
 
+mod remote;
 mod search;
 
 use std::fs;
@@ -149,6 +150,11 @@ pub fn run() {
             create_folder,
             rename_path,
             trash_path,
+            remote::remote_vaults,
+            remote::remember_remote_vault,
+            remote::forget_remote_vault,
+            remote::remote_token,
+            remote::set_reopen_remote_vault,
             search::search_vault,
         ])
         .run(tauri::generate_context!())

@@ -89,8 +89,8 @@ Windows, iOS/iPadOS and Android with one shell.
 emeraldmd/
 ├─ crates/
 │  ├─ emerald-core/   Vault paths, file ops, Markdown metadata parser, link index, backlinks
-│  ├─ emerald-sync/   (phase 3) sync protocol + conflict resolution
-│  └─ emerald-server/ (phase 3) self-hosted server (HTTP + WebSocket, auth, Docker)
+│  ├─ emerald-sync/   (phase 3, next slice) sync protocol + conflict resolution
+│  └─ emerald-server/ self-hosted server: `emeraldmd-server` (HTTP + WebSocket, tokens, Docker)
 ├─ packages/          TypeScript, runs in the webview
 │  ├─ core/           Vault/TFile/TFolder/MetadataCache mirror, Events, normalizePath
 │  ├─ editor/         CodeMirror 6 source mode (+ live preview later), Vim, `Editor` facade
@@ -129,8 +129,8 @@ target and gets dedicated CI coverage.
 | Mode | Backend | Notes |
 |---|---|---|
 | Local | `emerald-core` on the device | Identical on-disk layout to Obsidian; open an existing vault with no migration. |
-| Remote (online) | HTTP client to `emerald-server` | Reads and writes go straight to the server. Simple, needs a connection. |
-| Remote (synced) | local `emerald-core` + `emerald-sync` | Local copy plus bidirectional sync with the server. Works offline; conflicts are resolved with three-way merge for text and keep-both for binaries. |
+| Remote (online) | HTTP client to `emerald-server` (`RemoteBackend`) | Reads and writes go straight to the server. Simple, needs a connection. Implemented; see section 4. |
+| Remote (synced) | local `emerald-core` + `emerald-sync` | Local copy plus bidirectional sync with the server. Works offline; conflicts are resolved with three-way merge for text and keep-both for binaries. Next slice of phase 3. |
 
 Server: a single Rust binary or Docker image. It exposes vault directories over
 authenticated HTTPS (REST for files, WebSocket for change notifications), and
@@ -157,7 +157,70 @@ web client.
 
 ---
 
-## 4. Roadmap
+## 4. Self-hosting (phase 3)
+
+The first slice is the "remote, online" mode: the app talks to the server
+for every read and write. Setup and the HTTP API are in
+[self-hosting.md](self-hosting.md).
+
+**Server (`crates/emerald-server`, binary `emeraldmd-server`).** An axum
+server that serves one or more vault folders. Each vault is an
+`emerald_core::VaultSession`, the same code the desktop app runs locally, so
+path checks, hidden-file rules, trash instead of delete, metadata and link
+resolution behave identically. Every mutation returns the `VaultUpdate` the
+desktop Tauri commands return. A `notify` watcher on each vault turns changes
+made outside the server into updates too, as in the desktop shell.
+
+- **Event stream.** `GET /api/vaults/{id}/events` is a WebSocket pushing
+  numbered updates. The server keeps the last 1024 per vault. A client
+  passes the `epoch` and `version` from its snapshot (or from the last update
+  it saw) and gets what it missed; if that is no longer possible (the server
+  restarted, which changes the epoch, or the gap is too long) it is told to
+  `resync` and reloads the snapshot. Each client sends an id with its
+  requests, and its own changes are not echoed back, because it already has
+  them from the HTTP response.
+- **Auth.** Bearer tokens on every request. The config holds argon2id hashes
+  only; a verified token is remembered in memory by its SHA-256 digest, so
+  argon2 runs once per token, and at most two verifications run at a time.
+  Browsers cannot set headers on a WebSocket, so the app exchanges its token
+  for a single-use ticket valid for 30 seconds. Tokens can be limited to some
+  vaults; vaults a token cannot open answer 404, like missing ones.
+- **CORS** allows the app's webview origins (`tauri://localhost`,
+  `http(s)://tauri.localhost`) plus configured extras. TLS is left to a
+  reverse proxy.
+- **Deployment.** One static binary configured by TOML plus `EMERALDMD_*`
+  variables; a multi-stage `Dockerfile` produces a distroless image running
+  as an unprivileged user.
+
+**Client (`packages/core/src/remote-backend.ts`).** `RemoteBackend`
+implements `VaultBackend` over `fetch`, so the `Vault` mirror and
+`MetadataCache` work unchanged. It owns the event stream: ticket, WebSocket,
+reconnect with exponential backoff and jitter (0.5 s doubling up to 30 s),
+resuming from the last version, and on `resync` it fetches a fresh snapshot
+and hands it to the app to rebuild the mirror.
+
+**Desktop (`apps/desktop/src/remote/`, `src-tauri/src/remote.rs`).** "Connect
+to server" on the start screen and next to the vault switcher asks for a URL
+and a token, then lists the token's vaults. Recent remote vaults are kept in
+`remote-vaults.json` in the app's config folder; tokens go to the OS keychain
+through the `keyring` crate (macOS Keychain, Windows Credential Manager,
+Secret Service on Linux), never to a settings file. The last vault, local or
+remote, reopens on start. A dot next to the vault name shows the connection
+state. While a remote vault is open, events from the local watcher are
+ignored.
+
+**Next slice: offline sync (`emerald-sync`).** A local copy of the vault
+opened with `emerald-core`, kept in sync with the server: the event stream
+and versions above for server-to-client, a queue of local changes replayed
+on reconnect for client-to-server, and conflict handling (three-way merge for
+text with the last synced version as base, keep-both for binaries). Until
+then, two clients editing the same note at once means the last save wins.
+Also later: users and per-user vault access instead of bare tokens, serving
+binary files (attachments), a web client served by the server, and mobile.
+
+---
+
+## 5. Roadmap
 
 | Phase | Scope | Exit criteria |
 |---|---|---|

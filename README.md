@@ -14,9 +14,9 @@ compatibility strategy and the roadmap.
 > EmeraldMD is an independent project and is not affiliated with Obsidian.
 > "Compatible with Obsidian plugins" describes interoperability only.
 
-## Status: phase 0 (foundations)
+## Status
 
-Implemented on desktop (built and run on macOS so far):
+Phase 0 (foundations), implemented on desktop (built and run on macOS so far):
 
 - Open any folder as a vault (existing Obsidian vaults included). Hidden
   folders such as `.obsidian` and `.trash` are left alone.
@@ -29,15 +29,26 @@ Implemented on desktop (built and run on macOS so far):
 - Live reload of changes made outside the app (another editor, sync tools,
   Obsidian itself).
 
+Self-hosting (phase 3, first slice):
+
+- `emeraldmd-server` serves vault folders over HTTP, with a WebSocket that
+  pushes every change, including edits made directly on the server's disk.
+  Argon2-hashed bearer tokens, a Docker image, and a guide for running it
+  behind HTTPS: [docs/self-hosting.md](docs/self-hosting.md).
+- The desktop app connects to it with **Connect to server** (URL and token).
+  You browse, edit and create notes on the server, and changes from other
+  devices show up live. Tokens are kept in the OS keychain.
+
 Not yet: plugins, themes and snippets, live preview and reading view, search,
-graph, self-hosted server, mobile builds. See the roadmap.
+graph, offline sync with a self-hosted server, mobile builds. See the roadmap.
 
 ## Repository layout
 
 | Path | What |
 |---|---|
 | `crates/emerald-core` | Rust: vault I/O, Markdown metadata parser, link index, `VaultSession` |
-| `packages/core` | TypeScript mirror of the vault and metadata cache, with the plugin API's shapes |
+| `crates/emerald-server` | Rust: `emeraldmd-server`, the self-hosted server (`Dockerfile` at the root) |
+| `packages/core` | TypeScript mirror of the vault and metadata cache, with the plugin API's shapes, and `RemoteBackend` for server vaults |
 | `packages/editor` | CodeMirror 6 editor |
 | `apps/desktop` | Tauri app: `src-tauri/` (Rust shell) and `src/` (UI) |
 | `fixtures/` | Test cases shared by the Rust and TypeScript test suites |
@@ -57,6 +68,17 @@ npm run dev
 
 ```bash
 npm test
+```
+
+To try a self-hosted vault locally, create a token and start the server
+(see [docs/self-hosting.md](docs/self-hosting.md) for the config file):
+
+```bash
+cargo run -p emerald-server -- token new
+```
+
+```bash
+cargo run -p emerald-server -- --config emeraldmd-server.toml
 ```
 
 `npm test` runs Vitest and `cargo test`. `npm run typecheck` type-checks the
