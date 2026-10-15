@@ -1,0 +1,26 @@
+{
+  "name": "emeraldmd",
+  "private": true,
+  "version": "0.0.0",
+  "description": "Open-source, local-first Markdown knowledge base compatible with Obsidian vaults, plugins and themes.",
+  "license": "MIT",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev -w @emeraldmd/desktop",
+    "build": "npm run build -w @emeraldmd/desktop",
+    "test": "vitest run && cargo test --workspace",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.5",
+    "esbuild": "^0.28.2",
+    "typescript": "^7.0.2",
+    "vitest": "^5.0.5"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

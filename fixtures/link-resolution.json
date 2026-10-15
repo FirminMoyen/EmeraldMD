@@ -1,0 +1,31 @@
+{
+  "description": "Shared link-resolution cases. Run by crates/emerald-core (cargo test) and packages/core (vitest) so the Rust index and the TypeScript mirror agree.",
+  "files": [
+    "Home.md",
+    "Projects/Plan.md",
+    "Projects/Ideas.md",
+    "Archive/Plan.md",
+    "Archive/2024/Plan.md",
+    "Assets/diagram.png",
+    "Notes/Note.v2.md",
+    "Notes/Ideas.md"
+  ],
+  "cases": [
+    { "link": "Home", "source": "Projects/Plan.md", "expected": "Home.md" },
+    { "link": "home", "source": "Projects/Plan.md", "expected": "Home.md" },
+    { "link": "Home.md", "source": "Notes/Ideas.md", "expected": "Home.md" },
+    { "link": "Plan", "source": "Projects/Ideas.md", "expected": "Projects/Plan.md" },
+    { "link": "Plan", "source": "Home.md", "expected": "Archive/Plan.md" },
+    { "link": "Ideas", "source": "Notes/Note.v2.md", "expected": "Notes/Ideas.md" },
+    { "link": "Ideas", "source": "Home.md", "expected": "Notes/Ideas.md" },
+    { "link": "Archive/Plan", "source": "Projects/Ideas.md", "expected": "Archive/Plan.md" },
+    { "link": "2024/Plan", "source": "Home.md", "expected": "Archive/2024/Plan.md" },
+    { "link": "./Ideas", "source": "Projects/Plan.md", "expected": "Projects/Ideas.md" },
+    { "link": "../Home", "source": "Projects/Plan.md", "expected": "Home.md" },
+    { "link": "../../Home", "source": "Projects/Plan.md", "expected": null },
+    { "link": "diagram.png", "source": "Home.md", "expected": "Assets/diagram.png" },
+    { "link": "Note.v2", "source": "Home.md", "expected": "Notes/Note.v2.md" },
+    { "link": "Missing", "source": "Home.md", "expected": null },
+    { "link": "", "source": "Home.md", "expected": null }
+  ]
+}

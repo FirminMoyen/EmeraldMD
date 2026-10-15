@@ -1,0 +1,23 @@
+[package]
+name = "emeraldmd-desktop"
+description = "EmeraldMD desktop and mobile app"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[lib]
+# The suffix avoids a name clash with the binary on Windows (cargo#8519).
+name = "emeraldmd_desktop_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2.7", features = [] }
+
+[dependencies]
+emerald-core.workspace = true
+notify.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tauri = { version = "2.12", features = [] }
+tauri-plugin-dialog = "2.8"

@@ -1,0 +1,21 @@
+[workspace]
+resolver = "3"
+members = ["crates/*", "apps/desktop/src-tauri"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+repository = "https://github.com/emeraldmd/emeraldmd"
+
+[workspace.dependencies]
+emerald-core = { path = "crates/emerald-core" }
+notify = "8.2"
+regex = "1.13"
+serde = { version = "1", features = ["derive"] }
+# preserve_order keeps frontmatter properties in the order they are written.
+serde_json = { version = "1", features = ["preserve_order"] }
+serde_yaml_ng = "0.10"
+tempfile = "3.27"
+thiserror = "2"
+unicode-normalization = "0.1"
