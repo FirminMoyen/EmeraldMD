@@ -8,6 +8,8 @@
 //! to the vault's `.trash` on both sides.
 
 pub mod engine;
+#[cfg(feature = "http")]
+pub mod http;
 pub mod manifest;
 pub mod merge;
 pub mod plan;
@@ -15,3 +17,5 @@ pub mod plan;
 pub use engine::{Remote, SyncError, SyncReport, SyncState, sync_once};
 pub use manifest::{FileState, HashCache, Manifest, hash_bytes};
 pub use plan::Action;
+#[cfg(feature = "http")]
+pub use http::HttpRemote;
