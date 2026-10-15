@@ -4,6 +4,7 @@ export { getLinkpath, parseLinktext } from './linktext';
 export { MetadataCache } from './metadata-cache';
 export { fileName, joinPath, normalizePath, parentPath, resolveRelative, splitExtension } from './path';
 export * from './types';
+export type * from './search';
 export { TAbstractFile, TFile, TFolder, Vault, type FileStats } from './vault';
 
 import { MetadataCache } from './metadata-cache';

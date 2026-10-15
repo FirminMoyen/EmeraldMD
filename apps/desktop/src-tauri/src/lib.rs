@@ -1,6 +1,8 @@
 //! Tauri shell: exposes `emerald-core` to the webview as commands, and pushes
 //! changes made outside the app as `vault-changed` events.
 
+mod search;
+
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
@@ -147,6 +149,7 @@ pub fn run() {
             create_folder,
             rename_path,
             trash_path,
+            search::search_vault,
         ])
         .run(tauri::generate_context!())
         .expect("error while running EmeraldMD");
