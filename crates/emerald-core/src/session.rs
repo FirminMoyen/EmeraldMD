@@ -93,6 +93,22 @@ impl VaultSession {
         Ok(update)
     }
 
+    /// Writes any file, attachments included. Markdown must be UTF-8.
+    pub fn write_bytes(&mut self, path: &str, data: &[u8]) -> Result<VaultUpdate> {
+        let path = self.visible_path(path)?;
+        let text = if is_markdown(&path) {
+            Some(std::str::from_utf8(data).map_err(|e| {
+                VaultError::Io(std::io::Error::new(std::io::ErrorKind::InvalidData, format!("{path} is not UTF-8: {e}")))
+            })?)
+        } else {
+            None
+        };
+        let entry = self.vault.write_bytes(&path, data)?;
+        let mut update = VaultUpdate::default();
+        self.after_file_written(entry, text, &mut update)?;
+        Ok(update)
+    }
+
     pub fn create(&mut self, path: &str, data: &str) -> Result<VaultUpdate> {
         let path = self.visible_path(path)?;
         let entry = self.vault.create(&path, data)?;

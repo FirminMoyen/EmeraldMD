@@ -1,0 +1,18 @@
+[package]
+name = "emerald-sync"
+description = "Offline-first vault sync for EmeraldMD: change detection, three-way planning and text merges"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+diffy = "0.5"
+emerald-core.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha2 = "0.11"
+thiserror.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
