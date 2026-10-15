@@ -66,7 +66,9 @@ fn millis(time: std::io::Result<SystemTime>) -> u64 {
 
 impl Vault {
     pub fn open(root: impl AsRef<Path>) -> Result<Self> {
-        let root = fs::canonicalize(root.as_ref())?;
+        // dunce avoids Windows `\\?\` verbatim paths, which reject `/` and
+        // never match the plain paths file watchers report.
+        let root = dunce::canonicalize(root.as_ref())?;
         if !root.is_dir() {
             return Err(VaultError::NotAFolder(root.display().to_string()));
         }
@@ -87,10 +89,16 @@ impl Vault {
         if normalized == "/" {
             return Ok(self.root.clone());
         }
-        if normalized.split('/').any(|s| s == ".." || s == ".") || Path::new(&normalized).is_absolute() {
+        if normalized.split('/').any(|s| s == ".." || s == ".") {
             return Err(VaultError::OutsideVault(path.to_owned()));
         }
-        Ok(self.root.join(normalized))
+        // Join segment by segment so the OS separator is used, then make sure
+        // nothing (e.g. a Windows drive prefix like `C:`) replaced the root.
+        let full = normalized.split('/').fold(self.root.clone(), |acc, segment| acc.join(segment));
+        if !full.starts_with(&self.root) || full == self.root {
+            return Err(VaultError::OutsideVault(path.to_owned()));
+        }
+        Ok(full)
     }
 
     /// Vault path for an absolute OS path inside the vault.
@@ -248,6 +256,17 @@ mod tests {
         let (_dir, v) = vault();
         assert!(matches!(v.write("../escape.md", "x"), Err(VaultError::OutsideVault(_))));
         assert!(matches!(v.read("a/../../x"), Err(VaultError::OutsideVault(_))));
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn refuses_drive_prefixes_and_maps_watcher_paths() {
+        let (dir, v) = vault();
+        assert!(matches!(v.write("C:/escape.md", "x"), Err(VaultError::OutsideVault(_))));
+        v.write("a/b.md", "x").unwrap();
+        // Watchers report plain (non-verbatim) paths with backslashes.
+        let reported = dir.path().join("a").join("b.md");
+        assert_eq!(v.vault_path(&dunce::canonicalize(reported).unwrap()).as_deref(), Some("a/b.md"));
     }
 
     #[test]
