@@ -1,5 +1,5 @@
 import { arrayBufferToBase64, base64ToArrayBuffer, type ConfigStore, type ListedFiles, type RequestBackend, type Stat } from '@emeraldmd/api';
-import type { FileEntry, VaultBackend, VaultUpdate } from '@emeraldmd/core';
+import type { FileEntry, SearchOptions, SearchResults, VaultBackend, VaultUpdate } from '@emeraldmd/core';
 import type { TrustStore } from '@emeraldmd/plugin-host';
 import { invoke } from '@tauri-apps/api/core';
 
@@ -27,6 +27,10 @@ export class TauriBackend implements VaultBackend {
 
 	trash(path: string): Promise<VaultUpdate> {
 		return invoke('trash_path', { path });
+	}
+
+	search(query: string, options?: SearchOptions): Promise<SearchResults> {
+		return invoke('search_vault', { query, options });
 	}
 }
 

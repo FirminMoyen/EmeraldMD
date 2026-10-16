@@ -312,3 +312,18 @@ async fn tickets_open_the_event_stream_once() {
     assert_eq!(upserted_paths(&next_message(&mut ws).await["update"]), ["Pushed"]);
     assert_eq!(server.events(&format!("ticket={first}"), None).await.unwrap_err(), StatusCode::UNAUTHORIZED);
 }
+
+#[tokio::test]
+async fn search_uses_obsidian_query_syntax() {
+    let server = TestServer::start().await;
+    let found: Value = server.get("/api/vaults/notes/search?q=file%3Aplan").send().await.unwrap().json().await.unwrap();
+    assert_eq!(found["totalFiles"], 1);
+    assert_eq!(found["files"][0]["path"], "Projects/Plan.md");
+    let linked: Value = server.get("/api/vaults/notes/search?q=%22See%20%5B%5BPlan%5D%5D%22").send().await.unwrap().json().await.unwrap();
+    assert_eq!(linked["files"][0]["path"], "Home.md");
+    assert_eq!(linked["files"][0]["matches"][0]["line"], 2);
+    let bad = server.get("/api/vaults/notes/search?q=(oops").send().await.unwrap();
+    assert_eq!(bad.status(), StatusCode::BAD_REQUEST);
+    let error: Value = bad.json().await.unwrap();
+    assert!(error["error"].as_str().unwrap().contains("unclosed ("), "{error}");
+}

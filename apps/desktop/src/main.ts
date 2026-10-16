@@ -29,6 +29,7 @@ import { listen } from '@tauri-apps/api/event';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { ask, open as openDialog } from '@tauri-apps/plugin-dialog';
 import { CommandPalette } from './command-palette';
+import { registerCoreViews, revealSearch } from './core-views';
 import { RemoteVaults } from './remote';
 import { TauriBackend, TauriConfigStore, tauriRequestBackend, tauriTrustStore } from './tauri-backend';
 
@@ -229,6 +230,11 @@ class EmeraldApp {
 		this.activeFile = null;
 		this.mountWorkspace(app);
 		this.registerCommands(app);
+		registerCoreViews(app, {
+			search: backend.search ? (query, options) => backend.search!(query, options) : undefined,
+			openFile: (file, select) => this.openFileAt(file, select),
+			openSearch: (query) => revealSearch(app, query),
+		});
 
 		for (const name of ['create', 'delete', 'rename']) vault.on(name, () => this.queueTreeRender());
 		vault.on('rename', (file: TAbstractFile) => {
@@ -327,7 +333,8 @@ class EmeraldApp {
 				return true;
 			},
 		});
-		add({ id: 'app:open-vault', name: 'Open another vault', hotkeys: [{ modifiers: ['Mod'], key: 'O' }], callback: () => this.pickVault() });
+		// Mod+O is the quick switcher, as in Obsidian.
+		add({ id: 'app:open-vault', name: 'Open another vault', callback: () => this.pickVault() });
 		add({ id: 'app:toggle-left-sidebar', name: 'Toggle left sidebar', callback: () => this.toggleSplit($('left-split')) });
 		add({ id: 'app:toggle-right-sidebar', name: 'Toggle right sidebar', callback: () => this.toggleSplit($('right-split')) });
 		add({ id: 'app:reload', name: 'Reload app without saving', callback: () => window.location.reload() });
@@ -336,6 +343,18 @@ class EmeraldApp {
 	private toggleSplit(el: HTMLElement): void {
 		el.toggleClass('is-collapsed', !el.hasClass('is-collapsed'));
 		this.app?.workspace.trigger('resize');
+	}
+
+	/** Opens a file; for notes, `select` is a UTF-16 range to select and scroll to. */
+	private async openFileAt(file: TFile, select?: { from: number; to: number }): Promise<void> {
+		await this.openFile(file);
+		const editor = this.markdownView?.editor;
+		if (!select || file !== this.activeFile || !editor) return;
+		const from = editor.offsetToPos(select.from);
+		const to = editor.offsetToPos(select.to);
+		editor.setSelection(from, to);
+		editor.scrollIntoView({ from, to }, true);
+		editor.focus();
 	}
 
 	private async openFile(file: TFile): Promise<void> {

@@ -1164,3 +1164,216 @@ a.tag {
 	font-family: var(--font-monospace);
 	overflow-x: auto;
 }
+
+/* Built-in views (src/core-views) */
+
+.view-action.is-active,
+.search-option.is-active {
+	color: var(--interactive-accent);
+	background: var(--background-modifier-hover);
+}
+
+.pane-empty {
+	padding: 8px 4px;
+	color: var(--text-faint);
+}
+
+.is-clickable {
+	cursor: pointer;
+}
+
+.tree-item-self {
+	display: flex;
+	align-items: center;
+	gap: 4px;
+}
+
+.tree-item-inner {
+	flex: 1;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.tree-item-flair {
+	flex-shrink: 0;
+	padding: 0 6px;
+	border-radius: 999px;
+	background: var(--background-modifier-hover);
+	color: var(--text-muted);
+	font-size: 11px;
+}
+
+.collapse-icon {
+	display: grid;
+	place-items: center;
+	width: 16px;
+	flex-shrink: 0;
+	color: var(--text-faint);
+}
+
+.collapse-icon svg {
+	width: 14px;
+	height: 14px;
+	transition: transform 0.1s;
+}
+
+.is-collapsed > .tree-item-self .collapse-icon svg {
+	transform: rotate(-90deg);
+}
+
+/* Search */
+
+.search-view {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+}
+
+.search-input-container {
+	display: flex;
+	align-items: center;
+	gap: 4px;
+}
+
+.search-input-container input {
+	flex: 1;
+	min-width: 0;
+	padding: 6px 8px;
+	border: 1px solid var(--background-modifier-border);
+	border-radius: var(--radius-s);
+	background: var(--background-primary);
+	color: var(--text-normal);
+	font: inherit;
+}
+
+.search-input-container input:focus {
+	outline: none;
+	border-color: var(--interactive-accent);
+}
+
+.search-result-summary {
+	color: var(--text-muted);
+	font-size: 12px;
+}
+
+.search-result-summary.mod-error {
+	color: var(--text-error, #d33);
+}
+
+.search-result.is-collapsed .search-result-file-matches {
+	display: none;
+}
+
+.search-result-file-title {
+	font-weight: 500;
+	color: var(--text-normal);
+}
+
+.search-result-file-matches {
+	margin: 2px 0 8px 20px;
+	border-left: 1px solid var(--background-modifier-border);
+}
+
+.search-result-file-match {
+	padding: 4px 8px;
+	border-radius: var(--radius-s);
+	color: var(--text-muted);
+	font-size: 13px;
+	line-height: 1.4;
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+	cursor: pointer;
+}
+
+.search-result-file-match:hover {
+	background: var(--background-modifier-hover);
+	color: var(--text-normal);
+}
+
+.search-result-file-match.mod-name {
+	font-style: italic;
+	cursor: default;
+}
+
+.search-result-file-matched-text {
+	border-radius: 2px;
+	background: var(--text-highlight-bg, rgba(255, 208, 0, 0.4));
+	color: var(--text-normal);
+}
+
+.search-result-more {
+	padding: 2px 8px;
+	color: var(--text-faint);
+	font-size: 12px;
+}
+
+/* Outline and tags */
+
+.outline-item {
+	padding-top: 3px;
+	padding-bottom: 3px;
+}
+
+.tag-pane-tag-text {
+	color: var(--text-accent);
+}
+
+/* Graph and canvas fill their pane */
+
+.view-content.graph-view-container,
+.view-content.canvas-view {
+	position: relative;
+	overflow: hidden;
+	padding: 0 !important;
+}
+
+.workspace-sidedock .view-content.graph-view-container {
+	min-height: 260px;
+}
+
+.graph-view-container .graph-view {
+	position: absolute;
+	inset: 0;
+}
+
+.canvas-view .canvas-wrapper {
+	position: absolute;
+	inset: 0;
+}
+
+.canvas-file-name {
+	font-weight: 600;
+}
+
+.canvas-file-preview {
+	margin-top: 6px;
+	font-weight: normal;
+	font-size: 13px;
+	white-space: normal;
+}
+
+.canvas-file-image {
+	display: block;
+	max-width: 100%;
+	margin-top: 6px;
+	border-radius: var(--radius-s);
+}
+
+.is-unresolved .canvas-file-name {
+	color: var(--text-faint);
+}
+
+/* Quick switcher */
+
+.suggestion-item.mod-create .suggestion-prefix {
+	color: var(--text-muted);
+}
+
+.suggestion-flair {
+	margin-left: auto;
+	padding-left: 8px;
+	color: var(--text-faint);
+	font-size: 11px;
+	text-transform: uppercase;
+}

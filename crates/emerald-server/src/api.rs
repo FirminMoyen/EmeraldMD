@@ -41,6 +41,7 @@ pub fn router(state: AppState) -> Router {
         .route("/api/vaults/{id}/files", get(read_file).put(write_file).post(create_file))
         .route("/api/vaults/{id}/raw", get(read_raw).put(write_raw))
         .route("/api/vaults/{id}/manifest", get(manifest))
+        .route("/api/vaults/{id}/search", get(search))
         .route("/api/vaults/{id}/folders", post(create_folder))
         .route("/api/vaults/{id}/rename", post(rename))
         .route("/api/vaults/{id}/trash", post(trash))
@@ -259,6 +260,36 @@ async fn manifest(
 ) -> ApiResult<Json<emerald_sync::Manifest>> {
     let vault = state.vault(&principal, &id)?;
     blocking(move || vault.manifest()).await.map(Json)
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct SearchQuery {
+    q: String,
+    #[serde(default)]
+    case_sensitive: bool,
+    sort: Option<emerald_core::SearchSort>,
+    limit: Option<usize>,
+}
+
+/// Full-text search with Obsidian's query syntax (docs/search.md). Bad queries are 400s.
+async fn search(
+    State(state): State<AppState>,
+    Extension(principal): Extension<Arc<Principal>>,
+    Path(id): Path<String>,
+    Query(query): Query<SearchQuery>,
+) -> ApiResult<Json<emerald_core::SearchResults>> {
+    let vault = state.vault(&principal, &id)?;
+    let options = emerald_core::SearchOptions {
+        case_sensitive: query.case_sensitive,
+        sort: query.sort.unwrap_or_default(),
+        limit: query.limit,
+    };
+    tokio::task::spawn_blocking(move || vault.search(&query.q, &options))
+        .await
+        .map_err(|e| ApiError::new(StatusCode::INTERNAL_SERVER_ERROR, format!("task failed: {e}")))?
+        .map(Json)
+        .map_err(|e| ApiError::new(StatusCode::BAD_REQUEST, e.to_string()))
 }
 
 #[derive(Deserialize)]

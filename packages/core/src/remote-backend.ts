@@ -12,6 +12,7 @@
  * the caller rebuilds its mirror from it.
  */
 
+import type { SearchOptions, SearchResults } from './search';
 import type { VaultBackend, VaultSnapshot, VaultUpdate } from './types';
 
 export interface RemoteVaultInfo {
@@ -195,6 +196,14 @@ export class RemoteBackend implements VaultBackend {
 
 	trash(path: string): Promise<VaultUpdate> {
 		return this.update('POST', '/trash', { json: { path } });
+	}
+
+	async search(query: string, options: SearchOptions = {}): Promise<SearchResults> {
+		const params: Record<string, string> = { q: query };
+		if (options.caseSensitive) params.caseSensitive = 'true';
+		if (options.sort) params.sort = options.sort;
+		if (options.limit !== undefined) params.limit = String(options.limit);
+		return (await (await this.request('GET', '/search', { query: params })).json()) as SearchResults;
 	}
 
 	private async update(method: string, path: string, body: RequestBody): Promise<VaultUpdate> {

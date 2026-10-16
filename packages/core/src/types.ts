@@ -3,6 +3,8 @@
  * names follow `CachedMetadata` in the public plugin API typings.
  */
 
+import type { SearchOptions, SearchResults } from './search';
+
 export interface FileEntry {
 	path: string;
 	kind: 'file' | 'folder';
@@ -103,4 +105,6 @@ export interface VaultBackend {
 	rename(from: string, to: string): Promise<VaultUpdate>;
 	/** Moves to the vault's `.trash` folder. */
 	trash(path: string): Promise<VaultUpdate>;
+	/** Full-text search with Obsidian's query syntax (docs/search.md), when the backend supports it. */
+	search?(query: string, options?: SearchOptions): Promise<SearchResults>;
 }
