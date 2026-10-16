@@ -13,6 +13,7 @@ use std::sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard, Weak};
 use axum::extract::ws::Utf8Bytes;
 use emerald_core::vault::Result as VaultResult;
 use emerald_core::{VaultSession, VaultSnapshot, VaultUpdate};
+use emerald_sync::{HashCache, Manifest};
 use notify::{RecursiveMode, Watcher};
 use serde::Serialize;
 use tokio::sync::broadcast;
@@ -70,6 +71,8 @@ pub struct SharedVault {
     inner: RwLock<Inner>,
     events: broadcast::Sender<Arc<Event>>,
     watcher: std::sync::Mutex<Option<notify::RecommendedWatcher>>,
+    /// Content hashes for sync manifests, reused while files are unchanged.
+    hashes: std::sync::Mutex<HashCache>,
 }
 
 
@@ -86,6 +89,7 @@ impl SharedVault {
             inner: RwLock::new(Inner { session, version: 0, history: VecDeque::new() }),
             events: broadcast::channel(CHANNEL_CAPACITY).0,
             watcher: std::sync::Mutex::new(None),
+            hashes: std::sync::Mutex::new(HashCache::default()),
         });
         let watcher = watch(Arc::downgrade(&vault), &root).map_err(|e| format!("cannot watch {}: {e}", root.display()))?;
         *vault.watcher.lock().map_err(|_| "watcher lock poisoned")? = Some(watcher);
@@ -112,6 +116,17 @@ impl SharedVault {
 
     pub fn read(&self, path: &str) -> VaultResult<String> {
         self.read_inner().session.read(path)
+    }
+
+    pub fn read_bytes(&self, path: &str) -> VaultResult<Vec<u8>> {
+        self.read_inner().session.vault().read_bytes(path)
+    }
+
+    /// Every visible file with its content hash, for sync clients.
+    pub fn manifest(&self) -> VaultResult<Manifest> {
+        let inner = self.read_inner();
+        let mut hashes = self.hashes.lock().unwrap_or_else(|e| e.into_inner());
+        hashes.scan(inner.session.vault())
     }
 
     /// Runs a mutation and publishes its update to every other client.

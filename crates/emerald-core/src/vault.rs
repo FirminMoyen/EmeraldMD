@@ -160,8 +160,16 @@ impl Vault {
         Ok(fs::read_to_string(self.full_path(path)?)?)
     }
 
+    pub fn read_bytes(&self, path: &str) -> Result<Vec<u8>> {
+        Ok(fs::read(self.full_path(path)?)?)
+    }
+
     /// Writes a file, creating parent folders as needed.
     pub fn write(&self, path: &str, data: &str) -> Result<FileEntry> {
+        self.write_bytes(path, data.as_bytes())
+    }
+
+    pub fn write_bytes(&self, path: &str, data: &[u8]) -> Result<FileEntry> {
         let full = self.full_path(path)?;
         if let Some(parent) = full.parent() {
             fs::create_dir_all(parent)?;
