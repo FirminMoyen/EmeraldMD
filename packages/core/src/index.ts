@@ -13,6 +13,7 @@ export {
 	type WebSocketLike,
 } from './remote-backend';
 export * from './types';
+export type * from './search';
 export { TAbstractFile, TFile, TFolder, Vault, type FileStats } from './vault';
 
 import { MetadataCache } from './metadata-cache';
