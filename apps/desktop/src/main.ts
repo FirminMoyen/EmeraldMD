@@ -16,9 +16,11 @@ import {
 	TFile,
 	TFolder,
 	type TAbstractFile,
+	type VaultBackend,
 	type VaultSnapshot,
 	type VaultUpdate,
 } from '@emeraldmd/core';
+import { MemoryConfigStore } from '@emeraldmd/api/testing';
 import { MarkdownEditor } from '@emeraldmd/editor';
 import { CommunityPluginsTab, PluginHost } from '@emeraldmd/plugin-host';
 import type { Extension } from '@codemirror/state';
@@ -27,7 +29,11 @@ import { listen } from '@tauri-apps/api/event';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { ask, open as openDialog } from '@tauri-apps/plugin-dialog';
 import { CommandPalette } from './command-palette';
+import { RemoteVaults } from './remote';
 import { TauriBackend, TauriConfigStore, tauriRequestBackend, tauriTrustStore } from './tauri-backend';
+
+/** A note to reopen after the page reloads to switch vaults (see `attach`). */
+const REOPEN_FILE_KEY = 'emeraldmd:reopen-file';
 
 /** Same autosave delay as Obsidian. */
 const SAVE_DELAY_MS = 2000;
@@ -66,6 +72,8 @@ setRequestBackend(tauriRequestBackend);
 
 class EmeraldApp {
 	private app: App | null = null;
+	private backend: VaultBackend | null = null;
+	private readonly remote: RemoteVaults;
 	private host: PluginHost | null = null;
 	private markdownView: MarkdownView | null = null;
 	private activeFile: TFile | null = null;
@@ -116,7 +124,16 @@ class EmeraldApp {
 			}
 		});
 		this.followSystemTheme();
-		void listen<VaultUpdate>('vault-changed', (event) => this.app?.vault.applyUpdate(event.payload));
+		this.remote = new RemoteVaults({
+			attach: (backend, snapshot, options) => this.attach(backend, snapshot, options),
+			applyUpdate: (update) => this.vault?.applyUpdate(update),
+			showEmptyState: () => this.showEmptyState(),
+			notice: (message) => this.notice(message),
+		});
+		// The local vault's watcher; a remote vault's changes come through RemoteVaults.
+		void listen<VaultUpdate>('vault-changed', (event) => {
+			if (this.backend instanceof TauriBackend) this.vault?.applyUpdate(event.payload);
+		});
 		void getCurrentWindow().onCloseRequested(() => this.flush());
 	}
 
@@ -129,6 +146,8 @@ class EmeraldApp {
 	}
 
 	async start(): Promise<void> {
+		if (await this.remote.resumeSession()) return;
+		if (await this.remote.reopenLast()) return;
 		const last = await invoke<string | null>('last_vault');
 		if (last) {
 			try {
@@ -170,22 +189,38 @@ class EmeraldApp {
 	}
 
 	private async open(path: string): Promise<void> {
+		await this.flush();
+		const snapshot = await invoke<VaultSnapshot>('open_vault', { path });
+		await this.attach(new TauriBackend(), snapshot);
+	}
+
+	/**
+	 * Shows a vault, local or remote. With a vault already open, the page
+	 * reloads instead, because plugins can leave global state behind; the
+	 * new vault opens on start (local: the Rust side remembers it; remote:
+	 * `RemoteVaults.resumeSession`). `keepActiveFile` reopens the same note.
+	 */
+	private async attach(backend: VaultBackend, snapshot: VaultSnapshot, options: { keepActiveFile?: boolean } = {}): Promise<void> {
+		this.remote.vaultOpened(backend);
 		if (this.app) {
-			// Plugins can leave global state behind, so switching vaults starts a fresh page.
 			await this.flush();
+			if (options.keepActiveFile && this.activeFile) sessionStorage.setItem(REOPEN_FILE_KEY, this.activeFile.path);
 			this.host?.unloadAll();
-			await invoke<VaultSnapshot>('open_vault', { path });
 			window.location.reload();
 			return;
 		}
-		const snapshot = await invoke<VaultSnapshot>('open_vault', { path });
-		const vault = new Vault(new TauriBackend(), snapshot.name, snapshot.files, new TauriConfigStore());
+		const keep = sessionStorage.getItem(REOPEN_FILE_KEY);
+		sessionStorage.removeItem(REOPEN_FILE_KEY);
+		const local = backend instanceof TauriBackend;
+		this.backend = backend;
+		// Remote vaults keep their settings in memory until the server serves `.obsidian`.
+		const vault = new Vault(backend, snapshot.name, snapshot.files, local ? new TauriConfigStore() : new MemoryConfigStore());
 		await vault.loadConfig();
 		const metadataCache = new MetadataCache(vault, snapshot);
 		const app = new App({
 			vault,
 			metadataCache,
-			appId: appIdFor(snapshot.basePath),
+			appId: appIdFor(local ? snapshot.basePath : `remote:${snapshot.name}`),
 			statusBarEl: $('status-bar'),
 			workspaceEl: this.el.workspace,
 		});
@@ -211,10 +246,15 @@ class EmeraldApp {
 		this.el.emptyState.hidden = true;
 		this.el.workspace.hidden = false;
 		this.renderTree();
-		const recent = vault.getMarkdownFiles().sort((a, b) => b.stat.mtime - a.stat.mtime)[0];
+		const recent = (keep && vault.getFileByPath(keep)) || vault.getMarkdownFiles().sort((a, b) => b.stat.mtime - a.stat.mtime)[0];
 		if (recent) await this.openFile(recent);
 		else this.closeFile();
 
+		if (!local) {
+			// Community plugins run from the local `.obsidian` folder only, for now.
+			app.workspace.setLayoutReady();
+			return;
+		}
 		const host = new PluginHost(app, tauriTrustStore);
 		this.host = host;
 		app.setting.addBuiltInTab(new CommunityPluginsTab(app, host));

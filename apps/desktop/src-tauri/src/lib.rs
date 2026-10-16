@@ -2,6 +2,7 @@
 //! changes made outside the app as `vault-changed` events.
 
 mod http;
+mod remote;
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -220,6 +221,11 @@ pub fn run() {
             community_plugins_trusted,
             set_community_plugins_trusted,
             request_url,
+            remote::remote_vaults,
+            remote::remember_remote_vault,
+            remote::forget_remote_vault,
+            remote::remote_token,
+            remote::set_reopen_remote_vault,
         ])
         .run(tauri::generate_context!())
         .expect("error while running EmeraldMD");
