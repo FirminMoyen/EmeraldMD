@@ -11,6 +11,7 @@ repository = "https://github.com/FirminMoyen/EmeraldMD"
 [workspace.dependencies]
 dunce = "1.0"
 emerald-core = { path = "crates/emerald-core" }
+emerald-sync = { path = "crates/emerald-sync" }
 notify = "8.2"
 regex = "1.13"
 serde = { version = "1", features = ["derive"] }

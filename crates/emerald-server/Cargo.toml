@@ -14,6 +14,7 @@ path = "src/main.rs"
 argon2 = "0.6"
 axum = { version = "0.8.9", features = ["ws"] }
 emerald-core.workspace = true
+emerald-sync.workspace = true
 getrandom = "0.4"
 notify.workspace = true
 serde.workspace = true
@@ -27,6 +28,7 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 
 [dev-dependencies]
+emerald-sync = { workspace = true, features = ["http"] }
 futures-util = "0.3"
 reqwest = { version = "0.13", default-features = false, features = ["json", "query"] }
 tempfile.workspace = true

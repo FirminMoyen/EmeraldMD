@@ -3,6 +3,7 @@
 
 use std::sync::Arc;
 
+use axum::body::Bytes;
 use axum::extract::{DefaultBodyLimit, Path, Query, Request, State};
 use axum::http::header::{AUTHORIZATION, CONTENT_TYPE, WWW_AUTHENTICATE};
 use axum::http::{HeaderMap, HeaderName, HeaderValue, Method, StatusCode};
@@ -38,6 +39,8 @@ pub fn router(state: AppState) -> Router {
         .route("/api/vaults", get(list_vaults))
         .route("/api/vaults/{id}/snapshot", get(snapshot))
         .route("/api/vaults/{id}/files", get(read_file).put(write_file).post(create_file))
+        .route("/api/vaults/{id}/raw", get(read_raw).put(write_raw))
+        .route("/api/vaults/{id}/manifest", get(manifest))
         .route("/api/vaults/{id}/folders", post(create_folder))
         .route("/api/vaults/{id}/rename", post(rename))
         .route("/api/vaults/{id}/trash", post(trash))
@@ -221,6 +224,41 @@ async fn write_file(
 ) -> ApiResult<Json<VaultUpdate>> {
     let vault = state.vault(&principal, &id)?;
     mutate(vault, &headers, move |s| s.write(&query.path, &data)).await
+}
+
+/// Any file's bytes, attachments included (used by sync clients).
+async fn read_raw(
+    State(state): State<AppState>,
+    Extension(principal): Extension<Arc<Principal>>,
+    Path(id): Path<String>,
+    Query(query): Query<PathQuery>,
+) -> ApiResult<Response> {
+    let vault = state.vault(&principal, &id)?;
+    let data = blocking(move || vault.read_bytes(&query.path)).await?;
+    Ok(([(CONTENT_TYPE, "application/octet-stream")], data).into_response())
+}
+
+/// Writes any file from the raw request body. Markdown must be UTF-8.
+async fn write_raw(
+    State(state): State<AppState>,
+    Extension(principal): Extension<Arc<Principal>>,
+    Path(id): Path<String>,
+    Query(query): Query<PathQuery>,
+    headers: HeaderMap,
+    data: Bytes,
+) -> ApiResult<Json<VaultUpdate>> {
+    let vault = state.vault(&principal, &id)?;
+    mutate(vault, &headers, move |s| s.write_bytes(&query.path, &data)).await
+}
+
+/// Every visible file with its SHA-256, so sync clients can tell what changed.
+async fn manifest(
+    State(state): State<AppState>,
+    Extension(principal): Extension<Arc<Principal>>,
+    Path(id): Path<String>,
+) -> ApiResult<Json<emerald_sync::Manifest>> {
+    let vault = state.vault(&principal, &id)?;
+    blocking(move || vault.manifest()).await.map(Json)
 }
 
 #[derive(Deserialize)]

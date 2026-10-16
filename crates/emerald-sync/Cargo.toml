@@ -1,0 +1,23 @@
+[package]
+name = "emerald-sync"
+description = "Offline-first vault sync for EmeraldMD: change detection, three-way planning and text merges"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[features]
+# HttpRemote: sync against an emeraldmd-server over HTTP(S).
+http = ["dep:reqwest"]
+
+[dependencies]
+diffy = "0.5"
+emerald-core.workspace = true
+reqwest = { version = "0.13", optional = true, features = ["blocking", "json", "query"] }
+serde.workspace = true
+serde_json.workspace = true
+sha2 = "0.11"
+thiserror.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
