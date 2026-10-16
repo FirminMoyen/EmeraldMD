@@ -23,6 +23,8 @@ pub enum VaultError {
     NotFound(String),
     #[error("not a folder: {0}")]
     NotAFolder(String),
+    #[error("not in the vault's config folder: {0}")]
+    NotConfigPath(String),
     #[error(transparent)]
     Io(#[from] std::io::Error),
 }

@@ -14,7 +14,19 @@ compatibility strategy and the roadmap.
 > EmeraldMD is an independent project and is not affiliated with Obsidian.
 > "Compatible with Obsidian plugins" describes interoperability only.
 
-## Status: phase 0 (foundations)
+## Status: phase 1 (plugin host) in progress
+
+Community plugins that use only the plugin API load from a vault's
+`.obsidian/plugins` folder, honouring `community-plugins.json`: the `obsidian`
+module (`packages/api`), a plugin loader with restricted mode
+(`packages/plugin-host`), a command palette (Ctrl/Cmd+P) and a settings window
+(Ctrl/Cmd+,) with the installed plugins and their setting tabs. 15 of 16 popular
+community plugins pass the headless smoke tests; see
+[docs/compat/plugins.md](docs/compat/plugins.md). Not yet: themes and CSS
+snippets, Node.js and Electron shims for desktop-only plugins, installing plugins
+from the community list.
+
+### Phase 0 (foundations)
 
 Implemented on desktop (built and run on macOS so far):
 
@@ -29,8 +41,8 @@ Implemented on desktop (built and run on macOS so far):
 - Live reload of changes made outside the app (another editor, sync tools,
   Obsidian itself).
 
-Not yet: plugins, themes and snippets, live preview and reading view, search,
-graph, self-hosted server, mobile builds. See the roadmap.
+Not yet: themes and snippets, live preview and reading view, search, graph,
+self-hosted server, mobile builds. See the roadmap.
 
 ## Repository layout
 
@@ -39,6 +51,9 @@ graph, self-hosted server, mobile builds. See the roadmap.
 | `crates/emerald-core` | Rust: vault I/O, Markdown metadata parser, link index, `VaultSession` |
 | `packages/core` | TypeScript mirror of the vault and metadata cache, with the plugin API's shapes |
 | `packages/editor` | CodeMirror 6 editor |
+| `packages/api` | The `obsidian` module for plugins, implemented from the public typings |
+| `packages/plugin-host` | Loads community plugins: `require`, restricted mode, enable/disable, settings tab |
+| `compat/` | Community plugin smoke tests and API coverage report |
 | `apps/desktop` | Tauri app: `src-tauri/` (Rust shell) and `src/` (UI) |
 | `fixtures/` | Test cases shared by the Rust and TypeScript test suites |
 
@@ -60,7 +75,11 @@ npm test
 ```
 
 `npm test` runs Vitest and `cargo test`. `npm run typecheck` type-checks the
-TypeScript. `npm run build` produces installable bundles in
+TypeScript. `npm run compat` downloads the pinned community plugins in
+`compat/plugins.json` and smoke-tests them headlessly; add `UPDATE_COMPAT_DOCS=1`
+to regenerate `docs/compat/plugins.md` and `api-coverage.md`. To try plugins in
+the app, `node compat/make-vault.mjs <folder>` creates a vault with them
+installed. `npm run build` produces installable bundles in
 `target/release/bundle/`.
 
 On macOS with Homebrew's `rustup`, which is keg-only, put it on your `PATH`

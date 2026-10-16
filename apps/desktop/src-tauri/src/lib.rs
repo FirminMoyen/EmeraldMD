@@ -1,11 +1,13 @@
 //! Tauri shell: exposes `emerald-core` to the webview as commands, and pushes
 //! changes made outside the app as `vault-changed` events.
 
+mod http;
+
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
-use emerald_core::{VaultSession, VaultSnapshot, VaultUpdate};
+use emerald_core::{ConfigListing, FileEntry, Vault, VaultSession, VaultSnapshot, VaultUpdate};
 use notify::{RecursiveMode, Watcher};
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, Manager, State};
@@ -32,10 +34,18 @@ fn with_session<T>(
     f(&mut open.session).map_err(|e| e.to_string())
 }
 
+fn with_vault<T>(state: &AppState, f: impl FnOnce(&Vault) -> emerald_core::vault::Result<T>) -> CmdResult<T> {
+    with_session(state, |s| f(s.vault()))
+}
+
 #[derive(Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 struct Settings {
     last_vault: Option<String>,
+    /// Vault folders where the user turned community plugins on (restricted
+    /// mode off). Plugins run code, so this is decided per vault, in EmeraldMD.
+    #[serde(default)]
+    trusted_vaults: Vec<String>,
 }
 
 fn settings_path(app: &AppHandle) -> Option<PathBuf> {
@@ -99,7 +109,9 @@ async fn open_vault(app: AppHandle, state: State<'_, AppState>, path: String) ->
     let watcher = watch(app.clone(), session.vault().root().to_path_buf()).map_err(|e| e.to_string())?;
     *state.vault.lock().map_err(|_| "vault state is poisoned".to_owned())? =
         Some(OpenVault { session, _watcher: watcher });
-    save_settings(&app, &Settings { last_vault: Some(path) });
+    let mut settings = load_settings(&app);
+    settings.last_vault = Some(path);
+    save_settings(&app, &settings);
     Ok(snapshot)
 }
 
@@ -133,6 +145,59 @@ async fn trash_path(state: State<'_, AppState>, path: String) -> CmdResult<Vault
     with_session(&state, |s| s.trash(&path))
 }
 
+#[tauri::command]
+async fn config_read(state: State<'_, AppState>, path: String) -> CmdResult<Option<String>> {
+    with_vault(&state, |v| v.read_config(&path))
+}
+
+#[tauri::command]
+async fn config_write(state: State<'_, AppState>, path: String, data: String) -> CmdResult<()> {
+    with_vault(&state, |v| v.write_config(&path, &data))
+}
+
+#[tauri::command]
+async fn config_list(state: State<'_, AppState>, path: String) -> CmdResult<ConfigListing> {
+    with_vault(&state, |v| v.list_config(&path))
+}
+
+#[tauri::command]
+async fn config_stat(state: State<'_, AppState>, path: String) -> CmdResult<Option<FileEntry>> {
+    with_vault(&state, |v| v.config_entry(&path))
+}
+
+#[tauri::command]
+async fn config_mkdir(state: State<'_, AppState>, path: String) -> CmdResult<()> {
+    with_vault(&state, |v| v.create_config_folder(&path))
+}
+
+fn open_vault_root(state: &AppState) -> CmdResult<String> {
+    with_vault(state, |v| Ok(v.root().display().to_string()))
+}
+
+/// Whether community plugins may run in the open vault (restricted mode is off).
+#[tauri::command]
+async fn community_plugins_trusted(app: AppHandle, state: State<'_, AppState>) -> CmdResult<bool> {
+    let root = open_vault_root(&state)?;
+    Ok(load_settings(&app).trusted_vaults.contains(&root))
+}
+
+#[tauri::command]
+async fn set_community_plugins_trusted(app: AppHandle, state: State<'_, AppState>, trusted: bool) -> CmdResult<()> {
+    let root = open_vault_root(&state)?;
+    let mut settings = load_settings(&app);
+    settings.trusted_vaults.retain(|v| v != &root);
+    if trusted {
+        settings.trusted_vaults.push(root);
+    }
+    save_settings(&app, &settings);
+    Ok(())
+}
+
+#[tauri::command]
+async fn request_url(request: http::HttpRequest) -> CmdResult<http::HttpResponse> {
+    http::send(request).await
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -147,6 +212,14 @@ pub fn run() {
             create_folder,
             rename_path,
             trash_path,
+            config_read,
+            config_write,
+            config_list,
+            config_stat,
+            config_mkdir,
+            community_plugins_trusted,
+            set_community_plugins_trusted,
+            request_url,
         ])
         .run(tauri::generate_context!())
         .expect("error while running EmeraldMD");
