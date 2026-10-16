@@ -4,10 +4,12 @@
 pub mod index;
 pub mod metadata;
 pub mod path;
+pub mod search;
 pub mod session;
 pub mod vault;
 
 pub use index::{LinkSets, VaultIndex};
 pub use metadata::{CachedMetadata, parse_markdown};
+pub use search::{SearchError, SearchOptions, SearchResults, SearchSort};
 pub use session::{VaultSession, VaultSnapshot, VaultUpdate};
 pub use vault::{EntryKind, FileEntry, Vault, VaultError};
