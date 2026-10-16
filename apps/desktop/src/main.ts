@@ -4,6 +4,7 @@ import {
 	editorInfoExtensions,
 	MarkdownView,
 	Notice,
+	Platform,
 	setIcon,
 	setRequestBackend,
 	setTooltip,
@@ -29,6 +30,7 @@ import { listen } from '@tauri-apps/api/event';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { ask, open as openDialog } from '@tauri-apps/plugin-dialog';
 import { CommandPalette } from './command-palette';
+import { setupMobile } from './mobile';
 import { RemoteVaults } from './remote';
 import { TauriBackend, TauriConfigStore, tauriRequestBackend, tauriTrustStore } from './tauri-backend';
 
@@ -124,6 +126,7 @@ class EmeraldApp {
 			}
 		});
 		this.followSystemTheme();
+		setupMobile({ open: (path) => this.open(path), notice: (message) => this.notice(message) });
 		this.remote = new RemoteVaults({
 			attach: (backend, snapshot, options) => this.attach(backend, snapshot, options),
 			applyUpdate: (update) => this.vault?.applyUpdate(update),
@@ -178,6 +181,11 @@ class EmeraldApp {
 	}
 
 	private async pickVault(): Promise<void> {
+		// Mobile folder pickers return content URIs, not paths: show the app's own vaults instead.
+		if (Platform.isMobile) {
+			this.showEmptyState();
+			return;
+		}
 		const path = await openDialog({ directory: true, title: 'Open folder as vault' });
 		if (typeof path === 'string') {
 			try {

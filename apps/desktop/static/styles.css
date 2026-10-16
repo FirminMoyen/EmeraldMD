@@ -1164,3 +1164,91 @@ a.tag {
 	font-family: var(--font-monospace);
 	overflow-x: auto;
 }
+
+/* Phones and tablets (body classes set by src/mobile.ts) */
+
+body.is-mobile {
+	padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+}
+
+body.is-mobile .tree-item-self {
+	padding-top: 8px;
+	padding-bottom: 8px;
+}
+
+.mobile-drawer-toggle {
+	display: none;
+}
+
+body.is-phone .mobile-drawer-toggle {
+	display: grid;
+	margin-right: auto;
+}
+
+body.is-phone .workspace-ribbon-container,
+body.is-phone .mod-right-split {
+	display: none !important;
+}
+
+body.is-phone .mod-left-split {
+	position: fixed;
+	top: 0;
+	bottom: 0;
+	left: 0;
+	z-index: 30;
+	width: min(85vw, 320px) !important;
+	padding-top: env(safe-area-inset-top);
+	box-shadow: 0 0 24px rgba(0, 0, 0, 0.25);
+	transform: translateX(-105%);
+	transition: transform 0.2s ease;
+}
+
+body.is-phone.is-left-drawer-open .mod-left-split {
+	transform: none;
+}
+
+body.is-phone.is-left-drawer-open .workspace::after {
+	content: '';
+	position: fixed;
+	inset: 0;
+	z-index: 20;
+	background: rgba(0, 0, 0, 0.3);
+}
+
+body.is-phone .markdown-source-view .cm-content {
+	padding: 16px 16px 40vh;
+}
+
+.mobile-vaults {
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
+	margin-top: 8px;
+}
+
+.mobile-vault-row {
+	padding: 12px 16px;
+	border: 1px solid var(--background-modifier-border);
+	border-radius: var(--radius-m);
+	background: var(--background-secondary);
+	text-align: left;
+	font-weight: 600;
+	cursor: pointer;
+}
+
+.mobile-vault-create {
+	display: flex;
+	gap: 8px;
+	margin-top: 8px;
+}
+
+.mobile-vault-create input {
+	flex: 1;
+	min-width: 0;
+	padding: 10px 12px;
+	border: 1px solid var(--background-modifier-border);
+	border-radius: var(--radius-m);
+	background: var(--background-primary);
+	color: var(--text-normal);
+	font: inherit;
+}

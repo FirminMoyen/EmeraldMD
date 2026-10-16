@@ -1,6 +1,7 @@
 //! Tauri shell: exposes `emerald-core` to the webview as commands, and pushes
 //! changes made outside the app as `vault-changed` events.
 
+mod app_vaults;
 mod http;
 mod remote;
 mod search;
@@ -228,6 +229,8 @@ pub fn run() {
             remote::remote_token,
             remote::set_reopen_remote_vault,
             search::search_vault,
+            app_vaults::app_vaults,
+            app_vaults::create_app_vault,
         ])
         .run(tauri::generate_context!())
         .expect("error while running EmeraldMD");

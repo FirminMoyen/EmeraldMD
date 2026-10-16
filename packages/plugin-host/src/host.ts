@@ -10,7 +10,7 @@
  * Exposed to plugins as `app.plugins`.
  */
 
-import { compareVersions, apiVersion, loadAsync, Notice, Plugin, type App, type PluginManifest, type PluginsApi } from '@emeraldmd/api';
+import { compareVersions, apiVersion, loadAsync, Notice, Platform, Plugin, type App, type PluginManifest, type PluginsApi } from '@emeraldmd/api';
 import { installPluginGlobals } from './globals';
 import { NODE_MODULES, SHARED_MODULES, trackMissingExports } from './modules';
 
@@ -115,6 +115,10 @@ export class PluginHost implements PluginsApi {
 		delete this.errors[id];
 		let plugin: Plugin | null = null;
 		try {
+			// Like Obsidian mobile: plugins that need Node.js or Electron do not load on phones and tablets.
+			if (manifest.isDesktopOnly && Platform.isMobile) {
+				throw new Error('only works on desktop');
+			}
 			if (manifest.minAppVersion && compareVersions(manifest.minAppVersion, apiVersion) > 0) {
 				throw new Error(`requires app version ${manifest.minAppVersion}; EmeraldMD implements API ${apiVersion}`);
 			}
