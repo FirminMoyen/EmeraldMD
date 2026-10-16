@@ -2,14 +2,16 @@
 //! [`VaultUpdate`] describing what changed, which front ends (the desktop
 //! webview, and later the server's clients) apply to their mirror.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashMap};
 use std::path::Path;
+use std::sync::Arc;
 
 use serde::Serialize;
 
 use crate::index::{LinkSets, VaultIndex};
 use crate::metadata::{CachedMetadata, parse_markdown};
 use crate::path::{is_markdown, normalize_path, parent_path};
+use crate::search::{Matcher, SearchDoc, SearchError, SearchOptions, SearchResults, search_docs};
 use crate::vault::{EntryKind, FileEntry, Result, Vault, VaultError};
 
 #[derive(Serialize, Debug)]
@@ -50,12 +52,15 @@ impl VaultUpdate {
 pub struct VaultSession {
     vault: Vault,
     index: VaultIndex,
+    /// Note contents for search, filled on first search and kept current by
+    /// every change after that.
+    contents: HashMap<String, Arc<str>>,
 }
 
 impl VaultSession {
     /// Opens a vault folder and indexes every visible file.
     pub fn open(root: impl AsRef<Path>) -> Result<Self> {
-        let mut session = Self { vault: Vault::open(root)?, index: VaultIndex::new() };
+        let mut session = Self { vault: Vault::open(root)?, index: VaultIndex::new(), contents: HashMap::new() };
         session.index_from_disk("/", &mut VaultUpdate::default())?;
         session.index.relink_all();
         Ok(session)
@@ -83,6 +88,34 @@ impl VaultSession {
 
     pub fn read(&self, path: &str) -> Result<String> {
         self.vault.read(path)
+    }
+
+    /// Searches every file with Obsidian's query syntax (see `docs/search.md`).
+    pub fn search(&mut self, query: &str, options: &SearchOptions) -> std::result::Result<SearchResults, SearchError> {
+        let matcher = Matcher::new(query, options)?;
+        let paths: Vec<String> = self
+            .index
+            .entries()
+            .filter(|e| e.kind == EntryKind::File && is_markdown(&e.path) && !self.contents.contains_key(&e.path))
+            .map(|e| e.path.clone())
+            .collect();
+        for path in paths {
+            // Unreadable notes (e.g. invalid UTF-8) are searched by name only.
+            let text = self.vault.read(&path).unwrap_or_default();
+            self.contents.insert(path, Arc::from(text));
+        }
+        let empty: Arc<str> = Arc::from("");
+        let docs: Vec<SearchDoc> = self
+            .index
+            .entries()
+            .filter(|e| e.kind == EntryKind::File)
+            .map(|entry| SearchDoc {
+                entry,
+                content: self.contents.get(&entry.path).cloned().unwrap_or_else(|| empty.clone()),
+                metadata: self.index.metadata(&entry.path),
+            })
+            .collect();
+        Ok(search_docs(&matcher, &docs, options))
     }
 
     pub fn write(&mut self, path: &str, data: &str) -> Result<VaultUpdate> {
@@ -120,6 +153,13 @@ impl VaultSession {
         let mut update = VaultUpdate::default();
         self.add_missing_ancestors(&to, &mut update)?;
         self.index.rename(&from, &to);
+        let prefix = format!("{from}/");
+        let moved: Vec<String> = self.contents.keys().filter(|k| **k == from || k.starts_with(&prefix)).cloned().collect();
+        for old in moved {
+            if let Some(text) = self.contents.remove(&old) {
+                self.contents.insert(format!("{to}{}", &old[from.len()..]), text);
+            }
+        }
         update.renamed.push((from, to));
         self.relink_all(&mut update);
         Ok(update)
@@ -132,7 +172,7 @@ impl VaultSession {
             return Err(VaultError::NotFound(path));
         }
         self.vault.trash(&path)?;
-        let mut update = VaultUpdate { removed: self.index.remove(&path), ..Default::default() };
+        let mut update = VaultUpdate { removed: self.remove_from_index(&path), ..Default::default() };
         self.relink_all(&mut update);
         Ok(update)
     }
@@ -148,7 +188,7 @@ impl VaultSession {
         match self.vault.entry(&path)? {
             None => {
                 if self.index.entry(&path).is_some() {
-                    update.removed = self.index.remove(&path);
+                    update.removed = self.remove_from_index(&path);
                     self.relink_all(&mut update);
                 }
             }
@@ -188,10 +228,12 @@ impl VaultSession {
         let is_new = self.index.upsert_entry(entry.clone());
         update.upserted.push(entry);
         if is_markdown(&path) {
-            let metadata = match data {
-                Some(text) => parse_markdown(text),
-                None => parse_markdown(&self.vault.read(&path)?),
+            let text: Arc<str> = match data {
+                Some(text) => Arc::from(text),
+                None => Arc::from(self.vault.read(&path)?),
             };
+            let metadata = parse_markdown(&text);
+            self.contents.insert(path.clone(), text);
             self.index.set_metadata(&path, metadata.clone());
             update.metadata.insert(path.clone(), metadata);
         }
@@ -204,6 +246,14 @@ impl VaultSession {
             update.links.insert(path, sets.clone());
         }
         Ok(())
+    }
+
+    fn remove_from_index(&mut self, path: &str) -> Vec<String> {
+        let removed = self.index.remove(path);
+        for p in &removed {
+            self.contents.remove(p);
+        }
+        removed
     }
 
     fn add_missing_ancestors(&mut self, path: &str, update: &mut VaultUpdate) -> Result<()> {
