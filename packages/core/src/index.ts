@@ -26,3 +26,4 @@ export function openVault(backend: VaultBackend, snapshot: VaultSnapshot): { vau
 	const metadataCache = new MetadataCache(vault, snapshot);
 	return { vault, metadataCache };
 }
+export { FootnoteSyntax, MathSyntax, obsidianMarkdown } from './markdown-syntax';

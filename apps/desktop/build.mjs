@@ -10,8 +10,11 @@ const outdir = preview ? 'dist-preview' : 'dist';
 await rm(outdir, { recursive: true, force: true });
 await cp('static', outdir, { recursive: true });
 await build({
-	entryPoints: [preview ? 'dev/preview-entry.ts' : 'src/main.ts'],
-	outfile: `${outdir}/app.js`,
+	entryPoints: { app: preview ? 'dev/preview-entry.ts' : 'src/main.ts' },
+	outdir,
+	// MathJax and Mermaid are large and loaded only when a note needs them.
+	splitting: true,
+	chunkNames: 'chunks/[name]-[hash]',
 	bundle: true,
 	format: 'esm',
 	platform: 'browser',

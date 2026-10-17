@@ -95,3 +95,43 @@ describe('line breaks', () => {
 		expect(el.querySelector('p')?.innerHTML).toBe('one\ntwo');
 	});
 });
+
+describe('math, footnotes and diagrams', () => {
+	it('keeps formulas whole, even with underscores and stars', async () => {
+		const { el } = await render('Inline $x_1 + y_2 * z_3$ and **bold**, but not $5 or $10.\n\n$$\n\\frac{a}{b}\n$$\n\nAlso $$e^x$$ in text.');
+		const inline = el.querySelectorAll('.math.math-inline');
+		expect(inline).toHaveLength(1);
+		expect(el.querySelector('p strong')?.textContent).toBe('bold');
+		expect(el.querySelector('p')?.textContent).toContain('but not $5 or $10.');
+		expect(el.querySelectorAll('.math.math-block')).toHaveLength(2);
+	});
+
+	it('renders formulas with MathJax', async () => {
+		const { loadMathJax, renderMath } = await import('../src');
+		await loadMathJax();
+		const formula = renderMath('\\sqrt{x^2}', false);
+		expect(formula.classList.contains('is-loaded')).toBe(true);
+		expect(formula.querySelector('mjx-container svg')).not.toBeNull();
+		expect((globalThis as { MathJax?: { tex2svg?: unknown } }).MathJax?.tex2svg).toBeTypeOf('function');
+	}, 20000);
+
+	it('numbers footnotes and lists them at the end', async () => {
+		const { el } = await render('One[^a], two^[An *inline* note], three[^a], missing[^zz].\n\n[^a]: The **note**,\n    continued.\n');
+		expect([...el.querySelectorAll('sup.footnote-ref')].map((s) => s.textContent)).toEqual(['1', '2', '1']);
+		expect(el.querySelector('p')?.textContent).toContain('missing[^zz]');
+		const items = el.querySelectorAll('section.footnotes > ol > li');
+		expect(items).toHaveLength(2);
+		expect(items[0]!.querySelector('strong')?.textContent).toBe('note');
+		expect(items[0]!.textContent).toContain('continued.');
+		expect(items[0]!.querySelectorAll('.footnote-backref')).toHaveLength(2);
+		expect(items[1]!.querySelector('em')?.textContent).toBe('inline');
+		const ref = el.querySelector<HTMLAnchorElement>('sup.footnote-ref a')!;
+		expect(ref.getAttribute('href')).toBe(`#${items[0]!.id}`);
+	});
+
+	it('puts mermaid code blocks in a .mermaid element', async () => {
+		const { el } = await render('```mermaid\ngraph TD; A-->B\n```');
+		expect(el.querySelector('div.mermaid')).not.toBeNull();
+		expect(el.querySelector('pre')).toBeNull();
+	});
+});

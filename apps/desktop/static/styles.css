@@ -2232,6 +2232,80 @@ a.tag {
 	max-width: 100%;
 }
 
+/* Math (MathJax SVG), Mermaid diagrams and footnotes */
+
+.math-block {
+	margin: 0 0 var(--p-spacing);
+	overflow-x: auto;
+	text-align: center;
+}
+
+.math-inline mjx-container,
+.math-block mjx-container {
+	color: var(--text-normal);
+}
+
+.math.math-error,
+.mermaid.mermaid-error {
+	color: var(--text-error);
+	font-family: var(--font-monospace);
+	font-size: var(--code-size);
+	white-space: pre-wrap;
+}
+
+.mermaid {
+	margin: 0 0 var(--p-spacing);
+	text-align: center;
+	white-space: pre-wrap;
+}
+
+.mermaid svg {
+	max-width: 100%;
+	height: auto;
+}
+
+.footnote-ref a,
+.footnote-backref {
+	color: var(--link-color);
+	text-decoration: none;
+}
+
+.footnotes {
+	margin-top: 2em;
+	color: var(--text-muted);
+	font-size: var(--font-smaller);
+}
+
+.footnotes-sep {
+	margin: 0 0 1em;
+	border: 0;
+	border-top: var(--hr-thickness) solid var(--hr-color);
+}
+
+.cm-footref {
+	color: var(--text-muted);
+	font-size: var(--font-smaller);
+	vertical-align: super;
+}
+
+.cm-math,
+.cm-math > p {
+	display: inline;
+	margin: 0;
+}
+
+.cm-math-block,
+.cm-mermaid {
+	margin: 0.4em 0;
+	cursor: text;
+	white-space: normal;
+}
+
+.cm-math-block > .math-block,
+.cm-mermaid > .mermaid {
+	margin: 0;
+}
+
 /* Scrollbars */
 
 ::-webkit-scrollbar {

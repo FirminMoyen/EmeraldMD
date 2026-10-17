@@ -231,6 +231,15 @@ function inlineDecorations(view: EditorView, options: LivePreviewOptions): Decor
 						hide(close.from, node.to);
 						return false;
 					}
+					case 'InlineMath':
+						if (options.renderMarkdown && !touches(state, node.from, node.to)) {
+							replace(node.from, node.to, new MarkdownWidget(doc.sliceString(node.from, node.to), 'cm-math', false, options.renderMarkdown));
+						}
+						return false;
+					case 'FootnoteRef':
+					case 'InlineFootnote':
+						ranges.push(Decoration.mark({ class: 'cm-footref' }).range(node.from, node.to));
+						return false;
 					case 'Image':
 						if (options.renderMarkdown && !touches(state, node.from, node.to)) {
 							replace(node.from, node.to, new MarkdownWidget(doc.sliceString(node.from, node.to), 'cm-embed-image', false, options.renderMarkdown));
@@ -279,7 +288,25 @@ function inlineDecorations(view: EditorView, options: LivePreviewOptions): Decor
 	return Decoration.set(ranges, true);
 }
 
-/** Callouts and tables, drawn as rendered blocks while the selection is outside them. */
+/** The widget class for blocks drawn rendered: callouts, tables, `$$` math and Mermaid diagrams. */
+function blockWidgetClass(state: EditorState, node: SyntaxNode): string | null {
+	switch (node.name) {
+		case 'Table':
+			return 'cm-table-widget';
+		case 'BlockMath':
+			return 'cm-math-block';
+		case 'Blockquote':
+			return CALLOUT_LINE.test(state.doc.lineAt(node.from).text) ? 'cm-callout' : null;
+		case 'FencedCode': {
+			const info = node.getChild('CodeInfo');
+			return info && state.doc.sliceString(info.from, info.to).trim().split(/\s/)[0] === 'mermaid' ? 'cm-mermaid' : null;
+		}
+		default:
+			return null;
+	}
+}
+
+/** Callouts, tables, `$$` math and Mermaid diagrams, drawn as rendered blocks while the selection is outside them. */
 function blockDecorations(state: EditorState, options: LivePreviewOptions): DecorationSet {
 	const render = options.renderMarkdown;
 	if (!render) return Decoration.none;
@@ -288,13 +315,13 @@ function blockDecorations(state: EditorState, options: LivePreviewOptions): Deco
 	syntaxTree(state).iterate({
 		enter: (node) => {
 			if (node.name === 'Document') return undefined;
-			if ((node.name !== 'Table' && node.name !== 'Blockquote') || node.node.parent?.name !== 'Document') return false;
-			const callout = node.name === 'Blockquote' && CALLOUT_LINE.test(state.doc.lineAt(node.from).text);
-			if (node.name === 'Blockquote' && !callout) return false;
+			if (node.node.parent?.name !== 'Document') return false;
+			const className = blockWidgetClass(state, node.node);
+			if (!className) return false;
 			const from = state.doc.lineAt(node.from).from;
 			const to = state.doc.lineAt(node.to).to;
 			if (!touches(state, from, to)) {
-				const widget = new MarkdownWidget(state.doc.sliceString(from, to), callout ? 'cm-callout' : 'cm-table-widget', true, render);
+				const widget = new MarkdownWidget(state.doc.sliceString(from, to), className, true, render);
 				ranges.push(Decoration.replace({ widget, block: true }).range(from, to));
 			}
 			return false;
