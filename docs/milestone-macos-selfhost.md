@@ -28,7 +28,8 @@ end-to-end tests; the rest is in priority order within each section.
       (`file-menu`), rename in place; links are rewritten when notes move
 - [x] Back/forward history (⌥⌘←/→, header buttons, mouse buttons)
 - [ ] Tabs and splits in the main area
-- [ ] Hover preview of links (page preview)
+- [x] Hover preview of links (page preview): reading view on hover, editor
+      with ⌘, sections and blocks, `hover-link` from plugins
 - [x] Daily notes and templates (core plugins, with their settings and
       the `{{date}}`/`{{time}}`/`{{title}}` variables)
 - [ ] Bookmarks, properties editor

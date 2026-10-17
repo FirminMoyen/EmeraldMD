@@ -57,6 +57,7 @@ machine does not switch plugins on.
 | `app.customCss` | `theme`, `themes` (manifests by name), `oldThemes`, `snippets`, `enabledSnippets` (Set), `setTheme`, `setCssEnabledStatus`, `isThemeInstalled`, `getThemeFolder`, `getThemePath`, `getSnippetsFolder`, `getSnippetPath`, `readThemes`, `readSnippets`, `requestLoadTheme`, `requestLoadSnippets` | Theme and snippet managers |
 | `workspace.on('file-menu')` | Fired with `(menu, file, 'file-explorer-context-menu', leaf)` before the file tree's context menu opens, so plugins can add items | Iconize, and most file-management plugins |
 | `fileManager.renameFile` | Renames or moves, then rewrites wikilinks (keeping heading and alias) and Markdown links to what moved; asks first unless `alwaysUpdateLinks` is on | Plugins that move or rename notes |
+| `workspace.trigger('hover-link', { event, source, hoverParent, targetEl, linktext, sourcePath })` | The Page preview core plugin shows the linked note in a `HoverPopover` (`.popover.hover-popover`); sources registered with `registerHoverLinkSource` and `defaultMod: true` (and the editor) need ⌘/Ctrl held | Dataview, Calendar and other plugins that preview links |
 | `workspace.on('css-change')` | Fired when the theme, a snippet or an appearance setting changes | Iconize, Minimal Theme Settings, Style Settings |
 
 ## Globals
@@ -136,8 +137,8 @@ the public theme documentation: `.modal-container > .modal > .modal-close-button
 
 - Node built-ins and `electron` (desktop-only plugins, and some that are not
   marked desktop-only, such as Auto Link Title, which requires `electron`).
-- Bases views and value classes, page previews (`HoverPopover`), tabs and
-  splits in the main area, popout windows.
+- Bases views and value classes, tabs and splits in the main area, popout
+  windows.
 - Live Preview widgets from plugins that rely on Obsidian's own Live Preview
   internals beyond `editorLivePreviewField` (math and Mermaid rendering).
 - `vault.adapter.remove`/`rename` inside `.obsidian` (refused); outside it,
