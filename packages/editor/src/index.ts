@@ -9,7 +9,7 @@ import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirro
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown';
 import { HighlightStyle, indentOnInput, syntaxHighlighting, syntaxTree } from '@codemirror/language';
 import { highlightSelectionMatches, searchKeymap } from '@codemirror/search';
-import { EditorState, type Extension } from '@codemirror/state';
+import { Compartment, EditorState, type Extension } from '@codemirror/state';
 import {
 	Decoration,
 	type DecorationSet,
@@ -102,6 +102,9 @@ export interface MarkdownEditorOptions {
 export class MarkdownEditor {
 	readonly view: EditorView;
 	private readonly extensions: Extension[];
+	/** Extensions added from outside (plugins), kept across documents. */
+	private readonly extra = new Compartment();
+	private extraExtensions: Extension = [];
 
 	constructor(options: MarkdownEditorOptions) {
 		this.extensions = [
@@ -155,6 +158,12 @@ export class MarkdownEditor {
 		});
 	}
 
+	/** Replaces the extensions added from outside (plugin editor extensions). */
+	setExtensions(extensions: Extension): void {
+		this.extraExtensions = extensions;
+		this.view.dispatch({ effects: this.extra.reconfigure(extensions) });
+	}
+
 	focus(): void {
 		this.view.focus();
 	}
@@ -164,6 +173,6 @@ export class MarkdownEditor {
 	}
 
 	private createState(doc: string): EditorState {
-		return EditorState.create({ doc, extensions: this.extensions });
+		return EditorState.create({ doc, extensions: [this.extensions, this.extra.of(this.extraExtensions)] });
 	}
 }

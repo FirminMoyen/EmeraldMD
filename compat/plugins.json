@@ -1,0 +1,195 @@
+{
+	"about": "Community plugins smoke-tested by compat/smoke.test.ts. Popular (by downloads), MIT-licensed and not desktop-only. Pinned with `node compat/fetch.mjs --lock`.",
+	"plugins": [
+		{
+			"id": "obsidian-hider",
+			"repo": "kepano/obsidian-hider",
+			"version": "1.7.1",
+			"license": "MIT",
+			"sha256": {
+				"manifest.json": "98af5d65438368adb86be18f8afea80f778acfef3a594b179bd1f5a7815ed359",
+				"main.js": "1aae6b0a59e5212af0547bce86c6df1d1bdf00af2ed5fe427c061246686352be",
+				"styles.css": "feea610c7da9b46c8cfbddd7d19f8985ee93454af2c4970d689c00e12e5770c5"
+			},
+			"expect": "clean-unload"
+		},
+		{
+			"id": "nldates-obsidian",
+			"repo": "obsidian-community/nldates",
+			"version": "0.6.4",
+			"license": "MIT",
+			"sha256": {
+				"manifest.json": "af72a3303867be4305d876488949beec4a2d153b892e3febbcd103f808cc83df",
+				"main.js": "387d36a43412f761c0c69320655a7ec09aa9189ae2267550224cacc861e63fd6"
+			},
+			"expect": "clean-unload"
+		},
+		{
+			"id": "dataview",
+			"repo": "blacksmithgu/obsidian-dataview",
+			"version": "0.5.68",
+			"license": "MIT",
+			"sha256": {
+				"manifest.json": "9235db47112da81b85591c79ecb9ae2574e5e72207056e976472f90616286185",
+				"main.js": "794e9eaede73920bb8d54b0eda4f5de2182d698cc638774500f24f14bcd4da0b",
+				"styles.css": "3306dd9032e00f989ba7233a37fd255bc4d3f4340cee661762e952f3f6aa1de9"
+			},
+			"expect": "clean-unload"
+		},
+		{
+			"id": "calendar",
+			"repo": "liamcain/obsidian-calendar-plugin",
+			"version": "1.5.10",
+			"license": "MIT",
+			"sha256": {
+				"manifest.json": "f3e9581338648512baa12d5b458490f7fd367918f7bdb6bd86171ce57be7d08b",
+				"main.js": "7fb339e9cf9fdbe5a801fa2b8ab85b366b5b3777fbd193cbc8728bc27711d125"
+			},
+			"expect": "clean-unload"
+		},
+		{
+			"id": "obsidian-outliner",
+			"repo": "vslinko/obsidian-outliner",
+			"version": "4.10.2",
+			"license": "MIT",
+			"sha256": {
+				"manifest.json": "277a8887eb959cc7a4ae047608421153b359bdf451c2d66caab91c35ca98b93f",
+				"main.js": "3d5bc634d3045ead4df9747d07ab51f16d9722f4601f9fee27e0c7fe9828fb33",
+				"styles.css": "7922a264883894e69f22c37f549744f7d46d1de926fc802aa4e94c75cd2fbceb"
+			},
+			"expect": "clean-unload"
+		},
+		{
+			"id": "homepage",
+			"repo": "mirnovov/obsidian-homepage",
+			"version": "4.5.0",
+			"license": "MIT",
+			"sha256": {
+				"manifest.json": "5e7e20085c952d10a10d373ca5718516997f52b2dfeae1627cafc9c70f8df29c",
+				"main.js": "567b14e6e7913301b46d9b61fd36a4081fa7de1818f1926c1fcb586792aab201",
+				"styles.css": "bf346def46e6626446c54983f7e6ce4775b84b01159cd046301e9be5c3407589"
+			},
+			"expect": "clean-unload"
+		},
+		{
+			"id": "cmdr",
+			"repo": "jsmorabito/obsidian-commander",
+			"version": "0.6.0",
+			"license": "MIT",
+			"sha256": {
+				"manifest.json": "1c3ecc36df49ca48975496113176c80a82ab0be722aa8e16b2fa60b4a70c4df6",
+				"main.js": "d1b9e2a6cbf9478c099cff437c9b89263915b7413620ad4637b145a90d03be80",
+				"styles.css": "fd7b727b3701a9f1cb1dfb29ad61278d3d880bd6a8411cc0aeca276c25b03f4e"
+			},
+			"expect": "clean-unload"
+		},
+		{
+			"id": "better-word-count",
+			"repo": "lukeleppan/better-word-count",
+			"version": "0.10.1",
+			"license": "MIT",
+			"sha256": {
+				"manifest.json": "45d6a1642d7e47e01cc32b602405c651d9289714ca9a0fd1c5e22eb5979e7313",
+				"main.js": "ce8ea4a7c4bb162206e5eb5b27d965883ce4b1beddae1de41fbeba0843c52dc9",
+				"styles.css": "f279f1989d4e099af82f0bc795beef45ee30685e9744f672dd0c8b50d64d4ee1"
+			},
+			"expect": "clean-unload"
+		},
+		{
+			"id": "obsidian-admonition",
+			"repo": "ebullient/obsidian-admonition",
+			"version": "12.0.10",
+			"license": "MIT",
+			"sha256": {
+				"manifest.json": "3ca4804df5d940ad04879746a020cf161b89bdd4fe1da64c16137840450d04f6",
+				"main.js": "c2b4ecdb50e5934031dad216f169143f8c471fca39631a2ee10fc95870959519",
+				"styles.css": "09d3328199aba165fc10ac419747bb092ce777867f4431db0d6c7f1c9da8258c"
+			},
+			"expect": "clean-unload"
+		},
+		{
+			"id": "obsidian-auto-link-title",
+			"repo": "zolrath/obsidian-auto-link-title",
+			"version": "1.5.5",
+			"license": "MIT",
+			"sha256": {
+				"manifest.json": "21916c8c8fa1996d38fc79e6064b61f41c6b34d5d4eaddaf36f18432b3f49a11",
+				"main.js": "eb27498bfd05dc5c3847dd072f555ed4c02aece24451042c2edb25fc961f38be",
+				"styles.css": "040d99c787acf90dba4374c21b67417dde43acc59ed4ab9bcee510bfbc4508b2"
+			},
+			"expect": "loads"
+		},
+		{
+			"id": "quickadd",
+			"repo": "chhoumann/quickadd",
+			"version": "2.32.1",
+			"license": "MIT",
+			"sha256": {
+				"manifest.json": "b7610b4c1d37c2c73f781c294c1a380e731e797f9858d2d825e7facc1ac3add1",
+				"main.js": "6423b2d14b60bc51fc6b6f61f835e08c5842d28e5a1a43ab5601ccd37b4e44c5",
+				"styles.css": "9467ef3622cd1137ce5a0148e16de23b9f5be87bc8c204fb6050c48f8f29994d"
+			},
+			"expect": "clean-unload"
+		},
+		{
+			"id": "obsidian-tasks-plugin",
+			"repo": "obsidian-tasks-group/obsidian-tasks",
+			"version": "8.5.0",
+			"license": "MIT",
+			"sha256": {
+				"manifest.json": "1920ee9d69357bdc4685becf9738da59a43132a57edf2ef4cf06ec62f2445eff",
+				"main.js": "f901cc5537518787cd07db251d8b0db43491a127440d1b415f9cae950fbb587b",
+				"styles.css": "1e2cbfff193a8086c07219b140fb52782348a7cf037ea101d8a5e5e92f7093b9"
+			},
+			"expect": "clean-unload"
+		},
+		{
+			"id": "obsidian-linter",
+			"repo": "platers/obsidian-linter",
+			"version": "1.34.1",
+			"license": "MIT",
+			"sha256": {
+				"manifest.json": "796d0c47d50d1c56c53ce604da45e5674763e7cd57fd5fa1ccc1a2d31fef4e91",
+				"main.js": "b3134716933daa397214aa94ce019e1e27db8054621dcea87bdbe91ff5acae19",
+				"styles.css": "aeda3a668070de1e48650d1613a96bd018e0b7b3aa5fabdc85263589f1198634"
+			},
+			"expect": "clean-unload"
+		},
+		{
+			"id": "obsidian-icon-folder",
+			"repo": "florianwoelki/obsidian-iconize",
+			"version": "2.14.7",
+			"license": "MIT",
+			"sha256": {
+				"manifest.json": "f524a18d69e990a244173a3595681c39a20bcbc9dc18b59af51e45660fef5ca2",
+				"main.js": "ada0b009706556c98101f953a6a87f5cafd3001085df593d3be28eeeea218201",
+				"styles.css": "56ffeb8349f4af97dab8a14fcadcb0019d3b37b116d7a34aa21e958e98455a89"
+			},
+			"expect": "clean-unload"
+		},
+		{
+			"id": "periodic-notes",
+			"repo": "liamcain/obsidian-periodic-notes",
+			"version": "0.0.17",
+			"license": "MIT",
+			"sha256": {
+				"manifest.json": "bda29323f75d3b3fcbda489335825b97fe4b574914d04635e9a7e67f2414049c",
+				"main.js": "ccf1a18673693d1036fc7614c3af9d23e5edfe425d1053df81dddcc29b1f8b0e",
+				"styles.css": "613f3985d4c84900ed2e25d8a46efb7b3ace6889fb71217055084084eb146238"
+			},
+			"expect": "clean-unload"
+		},
+		{
+			"id": "obsidian-minimal-settings",
+			"repo": "kepano/obsidian-minimal-settings",
+			"version": "9.0.0",
+			"license": "MIT",
+			"sha256": {
+				"manifest.json": "2038f9c1f5ca026ebc1f3e156bad97c671d2c401a20718384508ef72071e8c5f",
+				"main.js": "f754e0ce6523e433bff8e7995a848f7d7fac205399f9ab3b1258430261fd90c4",
+				"styles.css": "50084760da927a5bf5ac1b9d3b960dc52e1d0a3bf690e54df8f4d76f8212628c"
+			},
+			"expect": "clean-unload"
+		}
+	]
+}

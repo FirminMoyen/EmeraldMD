@@ -80,7 +80,7 @@ impl From<VaultError> for ApiError {
         let status = match &err {
             VaultError::NotFound(_) => StatusCode::NOT_FOUND,
             VaultError::AlreadyExists(_) => StatusCode::CONFLICT,
-            VaultError::OutsideVault(_) | VaultError::NotAFolder(_) => StatusCode::BAD_REQUEST,
+            VaultError::OutsideVault(_) | VaultError::NotAFolder(_) | VaultError::NotConfigPath(_) => StatusCode::BAD_REQUEST,
             VaultError::Io(io) => match io.kind() {
                 std::io::ErrorKind::NotFound => StatusCode::NOT_FOUND,
                 std::io::ErrorKind::InvalidData => StatusCode::UNPROCESSABLE_ENTITY,

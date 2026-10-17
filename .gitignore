@@ -5,3 +5,4 @@ coverage/
 apps/desktop/src-tauri/gen/
 *.log
 .DS_Store
+compat/.cache/

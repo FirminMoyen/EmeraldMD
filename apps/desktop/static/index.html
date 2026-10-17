@@ -22,45 +22,50 @@
 			</div>
 
 			<div class="workspace" id="workspace" hidden>
-				<aside class="workspace-split mod-left-split">
-					<div class="nav-header">
-						<div class="nav-vault-name" id="vault-name"></div>
-						<div class="nav-buttons-container">
-							<button class="clickable-icon" id="new-note" title="New note (Ctrl/Cmd+N)" aria-label="New note">
-								<svg viewBox="0 0 24 24"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z" /><path d="M14 3v6h6M12 12v6M9 15h6" /></svg>
-							</button>
-							<button class="clickable-icon" id="new-folder" title="New folder" aria-label="New folder">
-								<svg viewBox="0 0 24 24"><path d="M3 6a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" /><path d="M12 10v6M9 13h6" /></svg>
-							</button>
-							<button class="clickable-icon" id="switch-vault" title="Open another vault (Ctrl/Cmd+O)" aria-label="Open another vault">
-								<svg viewBox="0 0 24 24"><path d="M3 7h13l-3-3M21 17H8l3 3" /></svg>
-							</button>
+				<div class="workspace-ribbon-container" id="ribbon"></div>
+
+				<aside class="workspace-split mod-left-split" id="left-split">
+					<div class="file-explorer-pane" id="file-explorer">
+						<div class="nav-header">
+							<div class="nav-vault-name" id="vault-name"></div>
+							<div class="nav-buttons-container">
+								<button class="clickable-icon" id="new-note" title="New note (Ctrl/Cmd+N)" aria-label="New note">
+									<svg viewBox="0 0 24 24"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z" /><path d="M14 3v6h6M12 12v6M9 15h6" /></svg>
+								</button>
+								<button class="clickable-icon" id="new-folder" title="New folder" aria-label="New folder">
+									<svg viewBox="0 0 24 24"><path d="M3 6a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z" /><path d="M12 10v6M9 13h6" /></svg>
+								</button>
+								<button class="clickable-icon" id="switch-vault" title="Open another vault (Ctrl/Cmd+O)" aria-label="Open another vault">
+									<svg viewBox="0 0 24 24"><path d="M3 7h13l-3-3M21 17H8l3 3" /></svg>
+								</button>
+							</div>
 						</div>
+						<div class="nav-files-container" id="file-tree"></div>
 					</div>
-					<div class="nav-files-container" id="file-tree"></div>
 				</aside>
 
-				<main class="workspace-split mod-root">
-					<div class="view-header">
+				<main class="workspace-split mod-root" id="root-split">
+					<div class="markdown-view-parts" id="markdown-view-parts">
 						<input class="view-header-title" id="file-title" spellcheck="false" aria-label="Note name" />
-						<button class="clickable-icon" id="trash-file" title="Move to trash" aria-label="Move to trash">
+						<button class="clickable-icon view-action" id="trash-file" title="Move to trash" aria-label="Move to trash">
 							<svg viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13" /></svg>
 						</button>
-					</div>
-					<div class="view-content">
-						<div class="markdown-source-view" id="editor"></div>
+						<div class="markdown-source-view mod-cm6" id="editor"></div>
 						<div class="empty-view" id="no-file" hidden>No note is open. Pick one on the left, or press Ctrl/Cmd+N.</div>
 					</div>
 				</main>
 
-				<aside class="workspace-split mod-right-split">
-					<div class="side-header">Backlinks</div>
-					<div class="backlink-pane" id="backlinks"></div>
+				<aside class="workspace-split mod-right-split" id="right-split">
+					<div class="backlinks-pane" id="backlinks-pane">
+						<div class="side-header">Backlinks</div>
+						<div class="backlink-pane" id="backlinks"></div>
+					</div>
 				</aside>
 			</div>
 
-			<div class="status-bar" id="status-bar"></div>
-			<div class="notice-container" id="notices"></div>
+			<div class="status-bar" id="status-bar">
+				<div class="status-bar-item mod-core" id="status-core"></div>
+			</div>
 		</div>
 		<script type="module" src="app.js"></script>
 	</body>

@@ -15,10 +15,12 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = { version = "2.7", features = [] }
 
 [dependencies]
+base64 = "0.22"
 emerald-core.workspace = true
 # Server tokens: macOS Keychain, Windows Credential Manager, Secret Service on Linux.
 keyring = "4.2"
 notify.workspace = true
+reqwest = { version = "0.13", features = ["gzip", "deflate", "brotli"] }
 serde.workspace = true
 serde_json.workspace = true
 tauri = { version = "2.12", features = [] }

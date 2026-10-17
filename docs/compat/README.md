@@ -19,6 +19,17 @@ for macOS (Electron 39.8.3). Evidence: `ev_7c160cf9…54fd`.
 
 ## Vault layout
 
-- Notes and attachments are plain files. Settings live in `.obsidian/`, which
-  EmeraldMD leaves untouched for now.
+- Notes and attachments are plain files. Settings live in `.obsidian/`. EmeraldMD
+  reads `app.json`, `appearance.json`, `types.json`, `community-plugins.json`
+  and the plugin folders there, and writes only what the user or a plugin
+  changes (plugin `data.json`, the enabled-plugins list, settings set through
+  `vault.setConfig`). Access goes through path-checked commands that refuse
+  anything outside `.obsidian/`, including through symbolic links
+  (`crates/emerald-core/src/config.rs`).
 - Deleted files can go to `.trash/` inside the vault. EmeraldMD always does this.
+
+## More
+
+- [internals.md](internals.md): what plugins use beyond the public typings, and how it was established.
+- [plugins.md](plugins.md): smoke-test results for popular community plugins (generated).
+- [api-coverage.md](api-coverage.md): which exports and methods of the typings exist (generated).
