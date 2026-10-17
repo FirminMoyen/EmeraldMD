@@ -92,5 +92,5 @@ end-to-end tests; the rest is in priority order within each section.
       devices, offline edits then reconnect
 - [x] Hardening: rate limits, request size limits, trusted-proxy client
       addresses, symlink-safe path handling
-- [ ] Security review of the whole server and the app's server client,
-      dependency audit
+- [x] Security review of the desktop app (docs/security-desktop.md: inert
+      notes, command limits, plugin trust) and dependency audits (npm, cargo)

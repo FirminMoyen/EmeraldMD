@@ -135,3 +135,32 @@ describe('math, footnotes and diagrams', () => {
 		expect(el.querySelector('pre')).toBeNull();
 	});
 });
+
+describe('untrusted notes stay inert', () => {
+	it('drops links that run code from formulas', async () => {
+		const { loadMathJax, renderMath } = await import('../src');
+		await loadMathJax();
+		const formula = renderMath('\\href{javascript:alert(1)}{x} + \\href{https://example.org}{y}', false);
+		const hrefs = [...formula.querySelectorAll('*')].flatMap((el) => [el.getAttribute('href'), el.getAttribute('xlink:href')]).filter(Boolean);
+		expect(hrefs.some((h) => /javascript:/i.test(h!))).toBe(false);
+		expect(hrefs).toContain('https://example.org');
+	}, 20000);
+
+	it('cleans generated SVG and HTML in notes', async () => {
+		const { sanitizeSvg, isDangerousUrl } = await import('../src');
+		const svg = new DOMParser().parseFromString(
+			'<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" onload="x()"><script>x()</script><a xlink:href="javascript:x()"><text onclick="x()">t</text></a><a href="#ok">ok</a></svg>',
+			'image/svg+xml',
+		).documentElement;
+		sanitizeSvg(svg);
+		expect(svg.outerHTML).not.toMatch(/onload|onclick|<script|javascript:/i);
+		expect(svg.querySelector('a[href="#ok"]')).not.toBeNull();
+		expect(isDangerousUrl(' jav\tascript:x()')).toBe(true);
+		expect(isDangerousUrl('https://example.org')).toBe(false);
+
+		const { el } = await render('<div><a href="data:text/html,x">bad</a> <img src="data:image/png;base64,AAAA"> <a href="vbscript:x">vb</a></div>');
+		expect(el.querySelector('a[href^="data:"]')).toBeNull();
+		expect(el.querySelector('a[href^="vbscript:"]')).toBeNull();
+		expect(el.querySelector('img')?.getAttribute('src')).toBe('data:image/png;base64,AAAA');
+	});
+});

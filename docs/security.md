@@ -1,5 +1,7 @@
 # Security of the self-hosted server
 
+The desktop app has its own review: [security-desktop.md](security-desktop.md).
+
 A review of `emeraldmd-server` (`crates/emerald-server`) done on 2026-10-17,
 before it is run on the internet. It lists what was found, what changed, and
 the risks that remain by design. Setup is in [self-hosting.md](self-hosting.md).

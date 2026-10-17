@@ -7,6 +7,7 @@ import {
 	editorInfoExtensions,
 	MarkdownRenderer,
 	MarkdownView,
+	isDangerousUrl,
 	Notice,
 	setIcon,
 	setLivePreviewEffect,
@@ -152,6 +153,19 @@ class EmeraldApp {
 				isResolved: (link) => !this.metadataCache || Boolean(this.metadataCache.getFirstLinkpathDest(getLinkpath(link), this.activeFile?.path ?? '')),
 			},
 		});
+		// Links that would run code or replace the page (javascript:, data:…) are never followed,
+		// whatever drew them: notes are untrusted, and the page can call the app's commands.
+		document.addEventListener(
+			'click',
+			(event) => {
+				const link = event.target instanceof Element ? event.target.closest('a') : null;
+				if (link && isDangerousUrl(link.getAttribute('href') ?? link.getAttribute('xlink:href'))) {
+					event.preventDefault();
+					event.stopImmediatePropagation();
+				}
+			},
+			true,
+		);
 		// Links in rendered Markdown (reading view, Live Preview widgets, plugin views) open in the browser.
 		document.addEventListener('click', (event) => {
 			const link = event.target instanceof Element ? event.target.closest<HTMLAnchorElement>('a.external-link[href]') : null;
