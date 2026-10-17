@@ -28,6 +28,12 @@ describe('file explorer', () => {
 		);
 		expect(title('Welcome.md').querySelector('.nav-file-title-content')?.textContent).toBe('Welcome');
 		expect(title('Projects').querySelector('.nav-folder-title-content')?.textContent).toBe('Projects');
+		// Folders start closed, so large vaults draw only their top level; a click opens them, and that is remembered.
+		expect(title('Projects').parentElement!.classList.contains('is-collapsed')).toBe(true);
+		expect(document.querySelector('[data-path="Projects/Plan.md"]')).toBeNull();
+		title('Projects').click();
+		title('Attachments').click();
+		expect(shell.app.loadLocalStorage('emerald-expanded-folders')).toEqual(['Projects', 'Attachments']);
 		expect(title('Projects').querySelector('.nav-folder-collapse-indicator svg')).not.toBeNull();
 		expect(title('Attachments/pic.png').querySelector('.nav-file-tag')?.textContent).toBe('png');
 	});

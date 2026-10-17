@@ -57,11 +57,32 @@ pub struct VaultSession {
     contents: HashMap<String, Arc<str>>,
 }
 
+/// The metadata of each Markdown note in `entries` (None for other files and
+/// for notes that cannot be read, e.g. invalid UTF-8), parsed in parallel.
+fn parse_notes(vault: &Vault, entries: &[FileEntry]) -> Vec<Option<CachedMetadata>> {
+    let parse = |entry: &FileEntry| -> Option<CachedMetadata> {
+        if entry.kind != EntryKind::File || !is_markdown(&entry.path) {
+            return None;
+        }
+        vault.read(&entry.path).ok().map(|text| parse_markdown(&text))
+    };
+    let threads = std::thread::available_parallelism().map_or(1, |n| n.get()).min(8);
+    // Small folders are not worth the threads.
+    if threads == 1 || entries.len() < 64 {
+        return entries.iter().map(parse).collect();
+    }
+    let chunk = entries.len().div_ceil(threads);
+    std::thread::scope(|scope| {
+        let handles: Vec<_> = entries.chunks(chunk).map(|part| scope.spawn(move || part.iter().map(parse).collect::<Vec<_>>())).collect();
+        handles.into_iter().flat_map(|handle| handle.join().expect("a parsing thread panicked")).collect()
+    })
+}
+
 impl VaultSession {
     /// Opens a vault folder and indexes every visible file.
     pub fn open(root: impl AsRef<Path>) -> Result<Self> {
         let mut session = Self { vault: Vault::open(root)?, index: VaultIndex::new(), contents: HashMap::new() };
-        session.index_from_disk("/", &mut VaultUpdate::default())?;
+        session.index_from_disk("/", None)?;
         session.index.relink_all();
         Ok(session)
     }
@@ -213,7 +234,7 @@ impl VaultSession {
                     self.add_missing_ancestors(&path, &mut update)?;
                     self.index.upsert_entry(entry.clone());
                     update.upserted.push(entry);
-                    self.index_from_disk(&path, &mut update)?;
+                    self.index_from_disk(&path, Some(&mut update))?;
                     self.relink_all(&mut update);
                 }
             }
@@ -288,18 +309,22 @@ impl VaultSession {
         Ok(())
     }
 
-    fn index_from_disk(&mut self, folder: &str, update: &mut VaultUpdate) -> Result<()> {
-        for entry in self.vault.scan(folder)? {
-            if entry.kind == EntryKind::File && is_markdown(&entry.path) {
-                // An unreadable note (e.g. invalid UTF-8) is listed without metadata.
-                if let Ok(text) = self.vault.read(&entry.path) {
-                    let metadata = parse_markdown(&text);
-                    self.index.set_metadata(&entry.path, metadata.clone());
-                    update.metadata.insert(entry.path.clone(), metadata);
+    /// Indexes everything under `folder`, reading and parsing notes on all
+    /// cores. With `update`, also records what was added (not when opening).
+    fn index_from_disk(&mut self, folder: &str, mut update: Option<&mut VaultUpdate>) -> Result<()> {
+        let entries = self.vault.scan(folder)?;
+        let parsed = parse_notes(&self.vault, &entries);
+        for (entry, metadata) in entries.into_iter().zip(parsed) {
+            if let Some(metadata) = metadata {
+                if let Some(update) = update.as_deref_mut() {
+                    update.metadata.insert(entry.path.clone(), metadata.clone());
                 }
+                self.index.set_metadata(&entry.path, metadata);
             }
             self.index.upsert_entry(entry.clone());
-            update.upserted.push(entry);
+            if let Some(update) = update.as_deref_mut() {
+                update.upserted.push(entry);
+            }
         }
         Ok(())
     }
