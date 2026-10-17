@@ -44,3 +44,30 @@ First errors each plugin logged while running (truncated).
   - `Vim adapter not found`
 - **Auto Link Title**
   - `Plugin "obsidian-auto-link-title" failed to load Error: Cannot find module 'electron': Node.js and Electron modules are not available in EmeraldMD yet`
+
+## Installing from the community directory
+
+Settings → Community plugins → **Browse** lists the plugins of the community
+directory (`community-plugins.json` in obsidianmd/obsidian-releases, sorted by
+download count), with each plugin's README. **Install** reads the latest
+version from the `manifest.json` on the plugin repository's default branch and
+downloads that release's `main.js`, `manifest.json` and `styles.css` into
+`.obsidian/plugins/<id>/`, as Obsidian does. Checks:
+
+- the plugin id must be a plain folder name, and the release's manifest must
+  carry the same id;
+- a plugin whose `minAppVersion` is newer than the API EmeraldMD implements is
+  refused; desktop-only plugins get a warning;
+- files over 20 MB are refused;
+- an installed plugin stays off until the user turns it on, and restricted
+  mode still applies.
+
+**Check for updates** compares installed versions with the directory's;
+updating rewrites the files and reloads the plugin if it was running.
+**Uninstall** moves the plugin's folder to the vault's `.trash` (the only
+config folders the app moves are `.obsidian/plugins/<id>` and
+`.obsidian/themes/<name>`).
+
+Themes work the same way from Settings → Appearance → Themes → **Browse**
+(`community-css-themes.json`, the release's `theme.css`, or the repository's
+default branch for themes without releases).

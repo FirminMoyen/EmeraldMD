@@ -149,6 +149,13 @@ export class MemoryConfigStore implements ConfigStore {
 	async mkdir(path: string): Promise<void> {
 		this.folders.add(normalizePath(path));
 	}
+
+	/** Forgets the folder (the app moves it to the vault's trash). */
+	async trash(path: string): Promise<void> {
+		const prefix = normalizePath(path);
+		for (const key of [...this.files.keys()]) if (key === prefix || key.startsWith(`${prefix}/`)) this.files.delete(key);
+		for (const key of [...this.folders]) if (key === prefix || key.startsWith(`${prefix}/`)) this.folders.delete(key);
+	}
 }
 
 export interface TestApp {

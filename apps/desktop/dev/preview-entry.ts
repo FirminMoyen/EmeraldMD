@@ -133,6 +133,8 @@ mockIPC(
 				return config.write(a.path!, a.data!);
 			case 'config_list':
 				return config.list(a.path!);
+			case 'config_trash':
+				return config.trash(a.path);
 			case 'config_mkdir':
 				return config.mkdir(a.path!);
 			case 'config_stat': {

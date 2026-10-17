@@ -65,6 +65,10 @@ export class TauriConfigStore implements ConfigStore {
 	mkdir(path: string): Promise<void> {
 		return invoke('config_mkdir', { path });
 	}
+
+	async trash(path: string): Promise<void> {
+		await invoke('config_trash', { path });
+	}
 }
 
 /** Whether community plugins may run in the open vault; stored in the app's settings. */

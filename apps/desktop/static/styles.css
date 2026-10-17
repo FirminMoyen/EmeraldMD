@@ -2330,6 +2330,184 @@ a.tag {
 	background: transparent;
 }
 
+/* Community plugin and theme browsers (packages/plugin-host/src/browser.ts, src/theme-browser.ts) */
+
+.modal.mod-community-modal {
+	width: min(1100px, 92vw);
+	height: min(760px, 86vh);
+	max-width: none;
+	display: flex;
+	flex-direction: column;
+}
+
+.mod-community-modal .modal-content {
+	flex: 1;
+	min-height: 0;
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+}
+
+.community-modal-controls {
+	display: flex;
+	gap: 8px;
+}
+
+.community-modal-search {
+	flex: 1;
+}
+
+.community-modal-body {
+	flex: 1;
+	min-height: 0;
+	display: flex;
+	gap: 16px;
+}
+
+.community-modal-search-results {
+	flex: 0 0 38%;
+	overflow-y: auto;
+	padding-right: 4px;
+}
+
+.community-modal-details {
+	flex: 1;
+	min-width: 0;
+	overflow-y: auto;
+	padding: 0 4px 24px;
+}
+
+.community-modal-count,
+.community-modal-empty {
+	padding: 6px 2px;
+	color: var(--text-muted);
+	font-size: var(--font-ui-small);
+}
+
+.community-item {
+	padding: 10px 12px;
+	margin-bottom: 6px;
+	border: 1px solid var(--background-modifier-border);
+	border-radius: var(--radius-m);
+	cursor: var(--cursor-link);
+}
+
+.community-item:hover {
+	background: var(--background-modifier-hover);
+}
+
+.community-item.is-selected {
+	border-color: var(--interactive-accent);
+	background: var(--background-modifier-active-hover);
+}
+
+.community-item-name {
+	display: inline;
+	font-weight: var(--font-semibold);
+}
+
+.community-item-installed {
+	margin-left: 8px;
+	padding: 1px 6px;
+	border-radius: var(--radius-s);
+	background: var(--interactive-accent);
+	color: var(--text-on-accent);
+	font-size: var(--font-ui-smaller);
+}
+
+.community-item-meta {
+	display: flex;
+	gap: 10px;
+	margin: 2px 0 4px;
+	color: var(--text-faint);
+	font-size: var(--font-ui-smaller);
+}
+
+.community-item-desc {
+	color: var(--text-muted);
+	font-size: var(--font-ui-small);
+}
+
+.community-modal-info-name {
+	font-size: var(--font-ui-large);
+	font-weight: var(--font-bold);
+}
+
+.community-modal-info,
+.community-modal-info-repo {
+	margin-top: 4px;
+	color: var(--text-muted);
+	font-size: var(--font-ui-small);
+}
+
+.community-modal-info-desc {
+	margin: 10px 0;
+}
+
+.community-modal-button-container {
+	display: flex;
+	gap: 8px;
+	margin: 12px 0;
+}
+
+.community-modal-notes > * {
+	margin-bottom: 6px;
+}
+
+.community-modal-readme {
+	margin-top: 16px;
+	padding-top: 12px;
+	border-top: 1px solid var(--background-modifier-border);
+}
+
+.community-modal-readme img {
+	max-width: 100%;
+}
+
+.community-theme-grid {
+	flex: 1;
+	min-height: 0;
+	overflow-y: auto;
+	display: grid;
+	grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+	align-content: start;
+	gap: 14px;
+}
+
+.community-theme {
+	padding: 10px;
+	border: 1px solid var(--background-modifier-border);
+	border-radius: var(--radius-m);
+}
+
+.community-theme.is-selected {
+	border-color: var(--interactive-accent);
+}
+
+.community-theme-screenshot {
+	width: 100%;
+	aspect-ratio: 16 / 10;
+	object-fit: cover;
+	border-radius: var(--radius-s);
+	background: var(--background-secondary);
+}
+
+.community-theme-name {
+	margin-top: 6px;
+	font-weight: var(--font-semibold);
+}
+
+.community-theme-info {
+	color: var(--text-faint);
+	font-size: var(--font-ui-smaller);
+}
+
+.community-theme-buttons {
+	display: flex;
+	gap: 6px;
+	margin-top: 8px;
+}
+
 /* Settings → Hotkeys */
 
 .setting-command-hotkeys {
