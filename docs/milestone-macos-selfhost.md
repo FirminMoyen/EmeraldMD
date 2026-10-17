@@ -25,7 +25,8 @@ end-to-end tests; the rest is in priority order within each section.
 - [x] File tree: drag-and-drop move, context menu (new note here, rename,
       move to, delete, reveal in Finder, copy path) extended by plugins
       (`file-menu`), rename in place; links are rewritten when notes move
-- [ ] Tabs and splits in the main area; back/forward history
+- [x] Back/forward history (⌥⌘←/→, header buttons, mouse buttons)
+- [ ] Tabs and splits in the main area
 - [ ] Hover preview of links (page preview)
 - [ ] Bookmarks, templates, daily notes, properties editor
 

@@ -939,6 +939,18 @@ body.hide-ribbon .workspace-ribbon-container {
 	flex-direction: column;
 }
 
+.view-header-left,
+.view-header-nav-buttons {
+	display: flex;
+	gap: 2px;
+}
+
+.clickable-icon.is-disabled {
+	opacity: 0.35;
+	cursor: default;
+	pointer-events: none;
+}
+
 .view-header-title-container {
 	flex: 1;
 	min-width: 0;

@@ -48,6 +48,8 @@ const REOPEN_FILE_KEY = 'emeraldmd:reopen-file';
 const SAVE_DELAY_MS = 2000;
 /** Local storage keys (per vault, through `app.saveLocalStorage`). */
 const LAST_FILE_KEY = 'emerald-last-file';
+/** How many notes back/forward remembers. */
+const HISTORY_LIMIT = 50;
 const SIDEBARS_KEY = 'emerald-sidebars';
 
 
@@ -94,6 +96,10 @@ class EmeraldApp {
 	private applyingExternalChange = false;
 	private renderQueued = false;
 	private explorer: FileExplorer | null = null;
+	/** Notes visited before and after the open one (back/forward). */
+	private readonly history = { back: [] as TFile[], forward: [] as TFile[] };
+	private navigating = false;
+	private navButtons: { back: HTMLElement; forward: HTMLElement } | null = null;
 	private lastHandledShortcut = -Infinity;
 	private readonly editor: MarkdownEditor;
 	private readonly el = {
@@ -383,6 +389,18 @@ class EmeraldApp {
 			setIcon(modeButton, mode === 'preview' ? 'pencil' : 'book-open');
 			modeButton.setAttribute('aria-label', mode === 'preview' ? 'Edit (⌘E)' : 'Reading view (⌘E)');
 		};
+		const navButton = (icon: string, label: string, direction: -1 | 1) => {
+			const el = view.navButtonsEl.createEl('button', { cls: 'clickable-icon view-header-nav-button is-disabled', attr: { 'aria-label': label } });
+			setIcon(el, icon);
+			setTooltip(el, label);
+			el.addEventListener('click', () => void this.navigate(direction));
+			return el;
+		};
+		this.navButtons = { back: navButton('arrow-left', 'Navigate back (⌥⌘←)', -1), forward: navButton('arrow-right', 'Navigate forward (⌥⌘→)', 1) };
+		// The mouse's back and forward buttons.
+		view.containerEl.addEventListener('mouseup', (event) => {
+			if (event.button === 3 || event.button === 4) void this.navigate(event.button === 3 ? -1 : 1);
+		});
 		view.onLivePreviewChange = (on) => this.editor.setLivePreview(on, [setLivePreviewEffect.of(on)]);
 		view.livePreview = app.vault.getConfig('livePreview') !== false;
 		this.editor.setLivePreview(view.livePreview, [setLivePreviewEffect.of(view.livePreview)]);
@@ -427,6 +445,8 @@ class EmeraldApp {
 				return true;
 			},
 		});
+		add({ id: 'app:go-back', name: 'Navigate back', hotkeys: [{ modifiers: ['Mod', 'Alt'], key: 'ArrowLeft' }], callback: () => this.navigate(-1) });
+		add({ id: 'app:go-forward', name: 'Navigate forward', hotkeys: [{ modifiers: ['Mod', 'Alt'], key: 'ArrowRight' }], callback: () => this.navigate(1) });
 		add({
 			id: 'workspace:close',
 			name: 'Close current note',
@@ -547,6 +567,28 @@ class EmeraldApp {
 		}
 	}
 
+	/** Opens the previous (-1) or next (1) note in the history, skipping deleted ones. */
+	private async navigate(direction: -1 | 1): Promise<void> {
+		const from = direction < 0 ? this.history.back : this.history.forward;
+		const to = direction < 0 ? this.history.forward : this.history.back;
+		let target: TFile | undefined;
+		while ((target = from.pop()) && !this.vault?.getFileByPath(target.path)) {}
+		if (!target) return this.renderNavButtons();
+		if (this.activeFile && this.activeFile !== target) to.push(this.activeFile);
+		this.navigating = true;
+		try {
+			await this.openFile(target);
+		} finally {
+			this.navigating = false;
+		}
+	}
+
+	private renderNavButtons(): void {
+		const exists = (file: TFile) => Boolean(this.vault?.getFileByPath(file.path));
+		this.navButtons?.back.toggleClass('is-disabled', !this.history.back.some(exists));
+		this.navButtons?.forward.toggleClass('is-disabled', !this.history.forward.some(exists));
+	}
+
 	/** Switches the open note between editing and the reading view (saving first). */
 	private async toggleReading(): Promise<void> {
 		const view = this.markdownView;
@@ -570,6 +612,11 @@ class EmeraldApp {
 	private async openFile(file: TFile): Promise<void> {
 		if (!this.vault || !this.app || !this.markdownView) return;
 		await this.flush();
+		if (!this.navigating && this.activeFile && this.activeFile !== file) {
+			this.history.back.push(this.activeFile);
+			if (this.history.back.length > HISTORY_LIMIT) this.history.back.shift();
+			this.history.forward = [];
+		}
 		const ws = this.app.workspace;
 		if (file.extension !== 'md') {
 			const type = this.app.viewRegistry.getTypeByExtension(file.extension);
@@ -597,6 +644,7 @@ class EmeraldApp {
 		this.editor.focus();
 		ws.recordOpenFile(file);
 		this.app.saveLocalStorage(LAST_FILE_KEY, file.path);
+		this.renderNavButtons();
 		ws.trigger('file-open', file);
 	}
 

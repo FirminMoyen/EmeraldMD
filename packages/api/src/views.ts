@@ -77,6 +77,8 @@ export abstract class ItemView extends View {
 	contentEl: HTMLElement;
 	/** @internal */
 	headerEl: HTMLElement;
+	/** @internal Back and forward buttons (`.view-header-nav-buttons`), filled by the shell. */
+	navButtonsEl: HTMLElement;
 	/** @internal */
 	titleEl: HTMLElement;
 	/** @internal */
@@ -85,6 +87,7 @@ export abstract class ItemView extends View {
 	constructor(leaf: WorkspaceLeaf) {
 		super(leaf);
 		this.headerEl = this.containerEl.createDiv('view-header');
+		this.navButtonsEl = this.headerEl.createDiv('view-header-left').createDiv('view-header-nav-buttons');
 		this.titleEl = this.headerEl.createDiv('view-header-title-container').createDiv('view-header-title');
 		this.actionsEl = this.headerEl.createDiv('view-actions');
 		this.contentEl = this.containerEl.createDiv('view-content');
