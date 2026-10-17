@@ -2306,6 +2306,32 @@ a.tag {
 	margin: 0;
 }
 
+/* Page preview (packages/api/src/hover-popover.ts) */
+
+.popover.hover-popover {
+	position: fixed;
+	z-index: var(--layer-popover);
+	width: var(--popover-width, 450px);
+	max-width: calc(100vw - 12px);
+	max-height: var(--popover-max-height, 400px);
+	overflow: auto;
+	border: 1px solid var(--background-modifier-border);
+	border-radius: var(--radius-m);
+	background: var(--background-primary);
+	box-shadow: var(--shadow-l);
+}
+
+.hover-popover .markdown-embed {
+	padding: 0;
+	border: 0;
+}
+
+.hover-popover .markdown-preview-view {
+	max-width: none;
+	padding: 12px 18px;
+	font-size: calc(var(--font-text-size) * 0.9);
+}
+
 /* Scrollbars */
 
 ::-webkit-scrollbar {

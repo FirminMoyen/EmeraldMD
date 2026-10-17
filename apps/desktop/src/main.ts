@@ -124,6 +124,11 @@ class EmeraldApp {
 			onChange: () => this.onEdit(),
 			onOpenLink: (link) => void this.openLink(link),
 			onOpenUrl: (url) => void this.openExternal(url),
+			onHoverLink: (event, linktext, targetEl) => {
+				const view = this.markdownView;
+				if (!view || !this.app) return;
+				this.app.workspace.trigger('hover-link', { event, source: 'editor', hoverParent: view, targetEl, linktext, sourcePath: this.activeFile?.path ?? '' });
+			},
 			onFiles: (files, pos) => void this.insertAttachments(files, pos),
 			livePreview: {
 				renderMarkdown: (markdown, el) => this.renderInEditor(markdown, el),

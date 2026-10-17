@@ -147,6 +147,8 @@ export interface MarkdownEditorOptions {
 	onFiles?: (files: File[], pos: number) => void;
 	/** A click on a rendered external link in Live Preview. */
 	onOpenUrl?: (url: string) => void;
+	/** The mouse went over a wikilink (for page previews). */
+	onHoverLink?: (event: MouseEvent, linktext: string, targetEl: HTMLElement) => void;
 	/** Rendering of embeds, callouts and tables in Live Preview. */
 	livePreview?: LivePreviewOptions;
 }
@@ -199,6 +201,20 @@ export class MarkdownEditor {
 					event.preventDefault();
 					options.onFiles(files, view.posAtCoords({ x: event.clientX, y: event.clientY }) ?? view.state.selection.main.head);
 					return true;
+				},
+				mouseover: (event, view) => {
+					if (!options.onHoverLink || !(event.target instanceof Element)) return false;
+					const target = event.target.closest<HTMLElement>('.cm-hmd-internal-link');
+					if (!target) return false;
+					// Rendered in Live Preview the link carries its target; in source mode it is read from the line.
+					let link = target.dataset.lpLink ?? null;
+					if (link === null) {
+						const pos = view.posAtDOM(target);
+						const line = view.state.doc.lineAt(pos);
+						link = wikilinkAt(line.text, pos - line.from + 2);
+					}
+					if (link) options.onHoverLink(event, link, target);
+					return false;
 				},
 				mousedown: (event, view) => {
 					// Live Preview: a click on a rendered link follows it.
