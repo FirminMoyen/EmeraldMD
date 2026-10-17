@@ -1,9 +1,10 @@
 /**
  * Built-in views, registered like Obsidian's core plugins: search, graph,
- * local graph, outline, tags, canvas files, and the quick switcher.
+ * local graph, outline, tags, bookmarks, canvas files, and the quick switcher.
  */
 
 import type { App } from '@emeraldmd/api';
+import { BOOKMARKS_VIEW, BookmarksView } from './bookmarks';
 import { CANVAS_VIEW, CanvasFileView } from './canvas';
 import { GlobalGraphView, GRAPH_VIEW, LOCAL_GRAPH_VIEW, LocalGraphView } from './graph';
 import type { CoreViewHost } from './host';
@@ -25,6 +26,7 @@ export function registerCoreViews(app: App, host: CoreViewHost): void {
 	views.registerView(OUTLINE_VIEW, (leaf) => new OutlineView(leaf, host));
 	views.registerView(TAGS_VIEW, (leaf) => new TagsView(leaf, host));
 	views.registerView(CANVAS_VIEW, (leaf) => new CanvasFileView(leaf, host));
+	views.registerView(BOOKMARKS_VIEW, (leaf) => new BookmarksView(leaf, host));
 	views.registerExtensions(['canvas'], CANVAS_VIEW);
 
 	const ws = app.workspace;
@@ -42,6 +44,15 @@ export function registerCoreViews(app: App, host: CoreViewHost): void {
 	add({ id: 'outline:open', name: 'Outline: Show outline', callback: () => ws.ensureSideLeaf(OUTLINE_VIEW, 'right') });
 	add({ id: 'tag-pane:open', name: 'Tags view: Show tags', callback: () => ws.ensureSideLeaf(TAGS_VIEW, 'right') });
 	add({ id: 'canvas:new-file', name: 'Canvas: Create new canvas', callback: newCanvas });
+	add({
+		id: 'bookmarks:open',
+		name: 'Bookmarks: Show bookmarks',
+		checkCallback: (checking) => {
+			if (!app.internalPlugins.getEnabledPluginById('bookmarks')) return false;
+			if (!checking) void ws.ensureSideLeaf(BOOKMARKS_VIEW, 'left');
+			return true;
+		},
+	});
 
 	ws.leftRibbon.addRibbonItemButton('switcher:open', 'file-search', 'Open quick switcher', () => new QuickSwitcher(app, host).open());
 	ws.leftRibbon.addRibbonItemButton('graph:open', 'git-fork', 'Open graph view', openGraph);
@@ -58,6 +69,7 @@ export function registerCoreViews(app: App, host: CoreViewHost): void {
 	ws.onLayoutReady(async () => {
 		// Side panes, behind the file explorer and backlinks tabs.
 		await ws.ensureSideLeaf(SEARCH_VIEW, 'left', { reveal: false });
+		if (app.internalPlugins.getEnabledPluginById('bookmarks')) await ws.ensureSideLeaf(BOOKMARKS_VIEW, 'left', { reveal: false });
 		await ws.ensureSideLeaf(OUTLINE_VIEW, 'right', { reveal: false });
 		await ws.ensureSideLeaf(TAGS_VIEW, 'right', { reveal: false });
 		await ws.ensureSideLeaf(LOCAL_GRAPH_VIEW, 'right', { reveal: false });

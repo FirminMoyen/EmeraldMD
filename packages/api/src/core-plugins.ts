@@ -76,7 +76,7 @@ export abstract class InternalPluginInstance {
 	disable(): void {
 		for (const id of this.commandIds.splice(0)) this.app.commands.removeCommand(id);
 		for (const el of this.ribbonEls.splice(0)) this.app.workspace.leftRibbon.removeRibbonItem(el);
-		for (const ref of this.eventRefs.splice(0)) this.app.workspace.offref(ref);
+		for (const ref of this.eventRefs.splice(0)) ref.e.offref(ref);
 	}
 
 	protected registerEvent(ref: EventRef): void {
@@ -289,6 +289,131 @@ class TemplatePicker extends FuzzySuggestModal<TFile> {
 	}
 }
 
+/** An entry of `.obsidian/bookmarks.json`, in Obsidian's format. */
+export interface BookmarkItem {
+	type: 'file' | 'folder' | 'search' | 'heading' | 'block' | 'graph' | 'url' | 'group';
+	ctime?: number;
+	title?: string;
+	path?: string;
+	/** `#Heading` or `#^block`, for headings and blocks. */
+	subpath?: string;
+	query?: string;
+	url?: string;
+	/** Group members. */
+	items?: BookmarkItem[];
+}
+
+/**
+ * Bookmarks: notes, folders, headings, searches and links kept at hand,
+ * stored in `.obsidian/bookmarks.json` as `{ "items": [...] }` (the plugin's
+ * options file, as in Obsidian). Paths follow renames.
+ */
+export class Bookmarks extends InternalPluginInstance {
+	readonly id = 'bookmarks';
+	readonly name = 'Bookmarks';
+	readonly description = 'Keep notes, folders, headings and searches at hand in the left sidebar.';
+	private readonly listeners = new Set<() => void>();
+
+	get items(): BookmarkItem[] {
+		const items = this.options.items;
+		if (!Array.isArray(items)) this.options.items = [];
+		return this.options.items as BookmarkItem[];
+	}
+
+	onEnable(): void {
+		this.addCommand({
+			id: 'bookmarks:bookmark-current-view',
+			name: 'Bookmarks: Bookmark current file',
+			checkCallback: (checking) => {
+				const file = this.app.workspace.getActiveFile();
+				if (!file) return false;
+				if (!checking) this.toggle(file);
+				return true;
+			},
+		});
+		this.registerEvent(
+			this.app.workspace.on('file-menu', (menu: { addItem: (cb: (item: MenuItemLike) => unknown) => unknown }, file: TFile | TFolder) => {
+				const marked = this.find(file.path) !== null;
+				menu.addItem((item) =>
+					item
+						.setTitle(marked ? 'Remove bookmark' : 'Bookmark')
+						.setIcon('bookmark')
+						.setSection('action')
+						.onClick(() => this.toggle(file)),
+				);
+			}),
+		);
+		this.registerEvent(this.app.vault.on('rename', (file: TFile | TFolder, oldPath: string) => this.followRename(oldPath, file.path)));
+	}
+
+	/** The bookmark of a file or folder (not of a heading in it), anywhere in groups. */
+	find(path: string, items = this.items): BookmarkItem | null {
+		for (const item of items) {
+			if ((item.type === 'file' || item.type === 'folder') && item.path === path) return item;
+			if (item.type === 'group') {
+				const found = this.find(path, item.items ?? []);
+				if (found) return found;
+			}
+		}
+		return null;
+	}
+
+	/** Bookmarks the file or folder, or removes its bookmark. */
+	toggle(file: TFile | TFolder): void {
+		const existing = this.find(file.path);
+		if (existing) this.remove(existing);
+		else this.add({ type: file instanceof TFolder ? 'folder' : 'file', ctime: Date.now(), path: file.path });
+	}
+
+	add(item: BookmarkItem, group?: BookmarkItem): void {
+		(group ? (group.items ??= []) : this.items).push(item);
+		this.changed();
+	}
+
+	remove(item: BookmarkItem, items = this.items): boolean {
+		const i = items.indexOf(item);
+		if (i !== -1) {
+			items.splice(i, 1);
+			this.changed();
+			return true;
+		}
+		return items.some((other) => other.type === 'group' && this.remove(item, other.items ?? []));
+	}
+
+	/** @internal Called when bookmarks change; returns an unsubscribe function. */
+	onChange(listener: () => void): () => void {
+		this.listeners.add(listener);
+		return () => this.listeners.delete(listener);
+	}
+
+	private followRename(oldPath: string, newPath: string): void {
+		let moved = false;
+		const walk = (items: BookmarkItem[]) => {
+			for (const item of items) {
+				if (item.path && (item.path === oldPath || item.path.startsWith(`${oldPath}/`))) {
+					item.path = newPath + item.path.slice(oldPath.length);
+					moved = true;
+				}
+				if (item.items) walk(item.items);
+			}
+		};
+		walk(this.items);
+		if (moved) this.changed();
+	}
+
+	private changed(): void {
+		void this.saveOptions().catch((err: unknown) => console.error(err));
+		for (const listener of this.listeners) listener();
+	}
+}
+
+interface MenuItemLike {
+	setTitle(title: string): MenuItemLike;
+	setIcon(icon: string): MenuItemLike;
+	setSection(section: string): MenuItemLike;
+	onClick(cb: () => unknown): MenuItemLike;
+}
+
 /** What `hover-link` events carry (plugin API). */
 export interface HoverLinkEvent {
 	event: MouseEvent;
@@ -350,7 +475,7 @@ export interface InternalPlugin {
 }
 
 /** Core plugins that are on in a new vault. */
-const ENABLED_BY_DEFAULT = new Set(['daily-notes', 'templates', 'page-preview']);
+const ENABLED_BY_DEFAULT = new Set(['daily-notes', 'templates', 'page-preview', 'bookmarks']);
 
 export class InternalPlugins {
 	plugins: Record<string, InternalPlugin> = {};
@@ -358,7 +483,7 @@ export class InternalPlugins {
 	config: Record<string, boolean> = {};
 	private app: App | null = null;
 
-	constructor(instances: InternalPluginInstance[] = [new DailyNotes(), new Templates(), new PagePreview()]) {
+	constructor(instances: InternalPluginInstance[] = [new DailyNotes(), new Templates(), new PagePreview(), new Bookmarks()]) {
 		for (const instance of instances) this.plugins[instance.id] = { enabled: false, instance };
 	}
 

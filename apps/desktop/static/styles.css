@@ -610,6 +610,23 @@ button {
 	transform: rotate(-90deg);
 }
 
+/* Bookmarks (src/core-views/bookmarks.ts) */
+.bookmarks-view .tree-item-icon {
+	display: flex;
+	flex-shrink: 0;
+	margin-right: 6px;
+	color: var(--icon-color);
+}
+
+.bookmarks-view .tree-item-icon svg {
+	width: var(--icon-xs);
+	height: var(--icon-xs);
+}
+
+.bookmarks-view .bookmark.is-unresolved {
+	opacity: 0.6;
+}
+
 /* Rename in place */
 .tree-item-inner.is-being-renamed {
 	padding: 0 4px;
