@@ -115,3 +115,18 @@ describe('Live Preview', () => {
 		expect(editor.view.contentDOM.querySelector('.HyperMD-header-1')).not.toBeNull();
 	});
 });
+
+describe('math and diagrams in Live Preview', () => {
+	it('renders formulas and diagrams while the cursor is elsewhere', () => {
+		const doc = 'Area $\\pi r_1 * r_2$ here.\n\n$$\nx^2\n$$\n\n```mermaid\ngraph TD; A-->B\n```\n\nend';
+		const editor = open(doc);
+		const dom = editor.view.dom;
+		expect(dom.querySelector('.cm-math')?.textContent).toBe('rendered: $\\pi r_1 * r_2$');
+		expect(dom.querySelector('.cm-math-block')?.textContent).toBe('rendered: $$\nx^2\n$$');
+		expect(dom.querySelector('.cm-mermaid')?.textContent).toBe('rendered: ```mermaid\ngraph TD; A-->B\n```');
+		// The formula is one node: no emphasis inside it.
+		expect(dom.querySelector('.cm-em')).toBeNull();
+		moveTo(editor, doc.indexOf('r_1'));
+		expect(lines(editor)[0]).toBe('Area $\\pi r_1 * r_2$ here.');
+	});
+});

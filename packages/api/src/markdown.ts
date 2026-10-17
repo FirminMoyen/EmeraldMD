@@ -7,13 +7,18 @@
 
 import type { SyntaxNode } from '@lezer/common';
 import { GFM, parser as baseParser } from '@lezer/markdown';
-import { parseLinktext, type TFile } from '@emeraldmd/core';
+import { obsidianMarkdown, parseLinktext, type TFile } from '@emeraldmd/core';
 import type { App } from './app';
 import { Component } from './component';
+import { renderMermaid } from './diagrams';
 import { getIcon, setIcon } from './icons';
+import { renderMath } from './math';
 import { getFrontMatterInfo, parseYaml, sanitizeHTMLToDom } from './util';
 
-const parser = baseParser.configure(GFM);
+const parser = baseParser.configure([GFM, ...obsidianMarkdown]);
+
+/** Ids of footnote anchors must be unique on the page, where a note can be rendered more than once. */
+let footnoteRun = 0;
 
 export interface MarkdownSectionInformation {
 	text: string;
@@ -209,10 +214,60 @@ interface RenderOptions {
 }
 
 class Renderer {
+	/** Footnote definitions met so far, by label: their Markdown. */
+	readonly footnotes = new Map<string, string>();
+
 	constructor(
 		private readonly src: string,
 		private readonly options: RenderOptions = { breaks: true },
 	) {}
+
+	/** Numbers the footnote references in `el` and appends the footnotes they point to. */
+	finishFootnotes(el: HTMLElement): void {
+		const refs = [...el.querySelectorAll<HTMLElement>('sup.footnote-ref')].filter((ref) => !ref.dataset.footnoteNumber);
+		if (!refs.length) return;
+		const run = ++footnoteRun;
+		const numbers = new Map<string, number>();
+		const notes: { id: string; source: string; refIds: string[] }[] = [];
+		for (const ref of refs) {
+			const label = ref.dataset.footnoteLabel;
+			const source = label === undefined ? ref.dataset.footnoteInline ?? '' : this.footnotes.get(label);
+			if (source === undefined) {
+				// No definition: the reference stays as text, as in other Markdown renderers.
+				ref.replaceWith(document.createTextNode(`[^${label}]`));
+				continue;
+			}
+			let n = label === undefined ? undefined : numbers.get(label);
+			if (n === undefined) {
+				n = notes.length + 1;
+				if (label !== undefined) numbers.set(label, n);
+				notes.push({ id: `fn-${n}-${run}`, source, refIds: [] });
+			}
+			const note = notes[n - 1]!;
+			const refId = `fnref-${n}-${run}${note.refIds.length ? `-${note.refIds.length}` : ''}`;
+			note.refIds.push(refId);
+			ref.id = refId;
+			ref.dataset.footnoteNumber = String(n);
+			ref.dataset.footnoteId = refId;
+			ref.empty();
+			const link = ref.createEl('a', { cls: 'footnote-link', text: String(n), attr: { href: `#${note.id}` } });
+			link.addEventListener('click', (event) => scrollToId(event, el, note.id));
+		}
+		if (!notes.length) return;
+		const section = el.createEl('section', { cls: 'footnotes', attr: { 'data-footnotes': '' } });
+		section.createEl('hr', { cls: 'footnotes-sep' });
+		const list = section.createEl('ol');
+		for (const note of notes) {
+			const item = list.createEl('li', { attr: { id: note.id, 'data-footnote-id': note.id } });
+			renderMarkdownToDom(note.source, item, this.options);
+			const last = item.lastElementChild instanceof HTMLParagraphElement ? item.lastElementChild : item;
+			for (const refId of note.refIds) {
+				last.appendText(' ');
+				const back = last.createEl('a', { cls: 'footnote-backref footnote-link', text: '↩︎', attr: { href: `#${refId}` } });
+				back.addEventListener('click', (event) => scrollToId(event, el, refId));
+			}
+		}
+	}
 
 	/** `> [!type]± Title` blockquotes become `.callout` blocks. */
 	callout(node: SyntaxNode, parent: HTMLElement): HTMLElement | null {
@@ -256,6 +311,21 @@ class Renderer {
 			case 'Paragraph':
 				this.inline(node, parent.createEl('p'));
 				return;
+			case 'BlockMath': {
+				const marks = node.getChildren('BlockMathMark');
+				const tex = this.src.slice(marks[0]?.to ?? node.from, marks[1]?.from ?? node.to).trim();
+				parent.appendChild(renderMath(tex, true));
+				return;
+			}
+			case 'FootnoteDefinition': {
+				const label = node.getChild('FootnoteLabel');
+				const content = node.getChild('FootnoteContent');
+				if (label) {
+					const source = content ? this.src.slice(content.from, content.to).replace(/\n( {4}|\t)/g, '\n') : '';
+					this.footnotes.set(this.src.slice(label.from, label.to), source);
+				}
+				return;
+			}
 			case 'Blockquote': {
 				const callout = this.callout(node, parent);
 				if (!callout) this.children(node, parent.createEl('blockquote'));
@@ -298,12 +368,19 @@ class Renderer {
 				return;
 			case 'FencedCode':
 			case 'CodeBlock': {
-				const pre = parent.createEl('pre');
 				const info = node.getChild('CodeInfo');
-				const code = pre.createEl('code');
-				if (info) code.addClass(`language-${this.src.slice(info.from, info.to).trim().split(/\s/)[0]}`);
+				const language = info ? this.src.slice(info.from, info.to).trim().split(/\s/)[0]! : '';
 				const texts = node.getChildren('CodeText');
-				code.setText(texts.map((t) => this.src.slice(t.from, t.to)).join('\n') + (texts.length ? '\n' : ''));
+				const source = texts.map((t) => this.src.slice(t.from, t.to)).join('\n') + (texts.length ? '\n' : '');
+				if (language === 'mermaid') {
+					const diagram = parent.createDiv({ cls: 'mermaid', text: source });
+					void renderMermaid(source, diagram);
+					return;
+				}
+				const pre = parent.createEl('pre');
+				const code = pre.createEl('code');
+				if (language) code.addClass(`language-${language}`);
+				code.setText(source);
 				return;
 			}
 			case 'HorizontalRule':
@@ -418,6 +495,23 @@ class Renderer {
 			case 'HardBreak':
 				el.createEl('br');
 				return;
+			case 'InlineMath': {
+				const marks = node.getChildren('InlineMathMark');
+				const open = marks[0];
+				const tex = this.src.slice(open?.to ?? node.from, marks[1]?.from ?? node.to);
+				el.appendChild(renderMath(tex.trim(), open !== undefined && open.to - open.from === 2));
+				return;
+			}
+			case 'FootnoteRef': {
+				const label = node.getChild('FootnoteLabel');
+				el.createEl('sup', { cls: 'footnote-ref', attr: { 'data-footnote-label': label ? this.src.slice(label.from, label.to) : '' } });
+				return;
+			}
+			case 'InlineFootnote': {
+				const content = node.getChild('InlineFootnoteContent');
+				el.createEl('sup', { cls: 'footnote-ref', attr: { 'data-footnote-inline': content ? this.src.slice(content.from, content.to) : '' } });
+				return;
+			}
 			case 'Escape':
 				el.appendText(this.src.slice(node.from + 1, node.to));
 				return;
@@ -442,7 +536,16 @@ class Renderer {
 /** Renders Markdown into DOM elements appended to `el`, without post-processing. */
 export function renderMarkdownToDom(markdown: string, el: HTMLElement, options?: RenderOptions): void {
 	const tree = parser.parse(markdown);
-	new Renderer(markdown, options).children(tree.topNode, el);
+	const renderer = new Renderer(markdown, options);
+	renderer.children(tree.topNode, el);
+	renderer.finishFootnotes(el);
+}
+
+/** Footnote links scroll their target into view instead of changing the page's address. */
+function scrollToId(event: MouseEvent, root: HTMLElement, id: string): void {
+	event.preventDefault();
+	const target = root.ownerDocument.getElementById(id);
+	target?.scrollIntoView({ block: 'center' });
 }
 
 export abstract class MarkdownRenderer extends MarkdownRenderChild {
