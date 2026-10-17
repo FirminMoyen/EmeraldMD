@@ -52,6 +52,9 @@ machine does not switch plugins on.
 | `app.dom.appContainerEl` | The app's root element | Periodic Notes, QuickAdd |
 | `app.isMobile`, `app.appId` | `false`; a stable id per vault folder | Calendar, Dataview, Outliner, Commander |
 | `editor.cm` | The CodeMirror 6 `EditorView` behind an `Editor` | Linter, Outliner and other editor plugins |
+| `app.setTheme`, `app.changeTheme`, `app.getTheme`, `app.updateFontSize`, `app.updateFontFamily`, `app.updateAccentColor` | `setTheme('obsidian' \| 'moonstone' \| 'system')` shows a color scheme without saving it; `changeTheme` also saves it as `theme` in appearance.json; the `update*` methods re-apply appearance.json | Minimal Theme Settings |
+| `app.customCss` | `theme`, `themes` (manifests by name), `oldThemes`, `snippets`, `enabledSnippets` (Set), `setTheme`, `setCssEnabledStatus`, `isThemeInstalled`, `getThemeFolder`, `getThemePath`, `getSnippetsFolder`, `getSnippetPath`, `readThemes`, `readSnippets`, `requestLoadTheme`, `requestLoadSnippets` | Theme and snippet managers |
+| `workspace.on('css-change')` | Fired when the theme, a snippet or an appearance setting changes | Iconize, Minimal Theme Settings, Style Settings |
 
 ## Globals
 
@@ -68,6 +71,33 @@ machine does not switch plugins on.
 read `isDesktopApp` as "Node.js and Electron are available" and only then
 `require('fs')` or `require('electron')`. That is not the case in EmeraldMD's
 webview until the Node shims exist, so plugins take their mobile code path.
+
+## Themes and CSS snippets
+
+How vaults store them (from the public theme documentation and the files
+themes ship):
+
+- A theme is a folder `<vault>/.obsidian/themes/<name>/` with `theme.css` and
+  `manifest.json` (`name`, `version`, `minAppVersion`, `author`…); the folder
+  name is the theme name. Older themes are a single `themes/<name>.css`.
+- `appearance.json` holds `cssTheme` (the theme name, empty for the default),
+  `enabledCssSnippets` (names of `<vault>/.obsidian/snippets/<name>.css`),
+  `theme` (`moonstone` light, `obsidian` dark, `system`), `accentColor`,
+  `baseFontSize`, `interfaceFontFamily`, `textFontFamily`,
+  `monospaceFontFamily` and `showRibbon`.
+- Styles apply in this order: the app, plugins' `styles.css`, the theme, then
+  snippets. User choices (accent, font size, fonts) are inline styles on
+  `<body>`, so they win over themes.
+- The default stylesheet defines the variables from the public CSS variables
+  reference (base palette `--color-base-*`, extended colors, `--accent-h/s/l`,
+  semantic colors, typography, spacing `--size-*`, icons, and component
+  variables such as `--link-color`, `--tag-*`, `--callout-*`, `--nav-item-*`)
+  with EmeraldMD's own values, on `.theme-light` / `.theme-dark` for colors and
+  `body` for the rest, so theme overrides on the same selectors win.
+- `--callout-color` is a CSS color in current themes and an `r, g, b` triplet
+  in older ones; the callout rules work with both. `--callout-icon` (a Lucide
+  id) sets a callout type's icon, which snippets use for custom callouts.
+- Checked in the app with Minimal, Things, AnuPpuccin, Blue Topaz and Border.
 
 ## DOM class names
 

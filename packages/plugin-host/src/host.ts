@@ -10,7 +10,7 @@
  * Exposed to plugins as `app.plugins`.
  */
 
-import { compareVersions, apiVersion, loadAsync, Notice, Plugin, type App, type PluginManifest, type PluginsApi } from '@emeraldmd/api';
+import { addPluginStyle, compareVersions, apiVersion, loadAsync, Notice, Plugin, type App, type PluginManifest, type PluginsApi } from '@emeraldmd/api';
 import { installPluginGlobals } from './globals';
 import { NODE_MODULES, SHARED_MODULES, trackMissingExports } from './modules';
 
@@ -245,7 +245,7 @@ export class PluginHost implements PluginsApi {
 		const style = document.createElement('style');
 		style.dataset.pluginId = manifest.id;
 		style.textContent = await adapter.read(path);
-		document.head.appendChild(style);
+		addPluginStyle(style);
 		this.styles.set(manifest.id, style);
 	}
 

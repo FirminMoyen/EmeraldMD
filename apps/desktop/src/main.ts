@@ -28,6 +28,7 @@ import { convertFileSrc, invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { ask, open as openDialog } from '@tauri-apps/plugin-dialog';
+import { AppearanceTab } from './appearance-tab';
 import { CommandPalette } from './command-palette';
 import { registerCoreViews, revealSearch } from './core-views';
 import { RemoteVaults } from './remote';
@@ -167,9 +168,10 @@ class EmeraldApp {
 	private followSystemTheme(): void {
 		const query = window.matchMedia('(prefers-color-scheme: dark)');
 		const apply = () => {
+			// With a vault open, its appearance settings decide (app.appearance).
+			if (this.app) return;
 			document.body.classList.toggle('theme-dark', query.matches);
 			document.body.classList.toggle('theme-light', !query.matches);
-			this.app?.workspace.trigger('css-change');
 		};
 		apply();
 		query.addEventListener('change', apply);
@@ -234,6 +236,13 @@ class EmeraldApp {
 		});
 		this.app = app;
 		await app.metadataTypeManager.load();
+		// Before plugins load, so their styles go under the theme's (see addPluginStyle).
+		app.appearance.load();
+		await app.customCss.load();
+		app.setting.addBuiltInTab(
+			new AppearanceTab(app, { showFolder: local ? (path) => invoke('show_config_folder', { path }) : undefined }),
+		);
+		if (local) void listen<string>('config-changed', (event) => app.customCss.onConfigFileChanged(event.payload));
 		this.activeFile = null;
 		this.mountWorkspace(app);
 		this.registerCommands(app);

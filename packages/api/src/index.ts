@@ -11,6 +11,8 @@ export * from './obsidian';
 export * as obsidianModule from './obsidian';
 export { VaultAdapter, type ConfigStore } from './adapter';
 export { type AppOptions, type PluginsApi, InternalPlugins } from './app';
+export { Appearance, hexToHsl, MAX_FONT_SIZE, MIN_FONT_SIZE, type BaseTheme, type ThemeSetting } from './appearance';
+export { addPluginStyle, CustomCss, type ThemeManifest } from './custom-css';
 export { Commands } from './commands';
 export { loadAsync } from './component';
 export { installDomHelpers } from './dom';
