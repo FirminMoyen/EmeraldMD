@@ -84,3 +84,14 @@ describe('MarkdownRenderer extras', () => {
 		expect(embeds[3]!.querySelector('.markdown-embed-content')?.textContent).toBe('Note');
 	});
 });
+
+describe('line breaks', () => {
+	it('turns single line breaks into <br> unless "Strict line breaks" is on', async () => {
+		const loose = await render('one\ntwo');
+		expect(loose.el.querySelector('p')?.innerHTML).toBe('one<br>two');
+		const { app } = await createTestApp({}, { '.obsidian/app.json': JSON.stringify({ strictLineBreaks: true }) });
+		const el = document.createElement('div');
+		await MarkdownRenderer.render(app, 'one\ntwo', el, 'Note.md', new Component());
+		expect(el.querySelector('p')?.innerHTML).toBe('one\ntwo');
+	});
+});

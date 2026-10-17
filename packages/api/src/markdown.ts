@@ -161,6 +161,11 @@ function removeFirstLine(content: HTMLElement): void {
 	const first = content.firstElementChild;
 	if (!first || first.tagName !== 'P') return;
 	for (const child of [...first.childNodes]) {
+		// The line ends at a newline, or at the `<br>` it became.
+		if (child.nodeName === 'BR') {
+			child.remove();
+			break;
+		}
 		if (child.nodeType === Node.TEXT_NODE) {
 			const text = child.textContent ?? '';
 			const newline = text.indexOf('\n');
@@ -198,8 +203,16 @@ const MARKS = new Set([
 	'TableDelimiter',
 ]);
 
+interface RenderOptions {
+	/** Single line breaks become `<br>` (Obsidian's default; off with "Strict line breaks"). */
+	breaks: boolean;
+}
+
 class Renderer {
-	constructor(private readonly src: string) {}
+	constructor(
+		private readonly src: string,
+		private readonly options: RenderOptions = { breaks: true },
+	) {}
 
 	/** `> [!type]± Title` blockquotes become `.callout` blocks. */
 	callout(node: SyntaxNode, parent: HTMLElement): HTMLElement | null {
@@ -334,7 +347,12 @@ class Renderer {
 		let pos = node.from;
 		const text = (from: number, to: number) => {
 			const t = this.src.slice(from, to).replace(/\n[ \t]*/g, '\n');
-			if (t) appendText(el, t);
+			if (!t) return;
+			if (!this.options.breaks) return appendText(el, t);
+			t.split('\n').forEach((line, i) => {
+				if (i > 0) el.createEl('br');
+				if (line) appendText(el, line);
+			});
 		};
 		// Lezer reads `[[a|b]]` as a bracketed link; keep wikilinks as text so appendText handles them.
 		const wikilinks = [...this.src.slice(node.from, node.to).matchAll(/!?\[\[[^[\]\n]+?\]\]/g)].map((m) => [
@@ -422,9 +440,9 @@ class Renderer {
 }
 
 /** Renders Markdown into DOM elements appended to `el`, without post-processing. */
-export function renderMarkdownToDom(markdown: string, el: HTMLElement): void {
+export function renderMarkdownToDom(markdown: string, el: HTMLElement, options?: RenderOptions): void {
 	const tree = parser.parse(markdown);
-	new Renderer(markdown).children(tree.topNode, el);
+	new Renderer(markdown, options).children(tree.topNode, el);
 }
 
 export abstract class MarkdownRenderer extends MarkdownRenderChild {
@@ -459,7 +477,7 @@ export abstract class MarkdownRenderer extends MarkdownRenderChild {
 		}
 		const body = fm.exists ? markdown.slice(fm.contentStart) : markdown;
 		const wrapper = createDiv();
-		renderMarkdownToDom(body, wrapper);
+		renderMarkdownToDom(body, wrapper, { breaks: app?.vault.getConfig('strictLineBreaks') !== true });
 		const ctx: MarkdownPostProcessorContext = {
 			docId: Math.random().toString(36).slice(2),
 			sourcePath,

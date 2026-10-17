@@ -1,7 +1,8 @@
 /**
  * The command registry, exposed to plugins as `app.commands` (not in the
  * public typings, but widely used: `executeCommandById`, `commands`,
- * `listCommands`). Default hotkeys are bound in the app's root scope.
+ * `listCommands`). Hotkeys are bound in the app's root scope: the user's
+ * from hotkeys.json, else the command's defaults (`app.hotkeyManager`).
  */
 
 import type { App } from './app';
@@ -30,24 +31,39 @@ export class Commands {
 
 	constructor(app: App) {
 		this.app = app;
+		app.hotkeyManager.onChange((id) => this.bindHotkeys(id));
 	}
 
 	addCommand(command: Command): void {
 		if (this.commands[command.id]) this.removeCommand(command.id);
 		this.commands[command.id] = command;
 		if (command.editorCallback || command.editorCheckCallback) this.editorCommands[command.id] = command;
-		const handlers = (command.hotkeys ?? []).map((hotkey) =>
-			this.app.scope.register(hotkey.modifiers, hotkey.key, (evt) => {
-				if (evt.repeat && !command.repeatable) return false;
-				return this.executeCommand(command) ? false : undefined;
-			}),
-		);
-		if (handlers.length) this.hotkeyHandlers.set(command.id, handlers);
+		if (command.hotkeys?.length) this.app.hotkeyManager.defaultKeys[command.id] = command.hotkeys;
+		this.bindHotkeys(command.id);
 	}
 
 	removeCommand(id: string): void {
 		delete this.commands[id];
 		delete this.editorCommands[id];
+		delete this.app.hotkeyManager.defaultKeys[id];
+		this.unbindHotkeys(id);
+	}
+
+	/** (Re)binds the hotkeys that run the command now. */
+	private bindHotkeys(id: string): void {
+		this.unbindHotkeys(id);
+		const command = this.commands[id];
+		if (!command) return;
+		const handlers = this.app.hotkeyManager.getEffectiveHotkeys(id).map((hotkey) =>
+			this.app.scope.register(hotkey.modifiers, hotkey.key, (evt) => {
+				if (evt.repeat && !command.repeatable) return false;
+				return this.executeCommand(command) ? false : undefined;
+			}),
+		);
+		if (handlers.length) this.hotkeyHandlers.set(id, handlers);
+	}
+
+	private unbindHotkeys(id: string): void {
 		for (const handler of this.hotkeyHandlers.get(id) ?? []) this.app.scope.unregister(handler);
 		this.hotkeyHandlers.delete(id);
 	}

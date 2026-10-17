@@ -29,6 +29,7 @@ const APPEARANCE_KEYS = new Set([
 const DEFAULT_CONFIG: Record<string, unknown> = {
 	alwaysUpdateLinks: false,
 	attachmentFolderPath: '/',
+	autoPairBrackets: true,
 	baseFontSize: 16,
 	defaultViewMode: 'source',
 	foldHeading: true,

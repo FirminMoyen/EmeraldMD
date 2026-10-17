@@ -46,7 +46,7 @@ describe('desktop shell with a community plugin', () => {
 	it('turns community plugins on from Settings', async () => {
 		shell.press(',', { mod: true });
 		const modal = document.querySelector('.modal.mod-settings')!;
-		expect(modal.querySelector('.vertical-tab-nav-item.is-active')?.textContent).toBe('Appearance');
+		expect(modal.querySelector('.vertical-tab-nav-item.is-active')?.textContent).toBe('Editor');
 		([...modal.querySelectorAll('.vertical-tab-nav-item')].find((n) => n.textContent === 'Community plugins') as HTMLElement).click();
 		const button = [...modal.querySelectorAll('button')].find((b) => b.textContent === 'Turn on community plugins')!;
 		button.click();
