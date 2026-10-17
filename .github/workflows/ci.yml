@@ -39,9 +39,11 @@ jobs:
       - run: cargo clippy --workspace --all-targets -- -D warnings
       - run: cargo test --workspace
 
-  # Windows minutes count double on private repos, so only for PRs and main.
+  # Windows minutes count double on private repos, and the current focus is
+  # macOS + self-hosting (docs/milestone-macos-selfhost.md): run by hand.
   windows:
     name: Test and build (Windows)
+    if: github.event_name == 'workflow_dispatch'
     needs: test
     runs-on: windows-2025
     steps:
