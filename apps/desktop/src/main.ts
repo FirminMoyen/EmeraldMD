@@ -1,22 +1,39 @@
 import {
+	App,
+	CodeMirrorEditor,
+	editorInfoExtensions,
+	MarkdownView,
+	Notice,
+	setIcon,
+	setRequestBackend,
+	setTooltip,
+	Vault,
+	type WorkspaceHost,
+} from '@emeraldmd/api';
+import {
 	getLinkpath,
-	openVault,
+	MetadataCache,
 	TFile,
 	TFolder,
-	type MetadataCache,
 	type TAbstractFile,
-	type Vault,
 	type VaultBackend,
 	type VaultSnapshot,
 	type VaultUpdate,
 } from '@emeraldmd/core';
+import { MemoryConfigStore } from '@emeraldmd/api/testing';
 import { MarkdownEditor } from '@emeraldmd/editor';
+import { CommunityPluginsTab, PluginHost } from '@emeraldmd/plugin-host';
+import type { Extension } from '@codemirror/state';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { ask, open as openDialog } from '@tauri-apps/plugin-dialog';
+import { CommandPalette } from './command-palette';
 import { RemoteVaults } from './remote';
-import { TauriBackend } from './tauri-backend';
+import { TauriBackend, TauriConfigStore, tauriRequestBackend, tauriTrustStore } from './tauri-backend';
+
+/** A note to reopen after the page reloads to switch vaults (see `attach`). */
+const REOPEN_FILE_KEY = 'emeraldmd:reopen-file';
 
 /** Same autosave delay as Obsidian. */
 const SAVE_DELAY_MS = 2000;
@@ -39,10 +56,26 @@ function isInside(file: TAbstractFile, folder: TAbstractFile): boolean {
 	return false;
 }
 
+/** A stable per-vault id (plugins use it to namespace local storage). */
+function appIdFor(basePath: string): string {
+	let h1 = 0x811c9dc5;
+	let h2 = 0x01000193;
+	for (let i = 0; i < basePath.length; i++) {
+		const c = basePath.charCodeAt(i);
+		h1 = Math.imul(h1 ^ c, 0x01000193);
+		h2 = Math.imul(h2 ^ c, 0x811c9dc5);
+	}
+	return ((h1 >>> 0).toString(16).padStart(8, '0') + (h2 >>> 0).toString(16).padStart(8, '0')).slice(0, 16);
+}
+
+setRequestBackend(tauriRequestBackend);
+
 class EmeraldApp {
-	private vault: Vault | null = null;
+	private app: App | null = null;
 	private backend: VaultBackend | null = null;
-	private metadataCache: MetadataCache | null = null;
+	private readonly remote: RemoteVaults;
+	private host: PluginHost | null = null;
+	private markdownView: MarkdownView | null = null;
 	private activeFile: TFile | null = null;
 	private saveTimer: ReturnType<typeof setTimeout> | undefined;
 	private dirty = false;
@@ -51,7 +84,6 @@ class EmeraldApp {
 	private renderQueued = false;
 	private readonly collapsed = new Set<string>();
 	private readonly editor: MarkdownEditor;
-	private readonly remote: RemoteVaults;
 	private readonly el = {
 		emptyState: $('empty-state'),
 		workspace: $('workspace'),
@@ -62,8 +94,7 @@ class EmeraldApp {
 		editor: $('editor'),
 		noFile: $('no-file'),
 		backlinks: $('backlinks'),
-		status: $('status-bar'),
-		notices: $('notices'),
+		status: $('status-core'),
 	};
 
 	constructor() {
@@ -85,15 +116,9 @@ class EmeraldApp {
 			}
 		});
 		this.el.title.addEventListener('change', () => void this.renameActiveFile(this.el.title.value));
+		// Once a vault is open, shortcuts are commands (see registerCommands); before that, only this one.
 		window.addEventListener('keydown', (e) => {
-			if (!(e.metaKey || e.ctrlKey) || e.altKey) return;
-			if (e.key === 'n') {
-				e.preventDefault();
-				void this.newNote();
-			} else if (e.key === 's') {
-				e.preventDefault();
-				void this.flush();
-			} else if (e.key === 'o') {
+			if (!this.app && (e.metaKey || e.ctrlKey) && !e.altKey && e.key === 'o') {
 				e.preventDefault();
 				void this.pickVault();
 			}
@@ -112,7 +137,16 @@ class EmeraldApp {
 		void getCurrentWindow().onCloseRequested(() => this.flush());
 	}
 
+	private get vault(): Vault | null {
+		return this.app?.vault ?? null;
+	}
+
+	private get metadataCache(): MetadataCache | null {
+		return this.app?.metadataCache ?? null;
+	}
+
 	async start(): Promise<void> {
+		if (await this.remote.resumeSession()) return;
 		if (await this.remote.reopenLast()) return;
 		const last = await invoke<string | null>('last_vault');
 		if (last) {
@@ -131,6 +165,7 @@ class EmeraldApp {
 		const apply = () => {
 			document.body.classList.toggle('theme-dark', query.matches);
 			document.body.classList.toggle('theme-light', !query.matches);
+			this.app?.workspace.trigger('css-change');
 		};
 		apply();
 		query.addEventListener('change', apply);
@@ -159,16 +194,41 @@ class EmeraldApp {
 		await this.attach(new TauriBackend(), snapshot);
 	}
 
-	/** Shows a vault, local or remote. `keepActiveFile`: reopen the same note if it still exists. */
+	/**
+	 * Shows a vault, local or remote. With a vault already open, the page
+	 * reloads instead, because plugins can leave global state behind; the
+	 * new vault opens on start (local: the Rust side remembers it; remote:
+	 * `RemoteVaults.resumeSession`). `keepActiveFile` reopens the same note.
+	 */
 	private async attach(backend: VaultBackend, snapshot: VaultSnapshot, options: { keepActiveFile?: boolean } = {}): Promise<void> {
-		await this.flush();
-		const keep = options.keepActiveFile ? this.activeFile?.path : undefined;
 		this.remote.vaultOpened(backend);
+		if (this.app) {
+			await this.flush();
+			if (options.keepActiveFile && this.activeFile) sessionStorage.setItem(REOPEN_FILE_KEY, this.activeFile.path);
+			this.host?.unloadAll();
+			window.location.reload();
+			return;
+		}
+		const keep = sessionStorage.getItem(REOPEN_FILE_KEY);
+		sessionStorage.removeItem(REOPEN_FILE_KEY);
+		const local = backend instanceof TauriBackend;
 		this.backend = backend;
-		const { vault, metadataCache } = openVault(backend, snapshot);
-		this.vault = vault;
-		this.metadataCache = metadataCache;
+		// Remote vaults keep their settings in memory until the server serves `.obsidian`.
+		const vault = new Vault(backend, snapshot.name, snapshot.files, local ? new TauriConfigStore() : new MemoryConfigStore());
+		await vault.loadConfig();
+		const metadataCache = new MetadataCache(vault, snapshot);
+		const app = new App({
+			vault,
+			metadataCache,
+			appId: appIdFor(local ? snapshot.basePath : `remote:${snapshot.name}`),
+			statusBarEl: $('status-bar'),
+			workspaceEl: this.el.workspace,
+		});
+		this.app = app;
+		await app.metadataTypeManager.load();
 		this.activeFile = null;
+		this.mountWorkspace(app);
+		this.registerCommands(app);
 
 		for (const name of ['create', 'delete', 'rename']) vault.on(name, () => this.queueTreeRender());
 		vault.on('rename', (file: TAbstractFile) => {
@@ -189,17 +249,115 @@ class EmeraldApp {
 		const recent = (keep && vault.getFileByPath(keep)) || vault.getMarkdownFiles().sort((a, b) => b.stat.mtime - a.stat.mtime)[0];
 		if (recent) await this.openFile(recent);
 		else this.closeFile();
+
+		if (!local) {
+			// Community plugins run from the local `.obsidian` folder only, for now.
+			app.workspace.setLayoutReady();
+			return;
+		}
+		const host = new PluginHost(app, tauriTrustStore);
+		this.host = host;
+		app.setting.addBuiltInTab(new CommunityPluginsTab(app, host));
+		try {
+			await host.initialize();
+		} catch (err) {
+			this.notice(`Could not load community plugins: ${err}`);
+		}
+		app.workspace.setLayoutReady();
+		if (host.restricted && [...host.enabledPlugins].some((id) => host.manifests[id])) {
+			this.notice('This vault uses community plugins. They stay off until you turn them on in Settings → Community plugins.', 10000);
+		}
+	}
+
+	/** Puts the workspace pieces (ribbon, side docks, root leaf with the note editor) into the page. */
+	private mountWorkspace(app: App): void {
+		const ws = app.workspace;
+		const ribbon = ws.leftRibbon.containerEl;
+		$('ribbon').replaceChildren(ribbon);
+		const settings = ribbon.createDiv('side-dock-settings').createDiv({ cls: 'clickable-icon side-dock-ribbon-action', attr: { 'aria-label': 'Settings' } });
+		setIcon(settings, 'settings');
+		setTooltip(settings, 'Settings', { placement: 'right' });
+		settings.addEventListener('click', () => app.setting.open());
+
+		$('left-split').append(ws.leftSplit.containerEl);
+		ws.leftSplit.addStaticTab('file-explorer', 'Files', 'folder-closed', $('file-explorer'));
+		$('right-split').append(ws.rightSplit.containerEl);
+		ws.rightSplit.addStaticTab('backlinks', 'Backlinks', 'links-coming-in', $('backlinks-pane'));
+
+		const view = new MarkdownView(ws.rootLeaf);
+		view.editor = new CodeMirrorEditor(this.editor.view);
+		view.titleEl.replaceWith(this.el.title);
+		view.actionsEl.append(this.el.trash);
+		view.contentEl.append(this.el.editor, this.el.noFile);
+		this.markdownView = view;
+		$('root-split').replaceWith(ws.rootSplit.containerEl);
+
+		const host: WorkspaceHost = {
+			openFile: (file) => this.openFile(file),
+			save: () => this.flush(),
+			setEditorExtensions: (extensions: Extension[]) =>
+				this.editor.setExtensions([editorInfoExtensions(view, () => this.editor.view), ...extensions]),
+		};
+		ws.setHost(host, view);
+	}
+
+	/** Built-in commands, with the shortcuts the app has always had. */
+	private registerCommands(app: App): void {
+		const add = app.commands.addCommand.bind(app.commands);
+		add({ id: 'command-palette:open', name: 'Command palette: Open command palette', hotkeys: [{ modifiers: ['Mod'], key: 'P' }], callback: () => new CommandPalette(app).open() });
+		add({ id: 'app:open-settings', name: 'Open settings', hotkeys: [{ modifiers: ['Mod'], key: ',' }], callback: () => app.setting.open() });
+		add({ id: 'file-explorer:new-file', name: 'Create new note', hotkeys: [{ modifiers: ['Mod'], key: 'N' }], callback: () => this.newNote() });
+		add({ id: 'file-explorer:new-folder', name: 'Create new folder', callback: () => this.newFolder() });
+		add({
+			id: 'editor:save-file',
+			name: 'Save current file',
+			hotkeys: [{ modifiers: ['Mod'], key: 'S' }],
+			checkCallback: (checking) => {
+				if (!this.activeFile) return false;
+				if (!checking) void this.flush();
+				return true;
+			},
+		});
+		add({
+			id: 'app:delete-file',
+			name: 'Delete current file',
+			checkCallback: (checking) => {
+				if (!this.activeFile) return false;
+				if (!checking) void this.trashActiveFile();
+				return true;
+			},
+		});
+		add({ id: 'app:open-vault', name: 'Open another vault', hotkeys: [{ modifiers: ['Mod'], key: 'O' }], callback: () => this.pickVault() });
+		add({ id: 'app:toggle-left-sidebar', name: 'Toggle left sidebar', callback: () => this.toggleSplit($('left-split')) });
+		add({ id: 'app:toggle-right-sidebar', name: 'Toggle right sidebar', callback: () => this.toggleSplit($('right-split')) });
+		add({ id: 'app:reload', name: 'Reload app without saving', callback: () => window.location.reload() });
+	}
+
+	private toggleSplit(el: HTMLElement): void {
+		el.toggleClass('is-collapsed', !el.hasClass('is-collapsed'));
+		this.app?.workspace.trigger('resize');
 	}
 
 	private async openFile(file: TFile): Promise<void> {
-		if (!this.vault) return;
+		if (!this.vault || !this.app || !this.markdownView) return;
 		await this.flush();
+		const ws = this.app.workspace;
 		if (file.extension !== 'md') {
-			this.notice(`${file.name}: only Markdown notes can be opened for now.`);
+			const type = this.app.viewRegistry.getTypeByExtension(file.extension);
+			if (type) {
+				await ws.rootLeaf.setViewState({ type, state: { file: file.path } });
+				ws.recordOpenFile(file);
+				ws.trigger('file-open', file);
+			} else {
+				this.notice(`${file.name}: only Markdown notes can be opened for now.`);
+			}
 			return;
 		}
 		const text = await this.vault.read(file);
+		if (ws.rootLeaf.view !== this.markdownView) await ws.rootLeaf.open(this.markdownView);
 		this.activeFile = file;
+		this.markdownView.file = file;
+		this.markdownView.data = text;
 		this.editor.setValue(text);
 		this.el.editor.hidden = false;
 		this.el.noFile.hidden = true;
@@ -207,18 +365,22 @@ class EmeraldApp {
 		this.renderTree();
 		this.renderSidePanels();
 		this.editor.focus();
+		ws.recordOpenFile(file);
+		ws.trigger('file-open', file);
 	}
 
 	private closeFile(): void {
 		clearTimeout(this.saveTimer);
 		this.dirty = false;
 		this.activeFile = null;
+		if (this.markdownView) this.markdownView.file = null;
 		this.editor.setValue('');
 		this.el.editor.hidden = true;
 		this.el.noFile.hidden = false;
 		this.renderHeader();
 		this.renderTree();
 		this.renderSidePanels();
+		this.app?.workspace.trigger('file-open', null);
 	}
 
 	private async openLink(linktext: string): Promise<void> {
@@ -245,6 +407,8 @@ class EmeraldApp {
 		clearTimeout(this.saveTimer);
 		this.saveTimer = setTimeout(() => void this.flush(), SAVE_DELAY_MS);
 		this.renderStatus();
+		const view = this.markdownView;
+		if (view) this.app?.workspace.trigger('editor-change', view.editor, view);
 	}
 
 	/** Saves pending edits to the active file now. */
@@ -256,7 +420,9 @@ class EmeraldApp {
 		this.saving = true;
 		this.renderStatus();
 		try {
-			await this.vault.modify(file, this.editor.getValue());
+			const text = this.editor.getValue();
+			await this.vault.modify(file, text);
+			if (this.markdownView?.file === file) this.markdownView.data = text;
 		} catch (err) {
 			this.dirty = true;
 			this.notice(`Could not save ${file.path}: ${err}`);
@@ -442,13 +608,8 @@ class EmeraldApp {
 		this.el.status.textContent = `${state} · ${words} words · ${backlinks} backlink${backlinks === 1 ? '' : 's'}`;
 	}
 
-	private notice(message: string): void {
-		const el = document.createElement('div');
-		el.className = 'notice';
-		el.textContent = message;
-		el.addEventListener('click', () => el.remove());
-		this.el.notices.append(el);
-		setTimeout(() => el.remove(), 6000);
+	private notice(message: string, duration = 6000): void {
+		new Notice(message, duration);
 	}
 }
 

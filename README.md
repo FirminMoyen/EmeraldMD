@@ -39,8 +39,20 @@ Self-hosting (phase 3, first slice):
   You browse, edit and create notes on the server, and changes from other
   devices show up live. Tokens are kept in the OS keychain.
 
-Not yet: plugins, themes and snippets, live preview and reading view, search,
-graph, offline sync with a self-hosted server, mobile builds. See the roadmap.
+Plugin host (phase 1, first slice):
+
+- Community plugins that use only the plugin API load from a vault's
+  `.obsidian/plugins` folder, honouring `community-plugins.json`: the
+  `obsidian` module (`packages/api`), a plugin loader with restricted mode
+  (`packages/plugin-host`), a command palette (Ctrl/Cmd+P) and a settings
+  window (Ctrl/Cmd+,) with the installed plugins and their setting tabs.
+- 15 of 16 popular community plugins pass the headless smoke tests; see
+  [docs/compat/plugins.md](docs/compat/plugins.md).
+- For now, plugins run in local vaults only.
+
+Not yet: themes and CSS snippets, Node.js and Electron shims for desktop-only
+plugins, installing plugins from the community list, live preview and reading
+view, offline sync in the app, mobile builds. See the roadmap.
 
 ## Repository layout
 
@@ -50,6 +62,9 @@ graph, offline sync with a self-hosted server, mobile builds. See the roadmap.
 | `crates/emerald-server` | Rust: `emeraldmd-server`, the self-hosted server (`Dockerfile` at the root) |
 | `packages/core` | TypeScript mirror of the vault and metadata cache, with the plugin API's shapes, and `RemoteBackend` for server vaults |
 | `packages/editor` | CodeMirror 6 editor |
+| `packages/api` | The `obsidian` module for plugins, implemented from the public typings |
+| `packages/plugin-host` | Loads community plugins: `require`, restricted mode, enable/disable, settings tab |
+| `compat/` | Community plugin smoke tests and API coverage report |
 | `apps/desktop` | Tauri app: `src-tauri/` (Rust shell) and `src/` (UI) |
 | `fixtures/` | Test cases shared by the Rust and TypeScript test suites |
 
@@ -82,7 +97,11 @@ cargo run -p emerald-server -- --config emeraldmd-server.toml
 ```
 
 `npm test` runs Vitest and `cargo test`. `npm run typecheck` type-checks the
-TypeScript. `npm run build` produces installable bundles in
+TypeScript. `npm run compat` downloads the pinned community plugins in
+`compat/plugins.json` and smoke-tests them headlessly; add `UPDATE_COMPAT_DOCS=1`
+to regenerate `docs/compat/plugins.md` and `api-coverage.md`. To try plugins in
+the app, `node compat/make-vault.mjs <folder>` creates a vault with them
+installed. `npm run build` produces installable bundles in
 `target/release/bundle/`.
 
 On macOS with Homebrew's `rustup`, which is keg-only, put it on your `PATH`

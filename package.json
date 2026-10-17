@@ -12,11 +12,14 @@
     "dev": "npm run dev -w @emeraldmd/desktop",
     "build": "npm run build -w @emeraldmd/desktop",
     "test": "vitest run && cargo test --workspace",
-    "typecheck": "tsc -p tsconfig.json"
+    "typecheck": "tsc -p tsconfig.json",
+    "compat:fetch": "node compat/fetch.mjs",
+    "compat": "node compat/fetch.mjs && vitest run --config compat/vitest.config.mts"
   },
   "devDependencies": {
     "@types/node": "^26.6.5",
     "esbuild": "^0.28.2",
+    "happy-dom": "^21.0.1",
     "typescript": "^7.0.2",
     "vitest": "^5.0.5"
   },

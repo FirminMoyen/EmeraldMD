@@ -1,0 +1,27 @@
+{
+  "name": "@emeraldmd/plugin-host",
+  "version": "0.0.0",
+  "private": true,
+  "license": "MIT",
+  "description": "Loads community plugins from a vault's .obsidian/plugins folder.",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@codemirror/autocomplete": "^6.20.3",
+    "@codemirror/collab": "^6.1.1",
+    "@codemirror/commands": "^6.11.1",
+    "@codemirror/language": "^6.13.1",
+    "@codemirror/lint": "^6.9.7",
+    "@codemirror/search": "^6.7.2",
+    "@codemirror/state": "^6.7.6",
+    "@codemirror/view": "6.43.13",
+    "@emeraldmd/api": "*",
+    "@emeraldmd/core": "*",
+    "@lezer/common": "^1.5.3",
+    "@lezer/highlight": "^1.2.5",
+    "@lezer/lr": "^1.4.11",
+    "moment": "^2.31.0"
+  }
+}

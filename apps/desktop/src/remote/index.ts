@@ -17,6 +17,9 @@ import {
 	type RemoteVault,
 } from './store';
 
+/** The open remote vault and its token, so it survives the reload that switches vaults. */
+const SESSION_KEY = 'emeraldmd:remote-session';
+
 export interface RemoteHost {
 	/** Shows a vault in place of the open one; `keepActiveFile` reopens the same note if it still exists. */
 	attach(backend: VaultBackend, snapshot: VaultSnapshot, options?: { keepActiveFile?: boolean }): Promise<void>;
@@ -84,6 +87,30 @@ export class RemoteVaults {
 	}
 
 	/** On start: reopens the last vault if it was a remote one. True if it handled startup. */
+	/**
+	 * Reconnects the remote vault this window had open before the page
+	 * reloaded (the app reloads to switch vaults). The token is kept in
+	 * sessionStorage, which lives only as long as the window.
+	 */
+	async resumeSession(): Promise<boolean> {
+		let session: { vault: RemoteVault; token: string } | null = null;
+		try {
+			session = JSON.parse(sessionStorage.getItem(SESSION_KEY) ?? 'null');
+		} catch {
+			session = null;
+		}
+		sessionStorage.removeItem(SESSION_KEY);
+		if (!session?.vault || !session.token) return false;
+		try {
+			await this.open(session.vault, session.token);
+			await this.refresh();
+			return true;
+		} catch (err) {
+			this.host.notice(`Could not reconnect to ${session.vault.name}: ${describeError(err, session.vault.serverUrl)}`);
+			return false;
+		}
+	}
+
 	async reopenLast(): Promise<boolean> {
 		const list = await loadRemoteVaults().catch(() => null);
 		const last = list?.reopenLast ? list.recent[0] : undefined;
@@ -95,6 +122,7 @@ export class RemoteVaults {
 	/** Called by the app whenever a vault is shown. Closes the remote connection if it is another vault. */
 	vaultOpened(backend: VaultBackend): void {
 		if (this.active?.backend === backend) return;
+		sessionStorage.removeItem(SESSION_KEY);
 		this.active?.backend.close();
 		this.active = null;
 		this.badge.hidden = true;
@@ -169,6 +197,7 @@ export class RemoteVaults {
 		const previous = this.active;
 		this.active = { backend, vault: opened };
 		previous?.backend.close();
+		sessionStorage.setItem(SESSION_KEY, JSON.stringify({ vault: opened, token }));
 		await this.host.attach(backend, snapshot);
 		backend.connect();
 		return opened;
