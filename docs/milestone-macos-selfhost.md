@@ -78,7 +78,10 @@ end-to-end tests; the rest is in priority order within each section.
 - [x] Synced mode in the app: choose a local folder, sync on open, after
       edits and every minute; status and conflict notices
 - [x] Synced mode: sync immediately on server events (event stream)
-- [ ] `.obsidian` settings and plugins for remote and synced vaults
+- [x] `.obsidian` settings for online server vaults: settings, hotkeys,
+      themes and snippets are kept on the server (config endpoints)
+- [ ] Community plugins in server vaults; `.obsidian` in synced copies
+      (opt-in)
 - [x] Server operations: health endpoint, token management CLI (list,
       revoke), Docker Compose example
 - [ ] Published server image (registry account: owner)
