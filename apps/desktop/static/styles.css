@@ -367,6 +367,7 @@ body {
 	--ribbon-background: var(--background-secondary);
 	--ribbon-width: 44px;
 	--nav-item-color: var(--text-muted);
+	--nav-collapse-icon-color: var(--text-faint);
 	--nav-item-color-hover: var(--text-normal);
 	--nav-item-color-active: var(--text-normal);
 	--nav-item-background-hover: var(--background-modifier-hover);
@@ -577,20 +578,59 @@ button {
 	font-weight: var(--nav-item-weight-active);
 }
 
-.nav-folder-title::before {
-	content: '';
-	display: inline-block;
-	width: 6px;
-	height: 6px;
-	margin: 0 8px 2px -2px;
-	border-right: 1.5px solid currentColor;
-	border-bottom: 1.5px solid currentColor;
-	transform: rotate(45deg);
+.tree-item-self {
+	display: flex;
+	align-items: center;
+	gap: 2px;
+}
+
+.tree-item-inner {
+	flex: 1;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
+.nav-folder-collapse-indicator {
+	display: flex;
+	flex-shrink: 0;
+	margin-inline-start: -4px;
+	color: var(--nav-collapse-icon-color);
+}
+
+.nav-folder-collapse-indicator svg {
+	width: 12px;
+	height: 12px;
+	stroke-width: 2.5px;
 	transition: transform 0.1s;
 }
 
-.nav-folder.is-collapsed > .nav-folder-title::before {
-	transform: rotate(-45deg);
+.nav-folder.is-collapsed > .nav-folder-title .nav-folder-collapse-indicator svg {
+	transform: rotate(-90deg);
+}
+
+/* Rename in place */
+.tree-item-inner.is-being-renamed {
+	padding: 0 4px;
+	border-radius: var(--radius-s);
+	outline: 1px solid var(--interactive-accent);
+	background: var(--background-modifier-form-field);
+	color: var(--text-normal);
+	text-overflow: clip;
+	cursor: text;
+	user-select: text;
+}
+
+/* Drag and drop */
+.tree-item-self.is-being-dragged {
+	opacity: 0.5;
+}
+
+.nav-folder.is-being-dragged-over,
+.nav-files-container.is-being-dragged-over {
+	border-radius: var(--radius-s);
+	background: var(--background-modifier-active-hover);
 }
 
 .nav-file-tag {

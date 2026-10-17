@@ -15,6 +15,7 @@ import {
 } from '@emeraldmd/api';
 import {
 	getLinkpath,
+	joinPath,
 	MetadataCache,
 	TFile,
 	TFolder,
@@ -32,6 +33,7 @@ import { listen } from '@tauri-apps/api/event';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { ask, open as openDialog } from '@tauri-apps/plugin-dialog';
 import { AppearanceTab } from './appearance-tab';
+import { FileExplorer } from './file-explorer';
 import { CommandPalette } from './command-palette';
 import { registerCoreViews, revealSearch } from './core-views';
 import { RemoteVaults } from './remote';
@@ -44,7 +46,6 @@ const REOPEN_FILE_KEY = 'emeraldmd:reopen-file';
 /** Same autosave delay as Obsidian. */
 const SAVE_DELAY_MS = 2000;
 
-const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' });
 
 function $(id: string): HTMLElement {
 	const el = document.getElementById(id);
@@ -88,7 +89,7 @@ class EmeraldApp {
 	private saving = false;
 	private applyingExternalChange = false;
 	private renderQueued = false;
-	private readonly collapsed = new Set<string>();
+	private explorer: FileExplorer | null = null;
 	private readonly editor: MarkdownEditor;
 	private readonly el = {
 		emptyState: $('empty-state'),
@@ -126,7 +127,7 @@ class EmeraldApp {
 		$('switch-vault').addEventListener('click', () => void this.pickVault());
 		$('new-note').addEventListener('click', () => void this.newNote());
 		$('new-folder').addEventListener('click', () => void this.newFolder());
-		this.el.trash.addEventListener('click', () => void this.trashActiveFile());
+		this.el.trash.addEventListener('click', () => void (this.activeFile && this.trash(this.activeFile)));
 		this.el.title.addEventListener('keydown', (e) => {
 			if (e.key === 'Enter') this.el.title.blur();
 			if (e.key === 'Escape') {
@@ -250,6 +251,16 @@ class EmeraldApp {
 			workspaceEl: this.el.workspace,
 		});
 		this.app = app;
+		this.explorer = new FileExplorer(app, this.el.tree, {
+			activeFile: () => this.activeFile,
+			openFile: (file) => this.openFile(file),
+			flush: () => this.flush(),
+			newNote: (folder) => this.newNote(folder),
+			newFolder: (folder) => this.newFolder(folder),
+			trash: (file) => this.trash(file),
+			reveal: local ? (file) => invoke('reveal_path', { path: file.path }) : undefined,
+			notice: (message) => this.notice(message),
+		});
 		await app.metadataTypeManager.load();
 		// Before plugins load, so their styles go under the theme's (see addPluginStyle).
 		app.appearance.load();
@@ -390,7 +401,7 @@ class EmeraldApp {
 			name: 'Delete current file',
 			checkCallback: (checking) => {
 				if (!this.activeFile) return false;
-				if (!checking) void this.trashActiveFile();
+				if (!checking && this.activeFile) void this.trash(this.activeFile);
 				return true;
 			},
 		});
@@ -582,20 +593,27 @@ class EmeraldApp {
 		this.renderStatus();
 	}
 
-	private async newNote(): Promise<void> {
-		if (!this.vault) return;
+	/** A new note in `folder`, or where the vault's "Default location for new notes" says. */
+	private async newNote(folder?: TFolder): Promise<void> {
+		const app = this.app;
+		if (!app) return;
+		const parent = folder ?? app.fileManager.getNewFileParent(this.activeFile?.path ?? '');
 		try {
-			await this.openFile(await this.vault.create(this.vault.getAvailablePath('Untitled', 'md'), ''));
+			await this.openFile(await app.vault.create(app.vault.getAvailablePath(joinPath(parent.isRoot() ? '' : parent.path, 'Untitled'), 'md'), ''));
 			this.el.title.select();
 		} catch (err) {
 			this.notice(`Could not create a note: ${err}`);
 		}
 	}
 
-	private async newFolder(): Promise<void> {
-		if (!this.vault) return;
+	/** A new folder, named in place in the file tree. */
+	private async newFolder(folder?: TFolder): Promise<void> {
+		const app = this.app;
+		if (!app) return;
+		const parent = folder ?? app.vault.getRoot();
 		try {
-			await this.vault.createFolder(this.vault.getAvailablePath('Untitled', ''));
+			const created = await app.vault.createFolder(app.vault.getAvailablePath(joinPath(parent.isRoot() ? '' : parent.path, 'Untitled'), ''));
+			this.explorer?.startRename(created);
 		} catch (err) {
 			this.notice(`Could not create a folder: ${err}`);
 		}
@@ -617,19 +635,21 @@ class EmeraldApp {
 		const folder = file.parent && !file.parent.isRoot() ? file.parent.path + '/' : '';
 		try {
 			await this.flush();
-			await this.vault.rename(file, `${folder}${newName}.${file.extension}`);
+			await this.app!.fileManager.renameFile(file, `${folder}${newName}.${file.extension}`);
 		} catch (err) {
 			this.notice(`Could not rename: ${err}`);
 			this.el.title.value = file.basename;
 		}
 	}
 
-	private async trashActiveFile(): Promise<void> {
-		const file = this.activeFile;
-		if (!file || !this.vault) return;
-		const ok = await ask(`Move "${file.name}" to the vault's .trash folder?`, { title: 'Move to trash', kind: 'warning' });
+	/** Moves a file or folder to the vault's `.trash`, after asking. */
+	private async trash(file: TAbstractFile): Promise<void> {
+		if (!this.vault) return;
+		const what = file instanceof TFolder ? `the folder "${file.name}" and everything in it` : `"${file.name}"`;
+		const ok = await ask(`Move ${what} to the vault's .trash folder?`, { title: 'Move to trash', kind: 'warning' });
 		if (!ok) return;
 		try {
+			if (this.activeFile && isInside(this.activeFile, file)) await this.flush();
 			await this.vault.trash(file);
 		} catch (err) {
 			this.notice(`Could not move to trash: ${err}`);
@@ -656,57 +676,7 @@ class EmeraldApp {
 	}
 
 	private renderTree(): void {
-		if (!this.vault) return;
-		const scroll = this.el.tree.scrollTop;
-		this.el.tree.replaceChildren(this.renderChildren(this.vault.getRoot(), 0));
-		this.el.tree.scrollTop = scroll;
-	}
-
-	private renderChildren(folder: TFolder, depth: number): DocumentFragment {
-		const fragment = document.createDocumentFragment();
-		const children = [...folder.children].sort((a, b) => {
-			const aFolder = a instanceof TFolder;
-			if (aFolder !== b instanceof TFolder) return aFolder ? -1 : 1;
-			return collator.compare(a.name, b.name);
-		});
-		for (const child of children) {
-			const item = document.createElement('div');
-			const title = document.createElement('div');
-			title.style.paddingInlineStart = `${8 + depth * 16}px`;
-			title.title = child.path;
-			if (child instanceof TFolder) {
-				const collapsed = this.collapsed.has(child.path);
-				item.className = 'tree-item nav-folder' + (collapsed ? ' is-collapsed' : '');
-				title.className = 'tree-item-self nav-folder-title';
-				title.textContent = child.name;
-				title.addEventListener('click', () => {
-					if (collapsed) this.collapsed.delete(child.path);
-					else this.collapsed.add(child.path);
-					this.renderTree();
-				});
-				item.append(title);
-				if (!collapsed) {
-					const kids = document.createElement('div');
-					kids.className = 'tree-item-children nav-folder-children';
-					kids.append(this.renderChildren(child, depth + 1));
-					item.append(kids);
-				}
-			} else if (child instanceof TFile) {
-				item.className = 'tree-item nav-file';
-				title.className = 'tree-item-self nav-file-title' + (child === this.activeFile ? ' is-active' : '');
-				title.textContent = child.extension === 'md' ? child.basename : child.name;
-				if (child.extension !== 'md') {
-					const tag = document.createElement('span');
-					tag.className = 'nav-file-tag';
-					tag.textContent = child.extension;
-					title.append(tag);
-				}
-				title.addEventListener('click', () => void this.openFile(child));
-				item.append(title);
-			}
-			fragment.append(item);
-		}
-		return fragment;
+		this.explorer?.render();
 	}
 
 	private renderSidePanels(): void {
