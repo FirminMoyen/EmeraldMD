@@ -9,6 +9,9 @@
 //! Quitting goes through the page first (`quit-requested`), so unsaved edits
 //! are written before the app exits.
 
+// The menu bar is macOS only; quitting through the page applies everywhere.
+#![cfg_attr(not(target_os = "macos"), allow(dead_code))]
+
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
