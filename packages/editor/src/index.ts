@@ -102,6 +102,8 @@ export interface MarkdownEditorOptions {
 	onChange?: (text: string) => void;
 	/** Cmd/Ctrl-click on a wikilink. */
 	onOpenLink?: (linktext: string) => void;
+	/** Files pasted or dropped into the editor, with the document position to insert at. */
+	onFiles?: (files: File[], pos: number) => void;
 }
 
 export class MarkdownEditor {
@@ -130,6 +132,20 @@ export class MarkdownEditor {
 				if (update.docChanged) options.onChange?.(update.state.doc.toString());
 			}),
 			EditorView.domEventHandlers({
+				paste: (event, view) => {
+					const files = [...(event.clipboardData?.files ?? [])];
+					if (!files.length || !options.onFiles) return false;
+					event.preventDefault();
+					options.onFiles(files, view.state.selection.main.head);
+					return true;
+				},
+				drop: (event, view) => {
+					const files = [...(event.dataTransfer?.files ?? [])];
+					if (!files.length || !options.onFiles) return false;
+					event.preventDefault();
+					options.onFiles(files, view.posAtCoords({ x: event.clientX, y: event.clientY }) ?? view.state.selection.main.head);
+					return true;
+				},
 				mousedown: (event, view) => {
 					if (!(event.metaKey || event.ctrlKey) || !options.onOpenLink) return false;
 					const pos = view.posAtCoords({ x: event.clientX, y: event.clientY });

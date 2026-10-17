@@ -29,6 +29,15 @@ export class TauriBackend implements VaultBackend {
 		return invoke('trash_path', { path });
 	}
 
+	readBinary(path: string): Promise<ArrayBuffer> {
+		return invoke('read_binary', { path });
+	}
+
+	/** Bytes travel as the raw request body; the path goes in a header. */
+	writeBinary(path: string, data: ArrayBuffer): Promise<VaultUpdate> {
+		return invoke('write_binary', new Uint8Array(data), { headers: { path: encodeURIComponent(path) } });
+	}
+
 	search(query: string, options?: SearchOptions): Promise<SearchResults> {
 		return invoke('search_vault', { query, options });
 	}

@@ -301,3 +301,11 @@ export function htmlToMarkdown(html: string | HTMLElement | Document | DocumentF
 	};
 	return walk(root, 0).replace(/\n{3,}/g, '\n\n').trim();
 }
+
+/** `a` followed by `b`, as a new buffer. */
+export function concatBytes(a: ArrayBuffer, b: ArrayBuffer): ArrayBuffer {
+	const out = new Uint8Array(a.byteLength + b.byteLength);
+	out.set(new Uint8Array(a), 0);
+	out.set(new Uint8Array(b), a.byteLength);
+	return out.buffer;
+}

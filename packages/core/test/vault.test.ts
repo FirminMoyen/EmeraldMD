@@ -22,6 +22,8 @@ function fakeBackend(contents: Record<string, string> = {}): VaultBackend & { ne
 		createFolder: async () => backend.next,
 		rename: async () => backend.next,
 		trash: async () => backend.next,
+		readBinary: async (path: string) => new TextEncoder().encode(contents[path] ?? '').buffer as ArrayBuffer,
+		writeBinary: async () => backend.next,
 	};
 	return backend;
 }

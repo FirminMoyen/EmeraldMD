@@ -6,6 +6,7 @@
  */
 
 import { normalizePath, TFile, TFolder, type Vault } from '@emeraldmd/core';
+import { concatBytes } from './util';
 
 export interface Stat {
 	type: 'file' | 'folder';
@@ -127,9 +128,12 @@ export class VaultAdapter implements DataAdapter {
 		return this.vault.read(file);
 	}
 
-	/** Text files only for now: the content is read as UTF-8. */
 	async readBinary(path: string): Promise<ArrayBuffer> {
-		return encoder.encode(await this.read(path)).buffer as ArrayBuffer;
+		path = normalizePath(path);
+		if (this.isConfigPath(path)) return encoder.encode(await this.read(path)).buffer as ArrayBuffer;
+		const file = this.vault.getFileByPath(path);
+		if (!file) throw notFound(path);
+		return this.vault.readBinary(file);
 	}
 
 	async write(path: string, data: string, _options?: DataWriteOptions): Promise<void> {
@@ -142,7 +146,11 @@ export class VaultAdapter implements DataAdapter {
 
 	/** Text only for now: the data is written as UTF-8. */
 	async writeBinary(path: string, data: ArrayBuffer, options?: DataWriteOptions): Promise<void> {
-		await this.write(path, decoder.decode(data), options);
+		path = normalizePath(path);
+		if (this.isConfigPath(path)) return this.write(path, decoder.decode(data), options);
+		const file = this.vault.getFileByPath(path);
+		if (file) await this.vault.modifyBinary(file, data);
+		else await this.vault.createBinary(path, data);
 	}
 
 	async append(path: string, data: string, options?: DataWriteOptions): Promise<void> {
@@ -151,7 +159,8 @@ export class VaultAdapter implements DataAdapter {
 	}
 
 	async appendBinary(path: string, data: ArrayBuffer, options?: DataWriteOptions): Promise<void> {
-		await this.append(path, decoder.decode(data), options);
+		const existing = (await this.exists(path)) ? await this.readBinary(path) : new ArrayBuffer(0);
+		await this.writeBinary(path, concatBytes(existing, data), options);
 	}
 
 	async process(path: string, fn: (data: string) => string, options?: DataWriteOptions): Promise<string> {

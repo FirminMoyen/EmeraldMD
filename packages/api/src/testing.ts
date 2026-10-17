@@ -15,6 +15,8 @@ function emptyUpdate(): VaultUpdate {
 export class MemoryBackend implements VaultBackend {
 	readonly files = new Map<string, string>();
 	readonly folders = new Set<string>();
+	/** Bytes of files written with `writeBinary` (`files` holds their UTF-8 reading). */
+	readonly binaries = new Map<string, Uint8Array>();
 	private clock = 1;
 
 	constructor(files: Record<string, string> = {}) {
@@ -39,6 +41,7 @@ export class MemoryBackend implements VaultBackend {
 
 	async write(path: string, data: string): Promise<VaultUpdate> {
 		path = normalizePath(path);
+		this.binaries.delete(path);
 		this.files.set(path, data);
 		return { ...emptyUpdate(), upserted: [this.entry(path, data)] };
 	}
@@ -83,6 +86,19 @@ export class MemoryBackend implements VaultBackend {
 			this.folders.delete(p);
 		}
 		return { ...emptyUpdate(), removed: removed.sort().reverse() };
+	}
+
+	async readBinary(path: string): Promise<ArrayBuffer> {
+		path = normalizePath(path);
+		const bytes = this.binaries.get(path) ?? new TextEncoder().encode(await this.read(path));
+		return bytes.slice().buffer as ArrayBuffer;
+	}
+
+	async writeBinary(path: string, data: ArrayBuffer): Promise<VaultUpdate> {
+		path = normalizePath(path);
+		const update = await this.write(path, new TextDecoder().decode(data));
+		this.binaries.set(path, new Uint8Array(data.slice(0)));
+		return update;
 	}
 
 	private entry(path: string, data: string): FileEntry {

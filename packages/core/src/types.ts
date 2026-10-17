@@ -105,6 +105,10 @@ export interface VaultBackend {
 	rename(from: string, to: string): Promise<VaultUpdate>;
 	/** Moves to the vault's `.trash` folder. */
 	trash(path: string): Promise<VaultUpdate>;
+	/** A file's bytes (attachments: images, PDFs, …). */
+	readBinary(path: string): Promise<ArrayBuffer>;
+	/** Writes any file from bytes, creating it and its folders if needed. Markdown must be UTF-8. */
+	writeBinary(path: string, data: ArrayBuffer): Promise<VaultUpdate>;
 	/** Full-text search with Obsidian's query syntax (docs/search.md), when the backend supports it. */
 	search?(query: string, options?: SearchOptions): Promise<SearchResults>;
 }

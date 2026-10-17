@@ -6,6 +6,7 @@
 
 import { normalizePath, TAbstractFile, TFile, TFolder, Vault as CoreVault, type FileEntry, type VaultBackend } from '@emeraldmd/core';
 import { VaultAdapter, type ConfigStore, type DataWriteOptions } from './adapter';
+import { concatBytes } from './util';
 
 /** Settings kept in `appearance.json` rather than `app.json`. */
 const APPEARANCE_KEYS = new Set([
@@ -51,8 +52,6 @@ const DEFAULT_CONFIG: Record<string, unknown> = {
 	vimMode: false,
 };
 
-const encoder = new TextEncoder();
-const decoder = new TextDecoder();
 
 export class Vault extends CoreVault {
 	adapter: VaultAdapter;
@@ -90,16 +89,12 @@ export class Vault extends CoreVault {
 		this.trigger('config-changed', key);
 	}
 
-	async readBinary(file: TFile): Promise<ArrayBuffer> {
-		return encoder.encode(await this.read(file)).buffer as ArrayBuffer;
+	override async createBinary(path: string, data: ArrayBuffer, _options?: DataWriteOptions): Promise<TFile> {
+		return super.createBinary(path, data);
 	}
 
-	async createBinary(path: string, data: ArrayBuffer, _options?: DataWriteOptions): Promise<TFile> {
-		return this.create(path, decoder.decode(data));
-	}
-
-	async modifyBinary(file: TFile, data: ArrayBuffer, _options?: DataWriteOptions): Promise<void> {
-		await this.modify(file, decoder.decode(data));
+	override async modifyBinary(file: TFile, data: ArrayBuffer, _options?: DataWriteOptions): Promise<void> {
+		await super.modifyBinary(file, data);
 	}
 
 	async append(file: TFile, data: string, _options?: DataWriteOptions): Promise<void> {
@@ -107,7 +102,7 @@ export class Vault extends CoreVault {
 	}
 
 	async appendBinary(file: TFile, data: ArrayBuffer, options?: DataWriteOptions): Promise<void> {
-		await this.append(file, decoder.decode(data), options);
+		await this.modifyBinary(file, concatBytes(await this.readBinary(file), data), options);
 	}
 
 	/** Reads, transforms and writes the file in one step. */
