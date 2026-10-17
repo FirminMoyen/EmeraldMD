@@ -58,12 +58,36 @@ itself ignore:
 
 All need the usual bearer token.
 
+## In the desktop app
+
+**Connect to server**, tick **Keep a synced copy on this Mac**, choose a vault,
+then choose where to keep it: the app creates a folder named after the vault
+there and opens it like any local vault. The token goes to the macOS Keychain;
+synced copies are listed in `synced-vaults.json` in the app's settings folder.
+
+While a synced vault is open, the app syncs:
+
+- when it opens;
+- 1.5 s after local edits (in the app or by other programs, through the file
+  watcher);
+- every minute, for other devices' changes;
+- on **Sync now** (command palette, or a click on the status bar item).
+
+The status bar shows *Syncing…*, *Synced* (hover for when), *Offline* (local
+edits are kept and sync later) or *Sign in again* (the server rejected the
+token; click to enter a new one). A notice names any conflict copy.
+
+For development, debug builds read the token from `EMERALDMD_DEV_SYNC_TOKEN`
+instead of the Keychain (`open --env EMERALDMD_DEV_SYNC_TOKEN=… EmeraldMD.app`),
+so a local test server works without Keychain prompts. Release builds ignore it.
+
 ## Status
 
 - Done: the engine, the server endpoints, the HTTP client
   (`emerald_sync::HttpRemote`, feature `http`), and tests that sync two real
   vaults through a running server.
-- Next: a "Synced" option in the desktop app's Connect to server dialog that
-  runs a pass on open, after local edits (debounced) and when the server's
-  event stream reports a change; then syncing `.obsidian/` settings as an
-  opt-in.
+- Done in the desktop app: synced copies (see above), checked against a
+  local server: first sync, server-to-Mac, Mac-to-server and a same-line
+  conflict producing a conflict copy on both sides.
+- Next: changes pushed from the server's event stream instead of the
+  one-minute poll; syncing `.obsidian/` settings as an opt-in.

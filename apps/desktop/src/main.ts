@@ -31,6 +31,7 @@ import { ask, open as openDialog } from '@tauri-apps/plugin-dialog';
 import { CommandPalette } from './command-palette';
 import { registerCoreViews, revealSearch } from './core-views';
 import { RemoteVaults } from './remote';
+import { setupSyncStatus } from './synced';
 import { TauriBackend, TauriConfigStore, tauriRequestBackend, tauriTrustStore } from './tauri-backend';
 
 /** A note to reopen after the page reloads to switch vaults (see `attach`). */
@@ -131,6 +132,7 @@ class EmeraldApp {
 			applyUpdate: (update) => this.vault?.applyUpdate(update),
 			showEmptyState: () => this.showEmptyState(),
 			notice: (message) => this.notice(message),
+			openLocal: (path) => this.open(path),
 		});
 		// The local vault's watcher; a remote vault's changes come through RemoteVaults.
 		void listen<VaultUpdate>('vault-changed', (event) => {
@@ -235,6 +237,7 @@ class EmeraldApp {
 		this.activeFile = null;
 		this.mountWorkspace(app);
 		this.registerCommands(app);
+		if (local) void setupSyncStatus(app, { notice: (message) => this.notice(message), reconnect: () => this.remote.showDialog() });
 		registerCoreViews(app, {
 			search: backend.search ? (query, options) => backend.search!(query, options) : undefined,
 			openFile: (file, select) => this.openFileAt(file, select),

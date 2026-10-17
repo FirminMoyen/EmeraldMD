@@ -1673,3 +1673,41 @@ a.tag {
 .cm-hmd-internal-link .cm-quote {
 	color: var(--text-accent);
 }
+
+/* Synced vault status (src/synced.ts) */
+
+.emerald-sync-status {
+	display: flex;
+	align-items: center;
+	gap: 4px;
+	cursor: pointer;
+}
+
+.emerald-sync-icon {
+	display: flex;
+}
+
+.emerald-sync-icon svg {
+	width: 13px;
+	height: 13px;
+}
+
+.emerald-sync-status[data-state='synced'] .emerald-sync-icon {
+	color: var(--interactive-accent);
+}
+
+.emerald-sync-status[data-state='offline'],
+.emerald-sync-status[data-state='unauthorized'],
+.emerald-sync-status[data-state='error'] {
+	color: var(--text-warning, #e0ac00);
+}
+
+.emerald-sync-status[data-state='syncing'] .emerald-sync-icon svg {
+	animation: emerald-spin 1s linear infinite;
+}
+
+@keyframes emerald-spin {
+	to {
+		transform: rotate(360deg);
+	}
+}

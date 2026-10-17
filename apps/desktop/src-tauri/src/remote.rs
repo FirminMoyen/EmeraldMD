@@ -8,7 +8,7 @@ use std::path::PathBuf;
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Manager};
 
-const KEYCHAIN_SERVICE: &str = "org.emeraldmd.desktop";
+pub(crate) const KEYCHAIN_SERVICE: &str = "org.emeraldmd.desktop";
 const MAX_RECENT: usize = 10;
 
 type CmdResult<T> = Result<T, String>;

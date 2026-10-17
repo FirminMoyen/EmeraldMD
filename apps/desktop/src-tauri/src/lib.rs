@@ -4,6 +4,7 @@
 mod http;
 mod remote;
 mod search;
+mod synced;
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -18,6 +19,17 @@ struct OpenVault {
     session: VaultSession,
     /// Dropping the watcher stops it.
     _watcher: notify::RecommendedWatcher,
+    /// Background sync, for vaults that are synced copies of a server vault.
+    syncer: Option<synced::Syncer>,
+}
+
+/// Asks the open vault's syncer, if any, for a pass soon (after an edit).
+fn nudge_sync(state: &AppState) {
+    if let Ok(guard) = state.vault.lock()
+        && let Some(syncer) = guard.as_ref().and_then(|open| open.syncer.as_ref())
+    {
+        syncer.nudge();
+    }
 }
 
 #[derive(Default)]
@@ -89,6 +101,9 @@ fn watch(app: AppHandle, root: PathBuf) -> notify::Result<notify::RecommendedWat
             match open.session.sync_path(&vault_path) {
                 Ok(update) if !update.is_empty() => {
                     let _ = app.emit("vault-changed", &update);
+                    if let Some(syncer) = &open.syncer {
+                        syncer.nudge();
+                    }
                 }
                 Ok(_) => {}
                 Err(err) => eprintln!("could not sync {vault_path}: {err}"),
@@ -109,10 +124,14 @@ async fn open_vault(app: AppHandle, state: State<'_, AppState>, path: String) ->
     let session = VaultSession::open(&path).map_err(|e| e.to_string())?;
     let snapshot = session.snapshot();
     let watcher = watch(app.clone(), session.vault().root().to_path_buf()).map_err(|e| e.to_string())?;
+    let root = session.vault().root().to_path_buf();
+    let syncer = synced::config_for(&app, &root).map(|config| synced::Syncer::start(app.clone(), config, root));
     // Lets the webview load the vault's attachments (images, PDFs) through the asset protocol.
     app.asset_protocol_scope().allow_directory(session.vault().root(), true).map_err(|e| e.to_string())?;
     *state.vault.lock().map_err(|_| "vault state is poisoned".to_owned())? =
-        Some(OpenVault { session, _watcher: watcher });
+        Some(OpenVault { session, _watcher: watcher, syncer });
+    // The first pass of a synced vault, now that the session is in place.
+    nudge_sync(&state);
     let mut settings = load_settings(&app);
     settings.last_vault = Some(path);
     save_settings(&app, &settings);
@@ -139,32 +158,44 @@ fn write_binary(state: State<'_, AppState>, request: tauri::ipc::Request<'_>) ->
     };
     let header = request.headers().get("path").and_then(|v| v.to_str().ok()).ok_or("missing path header")?;
     let path = percent_encoding::percent_decode_str(header).decode_utf8().map_err(|e| e.to_string())?;
-    with_session(&state, |s| s.write_bytes(&path, data))
+    let update = with_session(&state, |s| s.write_bytes(&path, data))?;
+    nudge_sync(&state);
+    Ok(update)
 }
 
 #[tauri::command]
 async fn write_file(state: State<'_, AppState>, path: String, data: String) -> CmdResult<VaultUpdate> {
-    with_session(&state, |s| s.write(&path, &data))
+    let update = with_session(&state, |s| s.write(&path, &data))?;
+    nudge_sync(&state);
+    Ok(update)
 }
 
 #[tauri::command]
 async fn create_file(state: State<'_, AppState>, path: String, data: String) -> CmdResult<VaultUpdate> {
-    with_session(&state, |s| s.create(&path, &data))
+    let update = with_session(&state, |s| s.create(&path, &data))?;
+    nudge_sync(&state);
+    Ok(update)
 }
 
 #[tauri::command]
 async fn create_folder(state: State<'_, AppState>, path: String) -> CmdResult<VaultUpdate> {
-    with_session(&state, |s| s.create_folder(&path))
+    let update = with_session(&state, |s| s.create_folder(&path))?;
+    nudge_sync(&state);
+    Ok(update)
 }
 
 #[tauri::command]
 async fn rename_path(state: State<'_, AppState>, from: String, to: String) -> CmdResult<VaultUpdate> {
-    with_session(&state, |s| s.rename(&from, &to))
+    let update = with_session(&state, |s| s.rename(&from, &to))?;
+    nudge_sync(&state);
+    Ok(update)
 }
 
 #[tauri::command]
 async fn trash_path(state: State<'_, AppState>, path: String) -> CmdResult<VaultUpdate> {
-    with_session(&state, |s| s.trash(&path))
+    let update = with_session(&state, |s| s.trash(&path))?;
+    nudge_sync(&state);
+    Ok(update)
 }
 
 #[tauri::command]
@@ -250,6 +281,11 @@ pub fn run() {
             remote::remote_token,
             remote::set_reopen_remote_vault,
             search::search_vault,
+            synced::synced_vaults,
+            synced::create_synced_vault,
+            synced::forget_synced_vault,
+            synced::open_vault_sync,
+            synced::sync_now,
         ])
         .run(tauri::generate_context!())
         .expect("error while running EmeraldMD");
