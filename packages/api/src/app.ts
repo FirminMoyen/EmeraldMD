@@ -8,6 +8,7 @@
 import { Events, type MetadataCache } from '@emeraldmd/core';
 import { Appearance, type BaseTheme, type ThemeSetting } from './appearance';
 import { Commands } from './commands';
+import { InternalPlugins } from './core-plugins';
 import { CustomCss } from './custom-css';
 import { FileManager } from './file-manager';
 import { HotkeyManager } from './hotkeys';
@@ -47,24 +48,6 @@ const noPlugins: PluginsApi = {
 	disablePluginAndSave: async () => false,
 	loadManifests: async () => {},
 };
-
-/** Core plugins (daily notes, templates…) arrive in phase 2; until then none are enabled. */
-export class InternalPlugins {
-	plugins: Record<string, unknown> = {};
-	config: Record<string, boolean> = {};
-
-	getPluginById(_id: string): null {
-		return null;
-	}
-
-	getEnabledPluginById(_id: string): null {
-		return null;
-	}
-
-	getEnabledPlugins(): unknown[] {
-		return [];
-	}
-}
 
 /** Secrets for plugins (API keys…). Kept in memory for now; a keychain-backed store comes later. */
 export class SecretStorage extends Events {

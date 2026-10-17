@@ -2,6 +2,8 @@ import {
 	App,
 	CodeMirrorEditor,
 	Component,
+	DailyNotes,
+	moment,
 	editorInfoExtensions,
 	MarkdownRenderer,
 	MarkdownView,
@@ -35,6 +37,7 @@ import { ask, open as openDialog } from '@tauri-apps/plugin-dialog';
 import { AppearanceTab } from './appearance-tab';
 import { FileExplorer } from './file-explorer';
 import { EditorTab, FilesTab, HotkeysTab } from './settings-tabs';
+import { CorePluginsTab, DailyNotesTab, TemplatesTab } from './core-plugin-tabs';
 import { CommandPalette } from './command-palette';
 import { registerCoreViews, revealSearch } from './core-views';
 import { RemoteVaults } from './remote';
@@ -298,12 +301,16 @@ class EmeraldApp {
 			new AppearanceTab(app, { showFolder: local ? (path) => invoke('show_config_folder', { path }) : undefined }),
 		);
 		app.setting.addBuiltInTab(new HotkeysTab(app));
+		app.setting.addBuiltInTab(new CorePluginsTab(app));
+		app.setting.addCorePluginTab(new DailyNotesTab(app));
+		app.setting.addCorePluginTab(new TemplatesTab(app));
 		if (local) void listen<string>('config-changed', (event) => app.customCss.onConfigFileChanged(event.payload));
 		this.activeFile = null;
 		this.mountWorkspace(app);
 		this.applyEditorSettings();
 		vault.on('config-changed', (key: string) => this.onConfigChanged(key));
 		this.registerCommands(app);
+		await app.internalPlugins.load(app);
 		if (local) void setupSyncStatus(app, { notice: (message) => this.notice(message), reconnect: () => this.remote.showDialog() });
 		registerCoreViews(app, {
 			search: backend.search ? (query, options) => backend.search!(query, options) : undefined,
@@ -334,11 +341,11 @@ class EmeraldApp {
 			(typeof last === 'string' && vault.getFileByPath(last)) ||
 			vault.getMarkdownFiles().sort((a, b) => b.stat.mtime - a.stat.mtime)[0];
 		this.restoreSidebars(app);
-		if (recent) {
-			await this.openFile(recent);
-			if (vault.getConfig('defaultViewMode') === 'preview') await this.markdownView?.setMode('preview');
-		}
+		const daily = app.internalPlugins.getEnabledPluginById('daily-notes');
+		if (daily instanceof DailyNotes && daily.options.autorun === true && !keep) await daily.openDay(moment());
+		else if (recent) await this.openFile(recent);
 		else this.closeFile();
+		if (this.activeFile && vault.getConfig('defaultViewMode') === 'preview') await this.markdownView?.setMode('preview');
 
 		if (!local) {
 			// Community plugins run from the local `.obsidian` folder only, for now.

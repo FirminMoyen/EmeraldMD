@@ -98,6 +98,11 @@ export abstract class SettingTab {
 		return [];
 	}
 
+	/** @internal Whether the tab is listed (a core plugin's options, while the plugin is off, are not). */
+	isAvailable(): boolean {
+		return true;
+	}
+
 	update(): void {
 		this.settingItems = this.getSettingDefinitions() ?? [];
 	}
@@ -267,6 +272,8 @@ export class AppSetting extends Modal {
 	settingTabs: SettingTab[] = [];
 	/** Tabs added by plugins. */
 	pluginTabs: SettingTab[] = [];
+	/** Options of core plugins. */
+	corePluginTabs: SettingTab[] = [];
 	activeTab: SettingTab | null = null;
 	tabHeadersEl: HTMLElement;
 	tabContentContainer: HTMLElement;
@@ -301,8 +308,18 @@ export class AppSetting extends Modal {
 		this.settingTabs.push(tab);
 	}
 
+	/** @internal A core plugin's options, listed under "Core plugins". */
+	addCorePluginTab(tab: SettingTab): void {
+		this.corePluginTabs.push(tab);
+	}
+
+	/** @internal Lists the tabs again (after a core plugin is turned on or off). */
+	updateTabs(): void {
+		if (this.isOpen) this.renderTabHeaders();
+	}
+
 	openTabById(id: string): SettingTab | null {
-		const tab = [...this.settingTabs, ...this.pluginTabs].find((t) => t.id === id) ?? null;
+		const tab = [...this.settingTabs, ...this.corePluginTabs, ...this.pluginTabs].find((t) => t.id === id) ?? null;
 		if (!tab) return null;
 		if (!this.isOpen) {
 			this.lastTabId = id;
@@ -328,7 +345,7 @@ export class AppSetting extends Modal {
 
 	override onOpen(): void {
 		this.renderTabHeaders();
-		const all = [...this.settingTabs, ...this.pluginTabs];
+		const all = [...this.settingTabs, ...this.corePluginTabs, ...this.pluginTabs].filter((t) => t.isAvailable());
 		this.openTab(all.find((t) => t.id === this.lastTabId) ?? all[0] ?? null);
 	}
 
@@ -351,6 +368,7 @@ export class AppSetting extends Modal {
 	private renderTabHeaders(): void {
 		const groups: TabGroup[] = [
 			{ title: 'Options', tabs: this.settingTabs },
+			{ title: 'Core plugins', tabs: this.corePluginTabs.filter((t) => t.isAvailable()) },
 			{ title: 'Community plugins', tabs: this.pluginTabs },
 		];
 		this.tabHeadersEl.empty();
