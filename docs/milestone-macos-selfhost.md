@@ -27,7 +27,9 @@ end-to-end tests; the rest is in priority order within each section.
       (`file-menu`), rename in place; links are rewritten when notes move
 - [ ] Tabs and splits in the main area; back/forward history
 - [ ] Hover preview of links (page preview)
-- [ ] Bookmarks, templates, daily notes, properties editor
+- [x] Daily notes and templates (core plugins, with their settings and
+      the `{{date}}`/`{{time}}`/`{{title}}` variables)
+- [ ] Bookmarks, properties editor
 
 ### Navigation and core panes
 
