@@ -66,7 +66,7 @@ machine does not switch plugins on.
 |---|---|---|
 | `app`, `moment` | The app and moment instance, like the `obsidian` exports | Calendar, Dataview, Homepage, Linter, Natural Language Dates, Periodic Notes, QuickAdd, Tasks |
 | `CodeMirror` | A CodeMirror 5 mode registry (`defineMode`, `defineMIME`, `getMode`, `modes`, `mimeModes`). Plugins register code-block syntax modes there; nothing renders with it yet | Admonition, Dataview |
-| `CodeMirrorAdapter` | Vim mode's adapter, as an empty `{ commands: {} }` until Vim mode exists | Linter, Outliner |
+| `CodeMirrorAdapter` | `{ commands, Vim }`: `Vim` is the editor's Vim emulation (`Vim.map`, `Vim.defineEx`…), used when `vimMode` is on | Linter, Outliner, Vimrc Support |
 | `createEl`, `createDiv`, `sleep`, `activeDocument`, … | The DOM helpers declared in the typings' `declare global` block (non-enumerable) | Most plugins |
 
 ## Platform

@@ -130,3 +130,21 @@ describe('math and diagrams in Live Preview', () => {
 		expect(lines(editor)[0]).toBe('Area $\\pi r_1 * r_2$ here.');
 	});
 });
+
+describe('Vim key bindings', () => {
+	it('turns on with the setting and edits with Vim keys', async () => {
+		const { DEFAULT_EDITOR_SETTINGS } = await import('../src');
+		const editor = open('hello world', 0);
+		editor.setLivePreview(false);
+		expect(editor.view.scrollDOM.classList.contains('cm-vimMode')).toBe(false);
+		editor.configure({ ...DEFAULT_EDITOR_SETTINGS, vim: true });
+		expect(editor.view.scrollDOM.classList.contains('cm-vimMode')).toBe(true);
+		const key = (k: string) => editor.view.contentDOM.dispatchEvent(new KeyboardEvent('keydown', { key: k, bubbles: true, cancelable: true }));
+		editor.view.focus();
+		key('d');
+		key('w');
+		expect(editor.getValue()).toBe('world');
+		editor.configure({ ...DEFAULT_EDITOR_SETTINGS, vim: false });
+		expect(editor.view.scrollDOM.classList.contains('cm-vimMode')).toBe(false);
+	});
+});

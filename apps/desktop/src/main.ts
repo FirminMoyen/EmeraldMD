@@ -29,7 +29,11 @@ import {
 	type VaultUpdate,
 } from '@emeraldmd/core';
 import { MemoryConfigStore } from '@emeraldmd/api/testing';
-import { MarkdownEditor } from '@emeraldmd/editor';
+import { MarkdownEditor, Vim } from '@emeraldmd/editor';
+
+// Plugins that add Vim commands or mappings reach the emulation as `CodeMirrorAdapter.Vim`.
+const vimAdapter = ((globalThis as { CodeMirrorAdapter?: Record<string, unknown> }).CodeMirrorAdapter ??= { commands: {} });
+vimAdapter.Vim = Vim;
 import { CommunityDirectory, CommunityPluginsTab, PluginHost } from '@emeraldmd/plugin-host';
 import type { Extension } from '@codemirror/state';
 import { convertFileSrc, invoke } from '@tauri-apps/api/core';
@@ -572,12 +576,13 @@ class EmeraldApp {
 			useTab: get('useTab') !== false,
 			autoPairBrackets: get('autoPairBrackets') !== false,
 			readableLineLength: readable,
+			vim: get('vimMode') === true,
 		});
 		this.markdownView?.previewMode.containerEl.toggleClass('is-readable-line-width', readable);
 	}
 
 	private onConfigChanged(key: string): void {
-		if (['showLineNumber', 'spellcheck', 'tabSize', 'useTab', 'autoPairBrackets', 'readableLineLength'].includes(key)) this.applyEditorSettings();
+		if (['showLineNumber', 'spellcheck', 'tabSize', 'useTab', 'autoPairBrackets', 'readableLineLength', 'vimMode'].includes(key)) this.applyEditorSettings();
 		else if (key === 'strictLineBreaks') void this.markdownView?.renderPreview();
 		else if (key === 'livePreview') this.markdownView?.setLivePreview(this.vault?.getConfig('livePreview') !== false);
 	}

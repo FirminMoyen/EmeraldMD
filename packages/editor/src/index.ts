@@ -11,7 +11,7 @@ import { markdown, markdownLanguage } from '@codemirror/lang-markdown';
 import { yamlFrontmatter } from '@codemirror/lang-yaml';
 import { HighlightStyle, indentOnInput, indentUnit, syntaxHighlighting, syntaxTree } from '@codemirror/language';
 import { highlightSelectionMatches, searchKeymap } from '@codemirror/search';
-import { Compartment, EditorState, type Extension, type StateEffect } from '@codemirror/state';
+import { Compartment, EditorState, Prec, type Extension, type StateEffect } from '@codemirror/state';
 import {
 	Decoration,
 	type DecorationSet,
@@ -27,6 +27,10 @@ import {
 import type { SyntaxNode } from '@lezer/common';
 import { tags as t } from '@lezer/highlight';
 import { obsidianMarkdown } from '@emeraldmd/core';
+import { vim } from '@replit/codemirror-vim';
+
+/** The Vim emulation's API (`Vim.map`, `Vim.defineEx`…), which plugins reach as `CodeMirrorAdapter.Vim`. */
+export { Vim } from '@replit/codemirror-vim';
 import { lineClasses, livePreview, type LivePreviewOptions } from './live-preview';
 
 export { lineClasses, livePreview, type LivePreviewOptions } from './live-preview';
@@ -117,6 +121,8 @@ export interface EditorSettings {
 	autoPairBrackets: boolean;
 	/** `readableLineLength`: the `is-readable-line-width` class on the container. */
 	readableLineLength: boolean;
+	/** `vimMode`: Vim key bindings. */
+	vim: boolean;
 }
 
 export const DEFAULT_EDITOR_SETTINGS: EditorSettings = {
@@ -126,10 +132,13 @@ export const DEFAULT_EDITOR_SETTINGS: EditorSettings = {
 	useTab: true,
 	autoPairBrackets: true,
 	readableLineLength: true,
+	vim: false,
 };
 
 function settingsExtensions(settings: EditorSettings): Extension {
 	return [
+		// Before every other keymap, as the Vim emulation needs.
+		settings.vim ? Prec.highest(vim()) : [],
 		settings.lineNumbers ? lineNumbers() : [],
 		settings.autoPairBrackets ? closeBrackets() : [],
 		EditorState.tabSize.of(settings.tabSize),
