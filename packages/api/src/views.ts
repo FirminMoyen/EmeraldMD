@@ -12,6 +12,7 @@ import { setIcon } from './icons';
 import type { Scope } from './keymap';
 import type { Menu } from './menu';
 import { setTooltip } from './tooltip';
+import { MarkdownRenderChild, MarkdownRenderer } from './markdown';
 import type { WorkspaceLeaf } from './workspace';
 
 export interface ViewStateResult {
@@ -205,6 +206,12 @@ export interface MarkdownSubView {
 
 export type MarkdownViewModeType = 'source' | 'preview';
 
+/** Reading view of a note (`view.previewMode`). */
+export interface MarkdownPreviewView extends MarkdownSubView {
+	containerEl: HTMLElement;
+	rerender(full?: boolean): void;
+}
+
 /**
  * The note editor. In EmeraldMD the desktop shell owns the CodeMirror
  * instance and assigns `editor` and `file`; loading and saving files goes
@@ -214,26 +221,82 @@ export class MarkdownView extends TextFileView implements MarkdownFileInfo {
 	editor!: Editor;
 	hoverPopover: unknown = null;
 	currentMode: MarkdownSubView;
-	previewMode: MarkdownSubView;
+	previewMode: MarkdownPreviewView;
+	/** @internal The editing mode (the shell's CodeMirror editor). */
+	readonly sourceMode: MarkdownSubView;
+	/** @internal Called after the mode changes, so the shell can update its controls. */
+	onModeChange: ((mode: MarkdownViewModeType) => void) | null = null;
+	private readonly readingEl: HTMLElement;
+	private renderChild: MarkdownRenderChild | null = null;
+	private renderGeneration = 0;
 
 	constructor(leaf: WorkspaceLeaf) {
 		super(leaf);
-		const source: MarkdownSubView = {
+		// `.markdown-reading-view > .markdown-preview-view.markdown-rendered`, the structure themes style.
+		this.readingEl = this.contentEl.createDiv('markdown-reading-view');
+		const previewEl = this.readingEl.createDiv('markdown-preview-view markdown-rendered');
+		this.sourceMode = {
 			getScroll: () => this.editor?.getScrollInfo().top ?? 0,
 			applyScroll: (scroll) => this.editor?.scrollTo(null, scroll),
 			get: () => this.getViewData(),
 			set: (data, clear) => this.setViewData(data, clear),
 		};
-		this.currentMode = source;
-		this.previewMode = source;
+		this.previewMode = {
+			containerEl: previewEl,
+			getScroll: () => this.readingEl.scrollTop,
+			applyScroll: (scroll) => (this.readingEl.scrollTop = scroll),
+			get: () => this.getViewData(),
+			set: () => void this.renderPreview(),
+			rerender: () => void this.renderPreview(),
+		};
+		this.currentMode = this.sourceMode;
+	}
+
+	getMode(): MarkdownViewModeType {
+		return this.currentMode === this.previewMode ? 'preview' : 'source';
+	}
+
+	/** Switches between editing (`source`) and the reading view (`preview`). */
+	async setMode(mode: MarkdownViewModeType | MarkdownSubView): Promise<void> {
+		const next = mode === 'preview' || mode === this.previewMode ? this.previewMode : this.sourceMode;
+		if (next === this.currentMode) return;
+		this.currentMode = next;
+		this.containerEl.toggleClass('is-reading', next === this.previewMode);
+		if (next === this.previewMode) await this.renderPreview();
+		else this.editor?.focus();
+		this.onModeChange?.(this.getMode());
+		this.app.workspace.trigger('layout-change');
+	}
+
+	override getState(): Record<string, unknown> {
+		return { ...super.getState(), mode: this.getMode() };
+	}
+
+	override async setState(state: unknown, result: ViewStateResult): Promise<void> {
+		await super.setState(state, result);
+		const mode = (state as { mode?: unknown } | null)?.mode;
+		if (mode === 'preview' || mode === 'source') await this.setMode(mode);
+	}
+
+	/** @internal Re-renders the reading view, when it is showing, from the current text. */
+	async renderPreview(): Promise<void> {
+		if (this.getMode() !== 'preview') return;
+		const generation = ++this.renderGeneration;
+		const target = createDiv('markdown-preview-sizer markdown-preview-section');
+		const child = new MarkdownRenderChild(target);
+		this.addChild(child);
+		await MarkdownRenderer.render(this.app, this.getViewData(), target, this.file?.path ?? '', child);
+		if (generation !== this.renderGeneration) {
+			this.removeChild(child);
+			return;
+		}
+		if (this.renderChild) this.removeChild(this.renderChild);
+		this.renderChild = child;
+		this.previewMode.containerEl.replaceChildren(target);
 	}
 
 	getViewType(): string {
 		return 'markdown';
-	}
-
-	getMode(): MarkdownViewModeType {
-		return 'source';
 	}
 
 	getViewData(): string {

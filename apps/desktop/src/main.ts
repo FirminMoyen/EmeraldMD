@@ -293,6 +293,12 @@ class EmeraldApp {
 		const view = new MarkdownView(ws.rootLeaf);
 		view.editor = new CodeMirrorEditor(this.editor.view);
 		view.titleEl.replaceWith(this.el.title);
+		// Reading view toggle, like the book/pencil button in Obsidian's note header.
+		const modeButton = view.addAction('book-open', 'Reading view (⌘E)', () => void this.toggleReading());
+		view.onModeChange = (mode) => {
+			setIcon(modeButton, mode === 'preview' ? 'pencil' : 'book-open');
+			modeButton.setAttribute('aria-label', mode === 'preview' ? 'Edit (⌘E)' : 'Reading view (⌘E)');
+		};
 		view.actionsEl.append(this.el.trash);
 		view.contentEl.append(this.el.editor, this.el.noFile);
 		this.markdownView = view;
@@ -325,6 +331,16 @@ class EmeraldApp {
 			},
 		});
 		add({
+			id: 'markdown:toggle-preview',
+			name: 'Toggle reading view',
+			hotkeys: [{ modifiers: ['Mod'], key: 'E' }],
+			checkCallback: (checking) => {
+				if (!this.activeFile) return false;
+				if (!checking) void this.toggleReading();
+				return true;
+			},
+		});
+		add({
 			id: 'app:delete-file',
 			name: 'Delete current file',
 			checkCallback: (checking) => {
@@ -343,6 +359,14 @@ class EmeraldApp {
 	private toggleSplit(el: HTMLElement): void {
 		el.toggleClass('is-collapsed', !el.hasClass('is-collapsed'));
 		this.app?.workspace.trigger('resize');
+	}
+
+	/** Switches the open note between editing and the reading view (saving first). */
+	private async toggleReading(): Promise<void> {
+		const view = this.markdownView;
+		if (!view || !this.activeFile) return;
+		await this.flush();
+		await view.setMode(view.getMode() === 'preview' ? 'source' : 'preview');
 	}
 
 	/** Opens a file; for notes, `select` is a UTF-16 range to select and scroll to. */
@@ -378,6 +402,7 @@ class EmeraldApp {
 		this.markdownView.file = file;
 		this.markdownView.data = text;
 		this.editor.setValue(text);
+		void this.markdownView.renderPreview();
 		this.el.editor.hidden = false;
 		this.el.noFile.hidden = true;
 		this.renderHeader();
@@ -459,6 +484,7 @@ class EmeraldApp {
 		this.applyingExternalChange = true;
 		try {
 			this.editor.replaceValue(text);
+			void this.markdownView?.renderPreview();
 		} finally {
 			this.applyingExternalChange = false;
 		}

@@ -47,6 +47,14 @@ export function registerCoreViews(app: App, host: CoreViewHost): void {
 	ws.leftRibbon.addRibbonItemButton('graph:open', 'git-fork', 'Open graph view', openGraph);
 	ws.leftRibbon.addRibbonItemButton('canvas:new-file', 'layout-dashboard', 'Create new canvas', newCanvas);
 
+	// Tags in rendered Markdown (reading view, canvas cards) search for the tag, as in Obsidian.
+	document.addEventListener('click', (evt) => {
+		const tag = (evt.target as Element | null)?.closest?.('.markdown-rendered a.tag, .canvas-node a.tag');
+		if (!tag) return;
+		evt.preventDefault();
+		void host.openSearch(`tag:${tag.textContent ?? ''}`);
+	});
+
 	ws.onLayoutReady(async () => {
 		// Side panes, behind the file explorer and backlinks tabs.
 		await ws.ensureSideLeaf(SEARCH_VIEW, 'left', { reveal: false });
