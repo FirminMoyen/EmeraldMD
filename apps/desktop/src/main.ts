@@ -37,6 +37,7 @@ import { listen } from '@tauri-apps/api/event';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { ask, open as openDialog } from '@tauri-apps/plugin-dialog';
 import { AppearanceTab } from './appearance-tab';
+import { BacklinksPane } from './backlinks';
 import { FileExplorer } from './file-explorer';
 import { EditorTab, FilesTab, HotkeysTab } from './settings-tabs';
 import { CorePluginsTab, DailyNotesTab, TemplatesTab } from './core-plugin-tabs';
@@ -116,6 +117,7 @@ class EmeraldApp {
 	private applyingExternalChange = false;
 	private renderQueued = false;
 	private explorer: FileExplorer | null = null;
+	private backlinks: BacklinksPane | null = null;
 	/** Notes visited before and after the open one (back/forward). */
 	private readonly history = { back: [] as TFile[], forward: [] as TFile[] };
 	private navigating = false;
@@ -316,6 +318,12 @@ class EmeraldApp {
 			newFolder: (folder) => this.newFolder(folder),
 			trash: (file) => this.trash(file),
 			reveal: local ? (file) => invoke('reveal_path', { path: file.path }) : undefined,
+			notice: (message) => this.notice(message),
+		});
+		this.backlinks = new BacklinksPane(app, this.el.backlinks, {
+			activeFile: () => this.activeFile,
+			openFileAt: (file, select) => this.openFileAt(file, select),
+			search: backend.search ? (query, options) => backend.search!(query, options) : undefined,
 			notice: (message) => this.notice(message),
 		});
 		await app.metadataTypeManager.load();
@@ -851,25 +859,7 @@ class EmeraldApp {
 
 	private renderSidePanels(): void {
 		this.renderStatus();
-		const list = this.el.backlinks;
-		list.replaceChildren();
-		const file = this.activeFile;
-		if (!file || !this.vault || !this.metadataCache) return;
-		const sources = this.metadataCache.getBacklinks(file);
-		if (sources.length === 0) {
-			list.textContent = 'No backlinks.';
-			return;
-		}
-		for (const path of sources) {
-			const source = this.vault.getFileByPath(path);
-			if (!source) continue;
-			const row = document.createElement('div');
-			row.className = 'tree-item-self search-result-file-title';
-			row.textContent = source.basename;
-			row.title = path;
-			row.addEventListener('click', () => void this.openFile(source));
-			list.append(row);
-		}
+		this.backlinks?.requestRender();
 	}
 
 	private renderStatus(): void {

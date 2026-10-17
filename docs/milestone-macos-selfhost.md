@@ -40,7 +40,8 @@ end-to-end tests; the rest is in priority order within each section.
       palette (⌘P)
 - [x] Backlinks, outline, tags, graph view (⌘G), local graph
 - [x] Canvas files (`.canvas`): view and edit
-- [ ] Unlinked mentions in backlinks
+- [x] Backlinks with the line of each link; unlinked mentions (name and
+      aliases, whole words, outside links) turned into links in one click
 
 ### Plugins and appearance
 

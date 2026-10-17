@@ -785,6 +785,59 @@ button {
 	margin-left: -8px;
 }
 
+/* Backlinks pane: linked and unlinked mentions (src/backlinks.ts) */
+
+.backlink-pane-header {
+	display: flex;
+	justify-content: space-between;
+	margin: 10px 0 4px -8px;
+	color: var(--text-muted);
+	font-size: var(--font-ui-small);
+	font-weight: var(--font-semibold);
+}
+
+.backlink-pane-unlinked .backlink-pane-header::before {
+	content: '▾';
+	margin-right: 6px;
+	color: var(--text-faint);
+}
+
+.backlink-pane-unlinked .backlink-pane-header.is-collapsed::before {
+	content: '▸';
+}
+
+.backlink-pane-title {
+	flex: 1;
+}
+
+.backlink-count {
+	color: var(--text-faint);
+	font-weight: var(--font-normal);
+}
+
+.search-empty-state {
+	padding: 4px 0;
+	color: var(--text-faint);
+	font-size: var(--font-ui-small);
+}
+
+.search-result-file-match {
+	position: relative;
+}
+
+.search-result-hover-button {
+	position: absolute;
+	top: 4px;
+	right: 4px;
+	display: none;
+	padding: 2px 8px;
+	font-size: var(--font-ui-smaller);
+}
+
+.search-result-file-match:hover .search-result-hover-button {
+	display: block;
+}
+
 /* Status bar and notices */
 
 .status-bar {
