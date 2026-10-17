@@ -165,6 +165,23 @@ export class Vault extends Events {
 		return file;
 	}
 
+	async readBinary(file: TFile): Promise<ArrayBuffer> {
+		return this.backend.readBinary(file.path);
+	}
+
+	async modifyBinary(file: TFile, data: ArrayBuffer): Promise<void> {
+		this.applyUpdate(await this.backend.writeBinary(file.path, data));
+	}
+
+	async createBinary(path: string, data: ArrayBuffer): Promise<TFile> {
+		path = normalizePath(path);
+		if (this.fileMap.has(path)) throw new Error(`File already exists: ${path}`);
+		this.applyUpdate(await this.backend.writeBinary(path, data));
+		const file = this.getFileByPath(path);
+		if (!file) throw new Error(`File was not created: ${path}`);
+		return file;
+	}
+
 	async createFolder(path: string): Promise<TFolder> {
 		path = normalizePath(path);
 		if (this.fileMap.has(path)) throw new Error(`Folder already exists: ${path}`);

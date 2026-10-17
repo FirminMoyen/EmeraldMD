@@ -1538,3 +1538,138 @@ a.tag {
 	background: var(--text-selection);
 	font-size: 0.9em;
 }
+
+/* Callouts: `--callout-color` is an "r, g, b" triplet, as themes expect */
+
+.callout {
+	--callout-color: 8, 109, 221;
+	margin: 0 0 1em;
+	padding: 12px 14px;
+	border-radius: var(--radius-m);
+	border-left: 3px solid rgb(var(--callout-color));
+	background: rgba(var(--callout-color), 0.08);
+}
+
+.callout[data-callout='abstract'],
+.callout[data-callout='summary'],
+.callout[data-callout='tldr'],
+.callout[data-callout='tip'],
+.callout[data-callout='hint'],
+.callout[data-callout='important'] { --callout-color: 0, 191, 188; }
+.callout[data-callout='success'],
+.callout[data-callout='check'],
+.callout[data-callout='done'] { --callout-color: 8, 185, 78; }
+.callout[data-callout='question'],
+.callout[data-callout='help'],
+.callout[data-callout='faq'],
+.callout[data-callout='warning'],
+.callout[data-callout='caution'],
+.callout[data-callout='attention'] { --callout-color: 236, 117, 0; }
+.callout[data-callout='failure'],
+.callout[data-callout='fail'],
+.callout[data-callout='missing'],
+.callout[data-callout='danger'],
+.callout[data-callout='error'],
+.callout[data-callout='bug'] { --callout-color: 233, 49, 71; }
+.callout[data-callout='example'] { --callout-color: 120, 82, 238; }
+.callout[data-callout='quote'],
+.callout[data-callout='cite'] { --callout-color: 158, 158, 158; }
+
+.callout-title {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	color: rgb(var(--callout-color));
+	font-weight: 600;
+}
+
+.callout.is-collapsible .callout-title {
+	cursor: pointer;
+}
+
+.callout-icon,
+.callout-fold {
+	display: flex;
+}
+
+.callout-icon svg,
+.callout-fold svg {
+	width: 16px;
+	height: 16px;
+}
+
+.callout-fold {
+	margin-left: auto;
+	transition: transform 0.1s;
+}
+
+.callout.is-collapsed .callout-fold {
+	transform: rotate(-90deg);
+}
+
+.callout.is-collapsed .callout-content {
+	display: none;
+}
+
+.callout-content {
+	margin-top: 6px;
+}
+
+.callout-content > :last-child {
+	margin-bottom: 0;
+}
+
+/* Highlights and embeds */
+
+.markdown-rendered mark {
+	padding: 0 2px;
+	border-radius: 2px;
+	background: var(--text-highlight-bg, rgba(255, 208, 0, 0.4));
+	color: inherit;
+}
+
+.markdown-rendered .image-embed img {
+	max-width: 100%;
+	border-radius: var(--radius-s);
+}
+
+.markdown-rendered .markdown-embed {
+	position: relative;
+	display: block;
+	margin: 0 0 1em;
+	padding: 4px 0 4px 16px;
+	border-left: 2px solid var(--interactive-accent);
+}
+
+.markdown-embed-link {
+	position: absolute;
+	top: 4px;
+	right: 4px;
+	display: flex;
+	color: var(--text-faint);
+	cursor: pointer;
+}
+
+.markdown-embed-link svg {
+	width: 16px;
+	height: 16px;
+}
+
+.markdown-rendered .file-embed {
+	display: inline-block;
+	padding: 6px 10px;
+	border: 1px solid var(--background-modifier-border);
+	border-radius: var(--radius-m);
+	cursor: pointer;
+}
+
+.markdown-rendered .internal-embed.is-unresolved {
+	color: var(--text-faint);
+}
+
+/* Links and tags keep their colour inside quotes and other styled spans */
+
+.cm-quote .cm-hmd-internal-link,
+.cm-hmd-internal-link .cm-quote {
+	color: var(--text-accent);
+}

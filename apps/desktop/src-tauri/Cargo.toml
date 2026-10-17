@@ -20,8 +20,9 @@ emerald-core.workspace = true
 # Server tokens: macOS Keychain, Windows Credential Manager, Secret Service on Linux.
 keyring = "4.2"
 notify.workspace = true
+percent-encoding = "2.3"
 reqwest = { version = "0.13", features = ["gzip", "deflate", "brotli"] }
 serde.workspace = true
 serde_json.workspace = true
-tauri = { version = "2.12", features = [] }
+tauri = { version = "2.12", features = ["protocol-asset"] }
 tauri-plugin-dialog = "2.8"

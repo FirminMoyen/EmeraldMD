@@ -24,7 +24,7 @@ import { MemoryConfigStore } from '@emeraldmd/api/testing';
 import { MarkdownEditor } from '@emeraldmd/editor';
 import { CommunityPluginsTab, PluginHost } from '@emeraldmd/plugin-host';
 import type { Extension } from '@codemirror/state';
-import { invoke } from '@tauri-apps/api/core';
+import { convertFileSrc, invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { ask, open as openDialog } from '@tauri-apps/plugin-dialog';
@@ -103,6 +103,7 @@ class EmeraldApp {
 			parent: this.el.editor,
 			onChange: () => this.onEdit(),
 			onOpenLink: (link) => void this.openLink(link),
+			onFiles: (files, pos) => void this.insertAttachments(files, pos),
 		});
 		$('open-vault').addEventListener('click', () => void this.pickVault());
 		$('switch-vault').addEventListener('click', () => void this.pickVault());
@@ -217,6 +218,10 @@ class EmeraldApp {
 		// Remote vaults keep their settings in memory until the server serves `.obsidian`.
 		const vault = new Vault(backend, snapshot.name, snapshot.files, local ? new TauriConfigStore() : new MemoryConfigStore());
 		await vault.loadConfig();
+		if (local) {
+			// Attachments load through Tauri's asset protocol (allowed for the open vault only).
+			vault.adapter.resourcePath = (path) => convertFileSrc(`${snapshot.basePath}/${path}`);
+		}
 		const metadataCache = new MetadataCache(vault, snapshot);
 		const app = new App({
 			vault,
@@ -359,6 +364,33 @@ class EmeraldApp {
 	private toggleSplit(el: HTMLElement): void {
 		el.toggleClass('is-collapsed', !el.hasClass('is-collapsed'));
 		this.app?.workspace.trigger('resize');
+	}
+
+	/**
+	 * Saves pasted or dropped files as attachments (where the vault's settings
+	 * say) and inserts embeds for them, like Obsidian: "Pasted image <time>.png".
+	 */
+	private async insertAttachments(files: File[], pos: number): Promise<void> {
+		const app = this.app;
+		const note = this.activeFile;
+		if (!app || !note) return;
+		const embeds: string[] = [];
+		for (const file of files) {
+			const dot = file.name.lastIndexOf('.');
+			const extension = dot > 0 ? file.name.slice(dot + 1).toLowerCase() : (file.type.split('/')[1] ?? 'bin');
+			const generic = !file.name || /^image\.\w+$/i.test(file.name);
+			const stamp = new Date().toISOString().replace(/\D/g, '').slice(0, 14);
+			const base = generic ? `Pasted image ${stamp}` : file.name.slice(0, dot > 0 ? dot : undefined);
+			try {
+				const path = await app.fileManager.getAvailablePathForAttachment(`${base}.${extension}`, note.path);
+				const created = await app.vault.createBinary(path, await file.arrayBuffer());
+				embeds.push(`!${app.fileManager.generateMarkdownLink(created, note.path)}`);
+			} catch (err) {
+				this.notice(`Could not save ${file.name || 'the pasted file'}: ${err}`);
+			}
+		}
+		if (!embeds.length || this.activeFile !== note) return;
+		this.editor.view.dispatch({ changes: { from: pos, insert: embeds.join('\n') }, selection: { anchor: pos + embeds.join('\n').length } });
 	}
 
 	/** Switches the open note between editing and the reading view (saving first). */

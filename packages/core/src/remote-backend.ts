@@ -198,6 +198,14 @@ export class RemoteBackend implements VaultBackend {
 		return this.update('POST', '/trash', { json: { path } });
 	}
 
+	async readBinary(path: string): Promise<ArrayBuffer> {
+		return (await this.request('GET', '/raw', { query: { path } })).arrayBuffer();
+	}
+
+	writeBinary(path: string, data: ArrayBuffer): Promise<VaultUpdate> {
+		return this.update('PUT', '/raw', { query: { path }, bytes: data });
+	}
+
 	async search(query: string, options: SearchOptions = {}): Promise<SearchResults> {
 		const params: Record<string, string> = { q: query };
 		if (options.caseSensitive) params.caseSensitive = 'true';
@@ -214,13 +222,16 @@ export class RemoteBackend implements VaultBackend {
 		const url = new URL(`${this.serverUrl}/api/vaults/${encodeURIComponent(this.vaultId)}${path}`);
 		for (const [key, value] of Object.entries(body.query ?? {})) url.searchParams.set(key, value);
 		const headers: Record<string, string> = { Authorization: `Bearer ${this.token}`, [CLIENT_HEADER]: this.clientId };
-		let payload: string | undefined;
+		let payload: string | ArrayBuffer | undefined;
 		if (body.json !== undefined) {
 			headers['Content-Type'] = 'application/json';
 			payload = JSON.stringify(body.json);
 		} else if (body.text !== undefined) {
 			headers['Content-Type'] = 'text/plain; charset=utf-8';
 			payload = body.text;
+		} else if (body.bytes !== undefined) {
+			headers['Content-Type'] = 'application/octet-stream';
+			payload = body.bytes;
 		}
 		const response = await this.fetchImpl(url, { method, headers, body: payload });
 		if (!response.ok) throw await errorFrom(response);
@@ -330,4 +341,5 @@ interface RequestBody {
 	query?: Record<string, string>;
 	json?: unknown;
 	text?: string;
+	bytes?: ArrayBuffer;
 }

@@ -109,6 +109,8 @@ async fn open_vault(app: AppHandle, state: State<'_, AppState>, path: String) ->
     let session = VaultSession::open(&path).map_err(|e| e.to_string())?;
     let snapshot = session.snapshot();
     let watcher = watch(app.clone(), session.vault().root().to_path_buf()).map_err(|e| e.to_string())?;
+    // Lets the webview load the vault's attachments (images, PDFs) through the asset protocol.
+    app.asset_protocol_scope().allow_directory(session.vault().root(), true).map_err(|e| e.to_string())?;
     *state.vault.lock().map_err(|_| "vault state is poisoned".to_owned())? =
         Some(OpenVault { session, _watcher: watcher });
     let mut settings = load_settings(&app);
@@ -120,6 +122,24 @@ async fn open_vault(app: AppHandle, state: State<'_, AppState>, path: String) ->
 #[tauri::command]
 async fn read_file(state: State<'_, AppState>, path: String) -> CmdResult<String> {
     with_session(&state, |s| s.read(&path))
+}
+
+/// Any file's bytes (attachments), returned as a raw buffer rather than JSON.
+#[tauri::command]
+async fn read_binary(state: State<'_, AppState>, path: String) -> CmdResult<tauri::ipc::Response> {
+    with_session(&state, |s| s.vault().read_bytes(&path)).map(tauri::ipc::Response::new)
+}
+
+/// Writes a file from the raw request body; the vault path is the
+/// percent-encoded `path` header.
+#[tauri::command]
+fn write_binary(state: State<'_, AppState>, request: tauri::ipc::Request<'_>) -> CmdResult<VaultUpdate> {
+    let tauri::ipc::InvokeBody::Raw(data) = request.body() else {
+        return Err("write_binary expects raw bytes".into());
+    };
+    let header = request.headers().get("path").and_then(|v| v.to_str().ok()).ok_or("missing path header")?;
+    let path = percent_encoding::percent_decode_str(header).decode_utf8().map_err(|e| e.to_string())?;
+    with_session(&state, |s| s.write_bytes(&path, data))
 }
 
 #[tauri::command]
@@ -214,6 +234,8 @@ pub fn run() {
             create_folder,
             rename_path,
             trash_path,
+            read_binary,
+            write_binary,
             config_read,
             config_write,
             config_list,

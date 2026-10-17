@@ -7,9 +7,10 @@
 
 import type { SyntaxNode } from '@lezer/common';
 import { GFM, parser as baseParser } from '@lezer/markdown';
-import type { TFile } from '@emeraldmd/core';
+import { parseLinktext, type TFile } from '@emeraldmd/core';
 import type { App } from './app';
 import { Component } from './component';
+import { setIcon } from './icons';
 import { getFrontMatterInfo, parseYaml, sanitizeHTMLToDom } from './util';
 
 const parser = baseParser.configure(GFM);
@@ -77,9 +78,9 @@ export class MarkdownPreviewRenderer {
 	}
 }
 
-const INLINE_LINK = /(!?)\[\[([^[\]\n]+?)\]\]|(^|[\s(])(#[\p{L}\p{N}_/-]*[\p{L}_/-][\p{L}\p{N}_/-]*)/gu;
+const INLINE_LINK = /(!?)\[\[([^[\]\n]+?)\]\]|(^|[\s(])(#[\p{L}\p{N}_/-]*[\p{L}_/-][\p{L}\p{N}_/-]*)|==([^=\n]+?)==/gu;
 
-/** Appends `text`, turning `[[wikilinks]]`, `![[embeds]]` and `#tags` into elements. */
+/** Appends `text`, turning `[[wikilinks]]`, `![[embeds]]`, `#tags` and `==highlights==` into elements. */
 function appendText(el: HTMLElement, text: string): void {
 	let pos = 0;
 	for (const match of text.matchAll(INLINE_LINK)) {
@@ -102,9 +103,61 @@ function appendText(el: HTMLElement, text: string): void {
 			if (tagStart > pos) el.appendText(text.slice(pos, tagStart));
 			el.createEl('a', { cls: 'tag', text: match[4], attr: { href: match[4], target: '_blank', rel: 'noopener' } });
 			pos = tagStart + match[4].length;
+		} else if (match[5] !== undefined) {
+			if (index > pos) el.appendText(text.slice(pos, index));
+			el.createEl('mark', { text: match[5] });
+			pos = index + match[0].length;
 		}
 	}
 	if (pos < text.length) el.appendText(text.slice(pos));
+}
+
+const CALLOUT_ICONS: Record<string, string> = {
+	note: 'pencil',
+	abstract: 'clipboard-list',
+	summary: 'clipboard-list',
+	tldr: 'clipboard-list',
+	info: 'info',
+	todo: 'circle-check',
+	tip: 'flame',
+	hint: 'flame',
+	important: 'flame',
+	success: 'check',
+	check: 'check',
+	done: 'check',
+	question: 'circle-help',
+	help: 'circle-help',
+	faq: 'circle-help',
+	warning: 'triangle-alert',
+	caution: 'triangle-alert',
+	attention: 'triangle-alert',
+	failure: 'x',
+	fail: 'x',
+	missing: 'x',
+	danger: 'zap',
+	error: 'zap',
+	bug: 'bug',
+	example: 'list',
+	quote: 'quote',
+	cite: 'quote',
+};
+
+/** Drops the callout's `[!type] title` line from the start of its content. */
+function removeFirstLine(content: HTMLElement): void {
+	const first = content.firstElementChild;
+	if (!first || first.tagName !== 'P') return;
+	for (const child of [...first.childNodes]) {
+		if (child.nodeType === Node.TEXT_NODE) {
+			const text = child.textContent ?? '';
+			const newline = text.indexOf('\n');
+			if (newline !== -1) {
+				child.textContent = text.slice(newline + 1).replace(/^\s+/, '');
+				break;
+			}
+		}
+		child.remove();
+	}
+	if (!first.textContent?.trim() && !first.querySelector('img, input, .internal-embed')) first.remove();
 }
 
 /** Removes whitespace at the start and end of `el`'s text (around heading marks, task markers). */
@@ -134,6 +187,32 @@ const MARKS = new Set([
 class Renderer {
 	constructor(private readonly src: string) {}
 
+	/** `> [!type]± Title` blockquotes become `.callout` blocks. */
+	callout(node: SyntaxNode, parent: HTMLElement): HTMLElement | null {
+		const lineEnd = this.src.indexOf('\n', node.from);
+		const firstLine = this.src.slice(node.from, lineEnd === -1 || lineEnd > node.to ? node.to : lineEnd);
+		const match = /^\s*>\s*\[!([^\]\s]+)\]([+-]?)[ \t]*(.*)$/.exec(firstLine);
+		if (!match) return null;
+		const type = match[1]!.toLowerCase();
+		const fold = match[2] ?? '';
+		const title = match[3]!.trim() || type.charAt(0).toUpperCase() + type.slice(1);
+		const callout = parent.createDiv({
+			cls: ['callout', ...(fold ? ['is-collapsible'] : []), ...(fold === '-' ? ['is-collapsed'] : [])],
+			attr: { 'data-callout': type, 'data-callout-fold': fold },
+		});
+		const titleEl = callout.createDiv('callout-title');
+		setIcon(titleEl.createDiv('callout-icon'), CALLOUT_ICONS[type] ?? 'pencil');
+		appendText(titleEl.createDiv('callout-title-inner'), title);
+		if (fold) {
+			setIcon(titleEl.createDiv('callout-fold'), 'chevron-down');
+			titleEl.addEventListener('click', () => callout.toggleClass('is-collapsed', !callout.hasClass('is-collapsed')));
+		}
+		const content = callout.createDiv('callout-content');
+		this.children(node, content);
+		removeFirstLine(content);
+		return callout;
+	}
+
 	block(node: SyntaxNode, parent: HTMLElement): void {
 		const name = node.name;
 		const heading = /^(?:ATX|Setext)Heading(\d)$/.exec(name);
@@ -147,9 +226,11 @@ class Renderer {
 			case 'Paragraph':
 				this.inline(node, parent.createEl('p'));
 				return;
-			case 'Blockquote':
-				this.children(node, parent.createEl('blockquote'));
+			case 'Blockquote': {
+				const callout = this.callout(node, parent);
+				if (!callout) this.children(node, parent.createEl('blockquote'));
 				return;
+			}
 			case 'BulletList':
 			case 'OrderedList': {
 				const list = parent.createEl(name === 'BulletList' ? 'ul' : 'ol');
@@ -376,8 +457,116 @@ export abstract class MarkdownRenderer extends MarkdownRenderChild {
 				console.error(err);
 			}
 		}
-		if (app) linkInternalLinks(app, wrapper, sourcePath);
+		if (app) {
+			linkInternalLinks(app, wrapper, sourcePath);
+			// After the post-processors, so embedded notes are processed once, by their own render.
+			await renderEmbeds(app, wrapper, sourcePath, component);
+		}
 		el.append(...wrapper.childNodes);
+	}
+}
+
+const IMAGE_EXTENSIONS = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp', 'avif']);
+/** Embedded notes may embed notes, up to this depth (guards against cycles). */
+const MAX_EMBED_DEPTH = 3;
+let embedDepth = 0;
+
+/** A URL for an attachment: the vault's resource path, or a blob URL for remote vaults. */
+async function attachmentUrl(app: App, file: TFile, component: Component): Promise<string> {
+	const url = app.vault.getResourcePath(file);
+	if (/^[a-z][a-z0-9+.-]*:/i.test(url)) return url;
+	const blobUrl = URL.createObjectURL(new Blob([await app.vault.readBinary(file)]));
+	component.register(() => URL.revokeObjectURL(blobUrl));
+	return blobUrl;
+}
+
+/** The part of a note a `#Heading` or `#^block` subpath points at, or all of it. */
+function sectionText(app: App, file: TFile, text: string, subpath: string): string {
+	const cache = app.metadataCache.getFileCache(file);
+	if (subpath.startsWith('#^')) {
+		const block = cache?.blocks?.[subpath.slice(2).toLowerCase()];
+		return block ? text.slice(block.position.start.offset, block.position.end.offset) : text;
+	}
+	const name = subpath.slice(1).trim().toLowerCase();
+	const headings = cache?.headings?.length
+		? cache.headings.map((h) => ({ heading: h.heading, level: h.level, offset: h.position.start.offset }))
+		: scanHeadings(text);
+	const i = headings.findIndex((h) => h.heading.toLowerCase() === name);
+	if (i === -1) return text;
+	const start = headings[i]!;
+	const end = headings.slice(i + 1).find((h) => h.level <= start.level);
+	return text.slice(start.offset, end ? end.offset : text.length);
+}
+
+/** ATX headings outside code fences, for notes the index has not seen yet. */
+function scanHeadings(text: string): { heading: string; level: number; offset: number }[] {
+	const out: { heading: string; level: number; offset: number }[] = [];
+	let offset = 0;
+	let fence = false;
+	for (const line of text.split('\n')) {
+		if (/^\s{0,3}(```|~~~)/.test(line)) fence = !fence;
+		const match = fence ? null : /^(#{1,6})[ \t]+(.+?)[ \t#]*$/.exec(line);
+		if (match) out.push({ heading: match[2]!, level: match[1]!.length, offset });
+		offset += line.length + 1;
+	}
+	return out;
+}
+
+/** Turns `![[…]]` placeholders into images, embedded notes and file cards. */
+async function renderEmbeds(app: App, el: HTMLElement, sourcePath: string, component: Component): Promise<void> {
+	for (const span of [...el.querySelectorAll<HTMLElement>('span.internal-embed:not(.is-loaded)')]) {
+		const src = span.getAttribute('src') ?? '';
+		const alt = span.getAttribute('alt') ?? '';
+		const { path, subpath } = parseLinktext(src);
+		const file = path ? app.metadataCache.getFirstLinkpathDest(path, sourcePath) : app.vault.getFileByPath(sourcePath);
+		if (!file) {
+			span.addClass('is-unresolved');
+			continue;
+		}
+		span.addClass('is-loaded');
+		span.empty();
+		const open = (evt: MouseEvent) => {
+			evt.preventDefault();
+			void app.workspace.openLinkText(src, sourcePath);
+		};
+		try {
+			if (IMAGE_EXTENSIONS.has(file.extension.toLowerCase())) {
+				span.addClass('image-embed', 'media-embed');
+				const img = span.createEl('img', { attr: { alt: alt && alt !== src ? alt : file.name } });
+				const size = /^(\d+)(?:x(\d+))?$/.exec(alt.trim());
+				if (size) {
+					img.setAttr('width', size[1]!);
+					if (size[2]) img.setAttr('height', size[2]);
+				}
+				img.src = await attachmentUrl(app, file, component);
+			} else if (file.extension === 'md') {
+				span.addClass('markdown-embed', 'inline-embed');
+				const link = span.createDiv({ cls: 'markdown-embed-link', attr: { 'aria-label': 'Open link' } });
+				setIcon(link, 'link');
+				link.addEventListener('click', open);
+				const content = span.createDiv('markdown-embed-content');
+				if (embedDepth >= MAX_EMBED_DEPTH) {
+					content.setText(file.basename);
+					continue;
+				}
+				const text = await app.vault.cachedRead(file);
+				embedDepth++;
+				try {
+					await MarkdownRenderer.render(app, subpath ? sectionText(app, file, text, subpath) : text, content, file.path, component);
+				} finally {
+					embedDepth--;
+				}
+			} else {
+				span.addClass('file-embed');
+				const title = span.createDiv('file-embed-title');
+				setIcon(title.createSpan('file-embed-icon'), file.extension === 'pdf' ? 'file-text' : 'file');
+				title.appendText(` ${file.name}`);
+				span.addEventListener('click', open);
+			}
+		} catch (err) {
+			console.error(err);
+			span.setText(alt || file.name);
+		}
 	}
 }
 

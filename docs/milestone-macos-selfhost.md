@@ -12,13 +12,14 @@ end-to-end tests; the rest is in priority order within each section.
       folder; rename; move to `.trash`
 - [x] Live reload of changes made outside the app
 - [x] YAML frontmatter shown as properties in the editor
-- [ ] Reading view (⌘E) rendering Markdown with plugin post-processors
-      (Dataview, Tasks, Admonition, …)
+- [x] Reading view (⌘E) rendering Markdown with plugin post-processors
+      (Dataview checked in the app)
 - [ ] Live Preview: Markdown syntax hidden away from the cursor, task
       checkboxes, rendered links and image embeds
-- [ ] Callouts, math, Mermaid, footnotes, highlights, embedded notes
-- [ ] Images and attachments: embeds, paste and drag-and-drop into notes,
-      attachment folder setting
+- [x] Callouts, highlights, embedded notes and sections
+- [ ] Math, Mermaid, footnotes
+- [x] Images and attachments: real binary files, image embeds, paste and
+      drag-and-drop into notes, attachment folder setting
 - [ ] File tree: drag-and-drop move, context menu (new note here, rename,
       delete, reveal in Finder, copy path), folder rename
 - [ ] Tabs and splits in the main area; back/forward history
