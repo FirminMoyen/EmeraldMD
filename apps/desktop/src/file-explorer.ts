@@ -40,17 +40,25 @@ function isInside(file: TAbstractFile, folder: TFolder): boolean {
 	return false;
 }
 
+/** Local storage key (per vault) for the folders the user opened. */
+const EXPANDED_KEY = 'emerald-expanded-folders';
+
 export class FileExplorer {
-	/** Collapsed folder paths. */
-	readonly collapsed = new Set<string>();
+	/** Folders shown open; the others start closed, so large vaults draw only their top level. */
+	readonly expanded: Set<string>;
 	private renaming: TAbstractFile | null = null;
 	private dragged: TAbstractFile | null = null;
+	/** The title element of each drawn file, to move the highlight without redrawing. */
+	private readonly titles = new Map<string, HTMLElement>();
+	private activeTitle: HTMLElement | null = null;
 
 	constructor(
 		private readonly app: App,
 		private readonly el: HTMLElement,
 		private readonly host: FileExplorerHost,
 	) {
+		const saved = app.loadLocalStorage(EXPANDED_KEY);
+		this.expanded = new Set(Array.isArray(saved) ? saved.filter((p): p is string => typeof p === 'string') : []);
 		el.addEventListener('contextmenu', (event) => {
 			if (event.target instanceof Element && event.target.closest('.tree-item-self')) return;
 			this.showMenu(event, this.app.vault.getRoot());
@@ -60,13 +68,43 @@ export class FileExplorer {
 
 	render(): void {
 		const scroll = this.el.scrollTop;
+		this.titles.clear();
+		this.activeTitle = null;
 		this.el.replaceChildren(this.renderChildren(this.app.vault.getRoot(), 0));
 		this.el.scrollTop = scroll;
 	}
 
+	/** Moves the highlight to the open note without redrawing the tree. */
+	setActive(file: TFile | null): void {
+		this.activeTitle?.removeClass('is-active');
+		this.activeTitle = file ? (this.titles.get(file.path) ?? null) : null;
+		this.activeTitle?.addClass('is-active');
+	}
+
+	/** Opens the folders above `file` and scrolls it into view. */
+	reveal(file: TAbstractFile): void {
+		for (let p = file.parent; p && !p.isRoot(); p = p.parent) this.expanded.add(p.path);
+		this.saveExpanded();
+		this.render();
+		this.titles.get(file.path)?.scrollIntoView({ block: 'center' });
+	}
+
+	private setExpanded(folder: TFolder, open: boolean): void {
+		if (open) this.expanded.add(folder.path);
+		else this.expanded.delete(folder.path);
+		this.saveExpanded();
+	}
+
+	private saveExpanded(): void {
+		// Only folders that still exist.
+		for (const path of this.expanded) if (!this.app.vault.getFolderByPath(path)) this.expanded.delete(path);
+		this.app.saveLocalStorage(EXPANDED_KEY, [...this.expanded]);
+	}
+
 	/** Starts renaming an item in place (after a "New folder", say). */
 	startRename(file: TAbstractFile): void {
-		for (let p = file.parent; p && !p.isRoot(); p = p.parent) this.collapsed.delete(p.path);
+		for (let p = file.parent; p && !p.isRoot(); p = p.parent) this.expanded.add(p.path);
+		this.saveExpanded();
 		this.renaming = file;
 		this.render();
 	}
@@ -83,7 +121,7 @@ export class FileExplorer {
 	}
 
 	private renderFolder(folder: TFolder, depth: number): HTMLElement {
-		const collapsed = this.collapsed.has(folder.path);
+		const collapsed = !this.expanded.has(folder.path);
 		const item = createDiv({ cls: ['tree-item', 'nav-folder', ...(collapsed ? ['is-collapsed'] : [])] });
 		const title = item.createDiv({ cls: 'tree-item-self nav-folder-title is-clickable mod-collapsible', attr: { 'data-path': folder.path, draggable: 'true' } });
 		title.style.paddingInlineStart = `${8 + depth * 16}px`;
@@ -92,8 +130,7 @@ export class FileExplorer {
 		const content = title.createDiv({ cls: 'tree-item-inner nav-folder-title-content', text: folder.name });
 		title.addEventListener('click', () => {
 			if (this.renaming === folder) return;
-			if (collapsed) this.collapsed.delete(folder.path);
-			else this.collapsed.add(folder.path);
+			this.setExpanded(folder, collapsed);
 			this.render();
 		});
 		this.common(title, content, folder);
@@ -110,6 +147,8 @@ export class FileExplorer {
 			attr: { 'data-path': file.path, draggable: 'true' },
 		});
 		title.style.paddingInlineStart = `${8 + depth * 16}px`;
+		this.titles.set(file.path, title);
+		if (active) this.activeTitle = title;
 		const content = title.createDiv({ cls: 'tree-item-inner nav-file-title-content', text: file.extension === 'md' ? file.basename : file.name });
 		if (file.extension !== 'md') title.createDiv({ cls: 'nav-file-tag', text: file.extension });
 		title.addEventListener('click', () => {
@@ -224,7 +263,7 @@ export class FileExplorer {
 		}
 		try {
 			await this.host.flush();
-			this.collapsed.delete(folder.path);
+			this.setExpanded(folder, true);
 			await this.app.fileManager.renameFile(file, path);
 		} catch (err) {
 			this.host.notice(`Could not move ${file.name}: ${err}`);

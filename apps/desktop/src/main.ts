@@ -460,6 +460,15 @@ class EmeraldApp {
 		add({ id: 'file-explorer:new-file', name: 'Create new note', hotkeys: [{ modifiers: ['Mod'], key: 'N' }], callback: () => this.newNote() });
 		add({ id: 'file-explorer:new-folder', name: 'Create new folder', callback: () => this.newFolder() });
 		add({
+			id: 'file-explorer:reveal-active-file',
+			name: 'Files: Reveal current file in navigation',
+			checkCallback: (checking) => {
+				if (!this.activeFile) return false;
+				if (!checking) this.explorer?.reveal(this.activeFile);
+				return true;
+			},
+		});
+		add({
 			id: 'editor:save-file',
 			name: 'Save current file',
 			hotkeys: [{ modifiers: ['Mod'], key: 'S' }],
@@ -673,7 +682,7 @@ class EmeraldApp {
 		this.el.editor.hidden = false;
 		this.el.noFile.hidden = true;
 		this.renderHeader();
-		this.renderTree();
+		this.explorer?.setActive(file);
 		this.renderSidePanels();
 		this.editor.focus();
 		ws.recordOpenFile(file);
@@ -692,7 +701,7 @@ class EmeraldApp {
 		this.el.editor.hidden = true;
 		this.el.noFile.hidden = false;
 		this.renderHeader();
-		this.renderTree();
+		this.explorer?.setActive(null);
 		this.renderSidePanels();
 		this.app?.workspace.trigger('file-open', null);
 	}
