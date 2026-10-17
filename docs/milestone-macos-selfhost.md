@@ -70,7 +70,7 @@ end-to-end tests; the rest is in priority order within each section.
 - [x] Search on remote vaults (server endpoint)
 - [x] Synced mode in the app: choose a local folder, sync on open, after
       edits and every minute; status and conflict notices
-- [ ] Synced mode: sync immediately on server events (event stream)
+- [x] Synced mode: sync immediately on server events (event stream)
 - [ ] `.obsidian` settings and plugins for remote and synced vaults
 - [x] Server operations: health endpoint, token management CLI (list,
       revoke), Docker Compose example

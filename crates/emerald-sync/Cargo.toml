@@ -8,7 +8,7 @@ repository.workspace = true
 
 [features]
 # HttpRemote: sync against an emeraldmd-server over HTTP(S).
-http = ["dep:reqwest"]
+http = ["dep:reqwest", "dep:tungstenite"]
 
 [dependencies]
 diffy = "0.5"
@@ -17,6 +17,8 @@ reqwest = { version = "0.13", optional = true, features = ["blocking", "json", "
 serde.workspace = true
 serde_json.workspace = true
 sha2 = "0.11"
+# The server's event stream (WebSocket), with the system's root certificates.
+tungstenite = { version = "0.29", optional = true, features = ["rustls-tls-native-roots"] }
 thiserror.workspace = true
 
 [dev-dependencies]

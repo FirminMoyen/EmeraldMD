@@ -1,13 +1,16 @@
 //! Synced vaults: a local folder kept in step with a vault on an
 //! emeraldmd-server (docs/sync.md). The folder is an ordinary local vault;
 //! while it is open, a background thread runs `emerald_sync::sync_once` when
-//! the vault opens, shortly after local changes, and every minute to pick up
-//! other devices' changes. Progress reaches the webview as `sync-status`
+//! the vault opens, shortly after local changes, as soon as the server's
+//! event stream reports a change from another device, and every minute in
+//! case the stream is down. Progress reaches the webview as `sync-status`
 //! events, and changes made by a pass as `vault-changed`.
 
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, RecvTimeoutError, Sender};
+use std::sync::Arc;
 use std::thread;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
@@ -87,12 +90,22 @@ fn now_ms() -> u64 {
 /// The background sync of the open synced vault. Dropping it stops the thread.
 pub struct Syncer {
     trigger: Sender<()>,
+    /// Stops the event-stream thread when the vault closes.
+    stop: Arc<AtomicBool>,
+}
+
+impl Drop for Syncer {
+    fn drop(&mut self) {
+        self.stop.store(true, Ordering::SeqCst);
+    }
 }
 
 impl Syncer {
     pub fn start(app: AppHandle, config: SyncedVault, root: PathBuf) -> Self {
         let (trigger, requests) = mpsc::channel::<()>();
         let device = device_name();
+        let stop = Arc::new(AtomicBool::new(false));
+        Self::watch_server(&config, &device, trigger.clone(), stop.clone());
         thread::spawn(move || {
             loop {
                 // A nudge (opening, edits, "Sync now") or the poll interval starts a pass.
@@ -115,7 +128,28 @@ impl Syncer {
                 let _ = app.emit("sync-status", &status);
             }
         });
-        Self { trigger }
+        Self { trigger, stop }
+    }
+
+    /// Syncs as soon as the server vault changes, through its event stream.
+    /// Without a connection, edits and the poll interval still start passes.
+    fn watch_server(config: &SyncedVault, device: &str, trigger: Sender<()>, stop: Arc<AtomicBool>) {
+        let config = config.clone();
+        let client_id = format!("sync-{device}");
+        thread::spawn(move || {
+            let connect = || {
+                let token = token(&config).map_err(|e| emerald_sync::SyncError::Remote(format!("keychain: {e}")))?;
+                HttpRemote::new(&config.server_url, &config.vault_id, &token, &client_id)
+            };
+            emerald_sync::watch_changes(
+                connect,
+                &stop,
+                || {
+                    let _ = trigger.send(());
+                },
+                |err| eprintln!("sync event stream for {}: {err}", config.server_url),
+            );
+        });
     }
 
     /// Asks for a sync pass soon (after local edits, or "Sync now").
@@ -124,16 +158,20 @@ impl Syncer {
     }
 }
 
-fn run_pass(app: &AppHandle, config: &SyncedVault, root: &Path, device: &str) -> SyncStatus {
-    let _ = app.emit("sync-status", &SyncStatus::Syncing);
+/// The server token from the Keychain.
+fn token(config: &SyncedVault) -> Result<String, keyring::Error> {
     // Debug builds only: lets developers sync against a local test server
     // without touching the Keychain. Release builds always use the Keychain.
     #[cfg(debug_assertions)]
-    let dev_token = std::env::var("EMERALDMD_DEV_SYNC_TOKEN").ok();
-    #[cfg(not(debug_assertions))]
-    let dev_token: Option<String> = None;
-    let keychain = || keyring::Entry::new(KEYCHAIN_SERVICE, &config.server_url).and_then(|e| e.get_password());
-    let token = match dev_token.map(Ok).unwrap_or_else(keychain) {
+    if let Ok(token) = std::env::var("EMERALDMD_DEV_SYNC_TOKEN") {
+        return Ok(token);
+    }
+    keyring::Entry::new(KEYCHAIN_SERVICE, &config.server_url)?.get_password()
+}
+
+fn run_pass(app: &AppHandle, config: &SyncedVault, root: &Path, device: &str) -> SyncStatus {
+    let _ = app.emit("sync-status", &SyncStatus::Syncing);
+    let token = match token(config) {
         Ok(token) => token,
         Err(keyring::Error::NoEntry) => return SyncStatus::Unauthorized,
         Err(err) => return SyncStatus::Error { message: format!("keychain: {err}") },

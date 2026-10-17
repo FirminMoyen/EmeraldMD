@@ -92,3 +92,61 @@ async fn devices_sync_through_the_server() {
     .unwrap();
     let _ = stop.send(());
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn the_event_stream_announces_other_devices_changes() {
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicBool, Ordering};
+    use std::sync::mpsc;
+    use std::time::Duration;
+
+    let server_dir = tempfile::tempdir().unwrap();
+    let config = Config {
+        vaults: vec![VaultConfig { id: "notes".into(), path: server_dir.path().to_owned(), name: None }],
+        tokens: vec![TokenConfig { name: "test".into(), hash: quick_hash(TOKEN), vaults: None }],
+        ..Config::default()
+    };
+    let server = Server::new(&config).unwrap();
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let base = format!("http://{}", listener.local_addr().unwrap());
+    let (stop_server, stopped) = tokio::sync::oneshot::channel::<()>();
+    tokio::spawn(server.serve(listener, async {
+        let _ = stopped.await;
+    }));
+
+    tokio::task::spawn_blocking(move || {
+        let (changed, notices) = mpsc::channel::<()>();
+        let stop = Arc::new(AtomicBool::new(false));
+        let watcher = {
+            let (base, stop) = (base.clone(), stop.clone());
+            std::thread::spawn(move || {
+                emerald_sync::watch_changes(
+                    || HttpRemote::new(&base, "notes", TOKEN, "Laptop"),
+                    &stop,
+                    || changed.send(()).unwrap(),
+                    |err| panic!("event stream failed: {err}"),
+                );
+            })
+        };
+        // Once on connecting, for anything missed while offline.
+        notices.recv_timeout(Duration::from_secs(5)).expect("a notice on connecting");
+
+        let phone = tempfile::tempdir().unwrap();
+        write(phone.path(), "From the phone.md", b"hello\n");
+        sync(&base, phone.path(), "Phone");
+        notices.recv_timeout(Duration::from_secs(5)).expect("a notice for the phone's change");
+        while notices.recv_timeout(Duration::from_millis(300)).is_ok() {}
+
+        // The laptop's own changes are not echoed back.
+        let laptop = tempfile::tempdir().unwrap();
+        write(laptop.path(), "From the laptop.md", b"hi\n");
+        sync(&base, laptop.path(), "Laptop");
+        assert!(notices.recv_timeout(Duration::from_secs(1)).is_err(), "own change announced");
+
+        stop.store(true, Ordering::SeqCst);
+        watcher.join().unwrap();
+    })
+    .await
+    .unwrap();
+    let _ = stop_server.send(());
+}
