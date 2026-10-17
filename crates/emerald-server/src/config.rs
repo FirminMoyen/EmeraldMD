@@ -9,8 +9,11 @@ use std::path::{Path, PathBuf};
 use argon2::password_hash::phc::PasswordHash;
 use serde::Deserialize;
 
+use crate::net::IpNet;
+
 pub const DEFAULT_BIND: &str = "127.0.0.1:8484";
 pub const DEFAULT_MAX_BODY_MB: usize = 64;
+pub const DEFAULT_MAX_STREAMS_PER_TOKEN: usize = 16;
 
 /// Origins of the EmeraldMD app's webview: `tauri://localhost` on macOS, iOS
 /// and Linux, `http(s)://tauri.localhost` on Windows and Android.
@@ -26,7 +29,7 @@ pub enum ConfigError {
     Invalid(String),
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct VaultConfig {
     /// Used in URLs: letters, digits, `-` and `_`.
@@ -58,6 +61,13 @@ pub struct Config {
     /// Largest accepted request body (a note's content), in MiB.
     #[serde(default = "default_max_body_mb")]
     pub max_body_mb: usize,
+    /// Reverse proxies (IP addresses or CIDR ranges) whose `X-Forwarded-For`
+    /// header names the client. Empty: the header is ignored.
+    #[serde(default)]
+    pub trusted_proxies: Vec<String>,
+    /// Event streams (WebSockets) one token may hold open at once.
+    #[serde(default = "default_max_streams_per_token")]
+    pub max_streams_per_token: usize,
     #[serde(default)]
     pub vaults: Vec<VaultConfig>,
     #[serde(default)]
@@ -72,12 +82,18 @@ fn default_max_body_mb() -> usize {
     DEFAULT_MAX_BODY_MB
 }
 
+fn default_max_streams_per_token() -> usize {
+    DEFAULT_MAX_STREAMS_PER_TOKEN
+}
+
 impl Default for Config {
     fn default() -> Self {
         Self {
             bind: default_bind(),
             allowed_origins: Vec::new(),
             max_body_mb: DEFAULT_MAX_BODY_MB,
+            trusted_proxies: Vec::new(),
+            max_streams_per_token: DEFAULT_MAX_STREAMS_PER_TOKEN,
             vaults: Vec::new(),
             tokens: Vec::new(),
         }
@@ -91,6 +107,13 @@ impl Config {
 
     /// Reads `file` (if given), applies the environment, and validates.
     pub fn load(file: Option<&Path>, env: impl Fn(&str) -> Option<String>) -> Result<Self, ConfigError> {
+        let config = Self::read(file, env)?;
+        config.validate()?;
+        Ok(config)
+    }
+
+    /// Reads `file` (if given) and applies the environment, without validating.
+    pub fn read(file: Option<&Path>, env: impl Fn(&str) -> Option<String>) -> Result<Self, ConfigError> {
         let mut config = match file {
             Some(path) => {
                 let text = std::fs::read_to_string(path).map_err(|source| ConfigError::Read { path: path.to_owned(), source })?;
@@ -99,13 +122,13 @@ impl Config {
             None => Self::default(),
         };
         config.apply_env(env)?;
-        config.validate()?;
         Ok(config)
     }
 
     /// `EMERALDMD_BIND`, `EMERALDMD_VAULTS` (`id=path` pairs separated by `;`),
     /// `EMERALDMD_TOKEN_HASHES` (whitespace-separated hashes, each allowed every
-    /// vault) and `EMERALDMD_ALLOWED_ORIGINS` (comma-separated).
+    /// vault), `EMERALDMD_ALLOWED_ORIGINS` and `EMERALDMD_TRUSTED_PROXIES`
+    /// (both comma-separated).
     pub fn apply_env(&mut self, env: impl Fn(&str) -> Option<String>) -> Result<(), ConfigError> {
         if let Some(bind) = env("EMERALDMD_BIND").filter(|s| !s.trim().is_empty()) {
             self.bind = bind.trim().parse().map_err(|_| ConfigError::Invalid(format!("EMERALDMD_BIND is not an address: {bind}")))?;
@@ -123,23 +146,36 @@ impl Config {
                 self.tokens.push(TokenConfig { name: format!("env-{}", i + 1), hash: hash.to_owned(), vaults: None });
             }
         }
+        let list = |value: String| value.split(',').map(str::trim).filter(|s| !s.is_empty()).map(str::to_owned).collect::<Vec<_>>();
         if let Some(origins) = env("EMERALDMD_ALLOWED_ORIGINS") {
-            self.allowed_origins.extend(origins.split(',').map(str::trim).filter(|s| !s.is_empty()).map(str::to_owned));
+            self.allowed_origins.extend(list(origins));
+        }
+        if let Some(proxies) = env("EMERALDMD_TRUSTED_PROXIES") {
+            self.trusted_proxies.extend(list(proxies));
         }
         Ok(())
     }
 
+    /// Everything [`Config::validate_entries`] checks, and at least one token:
+    /// a server nobody can use is a setup mistake.
     pub fn validate(&self) -> Result<(), ConfigError> {
+        self.validate_entries()?;
+        if self.tokens.is_empty() {
+            return Err(ConfigError::Invalid(
+                "no tokens are configured; create one with `emeraldmd-server token add <name>`, or add a hash from \
+                 `emeraldmd-server token new` to [[tokens]] or EMERALDMD_TOKEN_HASHES"
+                    .into(),
+            ));
+        }
+        Ok(())
+    }
+
+    /// Checks every entry, but accepts a config without tokens: reloading one
+    /// after revoking the last token must lock everyone out, not keep the old tokens.
+    pub fn validate_entries(&self) -> Result<(), ConfigError> {
         let invalid = |msg: String| Err(ConfigError::Invalid(msg));
         if self.vaults.is_empty() {
             return invalid("no vaults are configured; add a [[vaults]] entry or set EMERALDMD_VAULTS".into());
-        }
-        if self.tokens.is_empty() {
-            return invalid(
-                "no tokens are configured; create one with `emeraldmd-server token new` and add its hash to [[tokens]] \
-                 or EMERALDMD_TOKEN_HASHES"
-                    .into(),
-            );
         }
         let mut ids = HashSet::new();
         for vault in &self.vaults {
@@ -150,7 +186,14 @@ impl Config {
                 return invalid(format!("vault id {:?} is used twice", vault.id));
             }
         }
+        let mut names = HashSet::new();
         for token in &self.tokens {
+            if let Err(msg) = check_token_name(&token.name) {
+                return invalid(msg);
+            }
+            if !names.insert(token.name.as_str()) {
+                return invalid(format!("token name {:?} is used twice; names identify tokens for `token revoke`", token.name));
+            }
             if PasswordHash::new(&token.hash).is_err() {
                 return invalid(format!(
                     "token {:?}: hash is not an argon2 PHC string (it should start with $argon2id$); \
@@ -167,12 +210,31 @@ impl Config {
         if self.max_body_mb == 0 {
             return invalid("max_body_mb must be at least 1".into());
         }
+        if self.max_streams_per_token == 0 {
+            return invalid("max_streams_per_token must be at least 1".into());
+        }
+        for proxy in &self.trusted_proxies {
+            proxy.parse::<IpNet>().map_err(|e| ConfigError::Invalid(format!("trusted_proxies: {e}")))?;
+        }
         Ok(())
     }
 
     pub fn origins(&self) -> Vec<String> {
         APP_ORIGINS.iter().map(|s| (*s).to_owned()).chain(self.allowed_origins.iter().cloned()).collect()
     }
+
+    /// The parsed `trusted_proxies`; invalid entries were refused by validation.
+    pub fn trusted_proxies(&self) -> Vec<IpNet> {
+        self.trusted_proxies.iter().filter_map(|p| p.parse().ok()).collect()
+    }
+}
+
+/// Token names show up in logs and select tokens for `token revoke`.
+pub fn check_token_name(name: &str) -> Result<(), String> {
+    if name.trim().is_empty() || name.len() > 64 || name.chars().any(char::is_control) {
+        return Err(format!("token name {name:?} must be 1 to 64 characters, without control characters"));
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -249,7 +311,27 @@ mod tests {
         assert!(bad_id.validate().is_err());
         let duplicate = Config { vaults: vec![vault.clone(), vault.clone()], ..base.clone() };
         assert!(duplicate.validate().is_err());
-        let unknown = Config { tokens: vec![TokenConfig { vaults: Some(vec!["nope".into()]), ..token }], ..base };
+        let unknown = Config { tokens: vec![TokenConfig { vaults: Some(vec!["nope".into()]), ..token.clone() }], ..base.clone() };
         assert!(unknown.validate().is_err());
+        let same_name = Config { tokens: vec![token.clone(), token.clone()], ..base.clone() };
+        assert!(same_name.validate().unwrap_err().to_string().contains("used twice"));
+        let bad_name = Config { tokens: vec![TokenConfig { name: "a\nb".into(), ..token }], ..base.clone() };
+        assert!(bad_name.validate().is_err());
+        let bad_proxy = Config { trusted_proxies: vec!["proxy.local".into()], ..base.clone() };
+        assert!(bad_proxy.validate().unwrap_err().to_string().contains("trusted_proxies"));
+        // A reload may leave no tokens at all: that locks everyone out, as intended.
+        let revoked_all = Config { tokens: vec![], ..base };
+        assert!(revoked_all.validate().is_err());
+        revoked_all.validate_entries().unwrap();
+    }
+
+    #[test]
+    fn trusted_proxies_come_from_the_file_and_the_environment() {
+        let text = "trusted_proxies = [\"10.0.0.0/8\"]\n";
+        let mut config = Config::from_toml(text, Path::new("test.toml")).unwrap();
+        config.apply_env(|key| (key == "EMERALDMD_TRUSTED_PROXIES").then(|| "127.0.0.1, ::1".to_owned())).unwrap();
+        let proxies: Vec<String> = config.trusted_proxies().iter().map(ToString::to_string).collect();
+        assert_eq!(proxies, ["10.0.0.0/8", "127.0.0.1/32", "::1/128"]);
+        assert_eq!(config.max_streams_per_token, DEFAULT_MAX_STREAMS_PER_TOKEN);
     }
 }

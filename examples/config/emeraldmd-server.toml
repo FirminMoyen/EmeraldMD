@@ -1,0 +1,21 @@
+# EmeraldMD server, as run by ../docker-compose.yml. Paths are inside the
+# container: ../vaults is mounted at /vaults. Every setting is described in
+# docs/self-hosting.md.
+#
+# Tokens are not written by hand: `docker compose run --rm emeraldmd token add
+# <name>` appends them at the end of this file. After editing, reload with
+# `docker compose kill -s HUP emeraldmd`.
+
+bind = "0.0.0.0:8484"
+
+# Caddy's network in docker-compose.yml. Its X-Forwarded-For header then names
+# the real client, by which failed logins are limited.
+trusted_proxies = ["172.28.84.0/24"]
+
+# Largest note or attachment accepted, in MiB.
+max_body_mb = 64
+
+[[vaults]]
+id = "notes"
+path = "/vaults/notes"
+name = "Notes"

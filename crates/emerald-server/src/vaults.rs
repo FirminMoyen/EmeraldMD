@@ -3,8 +3,13 @@
 //!
 //! Every update gets the next `version`. The last [`HISTORY_LEN`] updates are
 //! kept, so a client that reconnects with the last version it saw gets what it
-//! missed. The `epoch` changes on every server start, which tells clients that
-//! their version numbers no longer apply and they must reload the snapshot.
+//! missed. The `epoch` changes every time the vault is opened (server start,
+//! or a reload that changed it), which tells clients that their version
+//! numbers no longer apply and they must reload the snapshot.
+//!
+//! Everything that leaves this module goes through the path policy in
+//! [`crate::paths`]: nothing behind a symbolic link that leads out of the
+//! vault folder is read, written or listed.
 
 use std::collections::VecDeque;
 use std::path::Path;
@@ -12,13 +17,14 @@ use std::sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard, Weak};
 
 use axum::extract::ws::Utf8Bytes;
 use emerald_core::vault::Result as VaultResult;
-use emerald_core::{SearchError, SearchOptions, SearchResults, VaultSession, VaultSnapshot, VaultUpdate};
+use emerald_core::{SearchError, SearchOptions, SearchResults, Vault, VaultSession, VaultSnapshot, VaultUpdate};
 use emerald_sync::{HashCache, Manifest};
 use notify::{RecursiveMode, Watcher};
 use serde::Serialize;
 use tokio::sync::broadcast;
 
 use crate::config::VaultConfig;
+use crate::paths::{self, Escapes};
 
 const HISTORY_LEN: usize = 1024;
 const CHANNEL_CAPACITY: usize = 256;
@@ -68,6 +74,8 @@ pub struct SharedVault {
     pub id: String,
     pub name: String,
     pub epoch: String,
+    /// What it was opened from; a reload reopens it if this changes.
+    pub(crate) config: VaultConfig,
     inner: RwLock<Inner>,
     events: broadcast::Sender<Arc<Event>>,
     watcher: std::sync::Mutex<Option<notify::RecommendedWatcher>>,
@@ -78,14 +86,15 @@ pub struct SharedVault {
 
 impl SharedVault {
     /// Opens and indexes the vault, and starts watching it for outside changes.
-    pub fn open(config: &VaultConfig, epoch: &str) -> Result<Arc<Self>, String> {
+    pub fn open(config: &VaultConfig) -> Result<Arc<Self>, String> {
         let session = VaultSession::open(&config.path).map_err(|e| format!("vault {:?} ({}): {e}", config.id, config.path.display()))?;
         let name = config.name.clone().unwrap_or_else(|| session.vault().name());
         let root = session.vault().root().to_path_buf();
         let vault = Arc::new(Self {
             id: config.id.clone(),
             name,
-            epoch: epoch.to_owned(),
+            epoch: crate::auth::random_hex(8),
+            config: config.clone(),
             inner: RwLock::new(Inner { session, version: 0, history: VecDeque::new() }),
             events: broadcast::channel(CHANNEL_CAPACITY).0,
             watcher: std::sync::Mutex::new(None),
@@ -94,6 +103,11 @@ impl SharedVault {
         let watcher = watch(Arc::downgrade(&vault), &root).map_err(|e| format!("cannot watch {}: {e}", root.display()))?;
         *vault.watcher.lock().map_err(|_| "watcher lock poisoned")? = Some(watcher);
         Ok(vault)
+    }
+
+    /// Stops watching the folder; called when a reload stops serving the vault.
+    pub fn close(&self) {
+        self.watcher.lock().unwrap_or_else(|e| e.into_inner()).take();
     }
 
     fn read_inner(&self) -> RwLockReadGuard<'_, Inner> {
@@ -111,37 +125,64 @@ impl SharedVault {
         snapshot.name = self.name.clone();
         // Where the vault lives on the server is none of the client's business.
         snapshot.base_path = String::new();
+        let escapes = Escapes::find(inner.session.vault(), snapshot.files.iter().map(|e| e.path.as_str()));
+        if !escapes.is_empty() {
+            snapshot.files.retain(|e| !escapes.hides(&e.path));
+            snapshot.metadata.retain(|path, _| !escapes.hides(path));
+            snapshot.links.retain(|path, _| !escapes.hides(path));
+            snapshot.links.values_mut().for_each(|sets| escapes.filter_links(sets));
+        }
         VersionedSnapshot { snapshot, epoch: self.epoch.clone(), version: inner.version }
     }
 
+    /// A file's text. Hidden files only from the config folder.
     pub fn read(&self, path: &str) -> VaultResult<String> {
-        self.read_inner().session.read(path)
+        let inner = self.read_inner();
+        paths::check_readable(inner.session.vault(), path)?;
+        inner.session.read(path)
     }
 
+    /// Any file's bytes. Hidden files only from the config folder.
     pub fn read_bytes(&self, path: &str) -> VaultResult<Vec<u8>> {
-        self.read_inner().session.vault().read_bytes(path)
+        let inner = self.read_inner();
+        paths::check_readable(inner.session.vault(), path)?;
+        inner.session.vault().read_bytes(path)
     }
 
     /// Full-text search; takes the write lock because the session caches note contents.
     pub fn search(&self, query: &str, options: &SearchOptions) -> Result<SearchResults, SearchError> {
-        self.write_inner().session.search(query, options)
+        let mut inner = self.write_inner();
+        // The limit is applied after leaving out files behind links, so `totalFiles` stays right.
+        let unlimited = SearchOptions { limit: None, ..options.clone() };
+        let mut results = inner.session.search(query, &unlimited)?;
+        let escapes = Escapes::find(inner.session.vault(), results.files.iter().map(|f| f.path.as_str()));
+        results.files.retain(|f| !escapes.hides(&f.path));
+        results.total_files = results.files.len();
+        results.files.truncate(options.limit.unwrap_or(usize::MAX));
+        Ok(results)
     }
 
     /// Every visible file with its content hash, for sync clients.
     pub fn manifest(&self) -> VaultResult<Manifest> {
         let inner = self.read_inner();
         let mut hashes = self.hashes.lock().unwrap_or_else(|e| e.into_inner());
-        hashes.scan(inner.session.vault())
+        let mut manifest = hashes.scan(inner.session.vault())?;
+        let escapes = Escapes::find(inner.session.vault(), manifest.keys().map(String::as_str));
+        manifest.retain(|path, _| !escapes.hides(path));
+        Ok(manifest)
     }
 
-    /// Runs a mutation and publishes its update to every other client.
+    /// Runs a mutation and publishes its update to every other client. `f`
+    /// runs under the vault's lock and should check its paths with
+    /// [`crate::paths`] before touching anything.
     pub fn mutate(
         &self,
         origin: Option<String>,
         f: impl FnOnce(&mut VaultSession) -> VaultResult<VaultUpdate>,
     ) -> VaultResult<VaultUpdate> {
         let mut inner = self.write_inner();
-        let update = f(&mut inner.session)?;
+        let mut update = f(&mut inner.session)?;
+        hide_escapes(inner.session.vault(), &mut update);
         self.publish(&mut inner, origin, &update);
         Ok(update)
     }
@@ -151,7 +192,10 @@ impl SharedVault {
         let mut inner = self.write_inner();
         let Some(path) = inner.session.vault().vault_path(full) else { return };
         match inner.session.sync_path(&path) {
-            Ok(update) => self.publish(&mut inner, None, &update),
+            Ok(mut update) => {
+                hide_escapes(inner.session.vault(), &mut update);
+                self.publish(&mut inner, None, &update);
+            }
             Err(err) => tracing::warn!(vault = %self.id, %path, "could not sync: {err}"),
         }
     }
@@ -192,6 +236,10 @@ impl SharedVault {
         };
         Subscription { backlog, live }
     }
+}
+
+fn hide_escapes(vault: &Vault, update: &mut VaultUpdate) {
+    Escapes::find(vault, paths::update_paths(update)).filter_update(update);
 }
 
 /// Watches the vault folder; changes made outside the server (another

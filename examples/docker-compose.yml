@@ -1,0 +1,66 @@
+# EmeraldMD server behind Caddy, which gets and renews HTTPS certificates by
+# itself. Step by step in docs/self-hosting.md, section "Docker Compose":
+#
+#   cp -r examples /srv/emeraldmd && cd /srv/emeraldmd
+#   cp .env.example .env            # then set EMERALDMD_DOMAIN in it
+#   mkdir -p vaults/notes
+#   docker compose run --rm emeraldmd token add laptop
+#   docker compose up -d
+#
+# Reload tokens and vaults after editing config/ (no restart needed):
+#   docker compose kill -s HUP emeraldmd
+
+name: emeraldmd
+
+services:
+  emeraldmd:
+    # Build it from the repository root with `docker build -t emeraldmd-server .`,
+    # or set EMERALDMD_IMAGE to a published image.
+    image: ${EMERALDMD_IMAGE:-emeraldmd-server}
+    # The owner of ./vaults and ./config on the host, so the server can write them.
+    user: "${EMERALDMD_UID:-1000}:${EMERALDMD_GID:-1000}"
+    environment:
+      EMERALDMD_CONFIG: /config/emeraldmd-server.toml
+      RUST_LOG: ${RUST_LOG:-info}
+    volumes:
+      # Mount the folder rather than the file: `token add` replaces the file,
+      # and only a folder mount shows the new one inside the container.
+      - ./config:/config
+      - ./vaults:/vaults
+    # No published ports: only Caddy, on the network below, can reach it.
+    networks:
+      - emeraldmd
+    # Health: the image's HEALTHCHECK (`emeraldmd-server healthcheck`).
+    restart: unless-stopped
+
+  caddy:
+    image: caddy:2
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      EMERALDMD_DOMAIN: ${EMERALDMD_DOMAIN:?set EMERALDMD_DOMAIN (in .env) to the server's domain name}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    networks:
+      - emeraldmd
+    depends_on:
+      emeraldmd:
+        condition: service_healthy
+    restart: unless-stopped
+
+networks:
+  emeraldmd:
+    ipam:
+      config:
+        # Fixed, so that config/emeraldmd-server.toml can trust Caddy's
+        # X-Forwarded-For header (trusted_proxies). If it clashes with a
+        # network you already have, change it in both places.
+        - subnet: 172.28.84.0/24
+
+volumes:
+  caddy-data:
+  caddy-config:

@@ -13,6 +13,7 @@ path = "src/main.rs"
 [dependencies]
 argon2 = "0.6"
 axum = { version = "0.8.9", features = ["ws"] }
+dunce.workspace = true
 emerald-core.workspace = true
 emerald-sync.workspace = true
 getrandom = "0.4"
@@ -20,10 +21,12 @@ notify.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 sha2 = "0.11"
+subtle = "2.6"
 thiserror.workspace = true
 tokio = { version = "1.53", features = ["macros", "net", "rt-multi-thread", "signal", "sync", "time"] }
 toml = "1.1"
-tower-http = { version = "0.7", features = ["cors", "trace"] }
+toml_edit = "0.25"
+tower-http = { version = "0.7", features = ["catch-panic", "cors", "limit", "trace"] }
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 

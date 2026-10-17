@@ -23,5 +23,10 @@ FROM gcr.io/distroless/cc-debian12:nonroot
 COPY --from=build /usr/local/bin/emeraldmd-server /usr/local/bin/emeraldmd-server
 ENV EMERALDMD_BIND=0.0.0.0:8484
 EXPOSE 8484
+# The image has no shell or curl: the binary asks itself for GET /healthz on
+# the configured address. Indexing large vaults can take a while at start.
+HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3 \
+    CMD ["/usr/local/bin/emeraldmd-server", "healthcheck"]
+# SIGTERM stops gracefully; SIGHUP reloads the config (`docker kill -s HUP`).
 ENTRYPOINT ["/usr/local/bin/emeraldmd-server"]
 CMD ["serve"]
