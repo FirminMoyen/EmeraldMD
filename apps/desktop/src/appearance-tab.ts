@@ -4,12 +4,17 @@
  * `@emeraldmd/api` Appearance and CustomCss).
  */
 
+import type { CommunityDirectory } from '@emeraldmd/plugin-host';
 import { debounce, MAX_FONT_SIZE, MIN_FONT_SIZE, Setting, SettingTab, type App, type ColorComponent, type ThemeSetting } from '@emeraldmd/api';
 
 export interface AppearanceTabOptions {
 	/** Shows a config folder (`.obsidian/snippets` or `.obsidian/themes`) in the file manager; absent for remote vaults. */
 	showFolder?: (path: string) => Promise<void>;
+	/** The community theme directory, for "Browse"; absent for remote vaults. */
+	directory?: CommunityDirectory;
 }
+
+import { ThemeBrowser } from './theme-browser';
 
 const SCHEMES: Record<ThemeSetting, string> = { system: 'Adapt to system', moonstone: 'Light', obsidian: 'Dark' };
 
@@ -82,6 +87,8 @@ export class AppearanceTab extends SettingTab {
 		});
 
 		const themes = this.heading('Themes', 'Reload themes', () => customCss.requestLoadTheme(), customCss.getThemeFolder());
+		const directory = this.options.directory;
+		if (directory) themes.addButton((b) => b.setButtonText('Browse').onClick(() => new ThemeBrowser(this.app, directory).open()));
 		themes.setDesc(`Community themes in ${customCss.getThemeFolder()}.`);
 		const names = [...Object.keys(customCss.themes), ...customCss.oldThemes].sort((a, b) => a.localeCompare(b));
 		const themeSetting = new Setting(containerEl).setName('Theme');

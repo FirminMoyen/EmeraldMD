@@ -11,9 +11,12 @@
  * Implemented: Daily notes (`daily-notes`) and Templates (`templates`).
  */
 
-import { normalizePath, TFile, TFolder } from '@emeraldmd/core';
+import { normalizePath, parseLinktext, TFile, TFolder, type EventRef } from '@emeraldmd/core';
 import type { App } from './app';
 import type { Command } from './commands';
+import { HoverPopover, type HoverParent } from './hover-popover';
+import { Keymap } from './keymap';
+import { MarkdownRenderer, sectionText } from './markdown';
 import { moment } from './moment';
 import { Notice } from './notice';
 import { FuzzySuggestModal } from './suggest';
@@ -59,6 +62,7 @@ export abstract class InternalPluginInstance {
 	protected app!: App;
 	private commandIds: string[] = [];
 	private ribbonEls: HTMLElement[] = [];
+	private eventRefs: EventRef[] = [];
 
 	/** @internal */
 	attach(app: App): void {
@@ -72,6 +76,11 @@ export abstract class InternalPluginInstance {
 	disable(): void {
 		for (const id of this.commandIds.splice(0)) this.app.commands.removeCommand(id);
 		for (const el of this.ribbonEls.splice(0)) this.app.workspace.leftRibbon.removeRibbonItem(el);
+		for (const ref of this.eventRefs.splice(0)) this.app.workspace.offref(ref);
+	}
+
+	protected registerEvent(ref: EventRef): void {
+		this.eventRefs.push(ref);
 	}
 
 	async saveOptions(): Promise<void> {
@@ -280,6 +289,60 @@ class TemplatePicker extends FuzzySuggestModal<TFile> {
 	}
 }
 
+/** What `hover-link` events carry (plugin API). */
+export interface HoverLinkEvent {
+	event: MouseEvent;
+	/** Which kind of place the link is in: `preview`, `editor`, or a plugin's registered source. */
+	source: string;
+	hoverParent: HoverParent;
+	targetEl: HTMLElement | null;
+	linktext: string;
+	sourcePath?: string;
+}
+
+/**
+ * Page preview: hovering a link shows the note it points to (the heading's
+ * section or the block for `#…` links). In the editor the ⌘/Ctrl key must be
+ * held, as in Obsidian; sources registered by plugins say for themselves.
+ */
+export class PagePreview extends InternalPluginInstance {
+	readonly id = 'page-preview';
+	readonly name = 'Page preview';
+	readonly description = 'See a note by hovering a link to it. In the editor, hold ⌘ (Ctrl) while hovering.';
+
+	onEnable(): void {
+		this.app.workspace.registerHoverLinkSource('preview', { display: 'Reading view', defaultMod: false });
+		this.app.workspace.registerHoverLinkSource('editor', { display: 'Editor', defaultMod: true });
+		this.registerEvent(this.app.workspace.on('hover-link', (info: HoverLinkEvent) => void this.onHoverLink(info)));
+	}
+
+	/** Whether `source` needs the ⌘/Ctrl key held. */
+	requiresModifier(source: string): boolean {
+		return this.app.workspace.hoverLinkSources[source]?.defaultMod ?? false;
+	}
+
+	async onHoverLink({ event, source, hoverParent, targetEl, linktext, sourcePath = '' }: HoverLinkEvent): Promise<void> {
+		if (!hoverParent || !linktext) return;
+		if (this.requiresModifier(source) && !(event && Keymap.isModifier(event, 'Mod'))) return;
+		// Moving over the parts of the same link fires again: keep its popover.
+		if (targetEl && hoverParent.hoverPopover?.targetEl === targetEl) return;
+		const { path, subpath } = parseLinktext(linktext);
+		const file = path ? this.app.metadataCache.getFirstLinkpathDest(path, sourcePath) : this.app.vault.getFileByPath(sourcePath);
+		if (!file) return;
+		const popover = new HoverPopover(hoverParent, targetEl);
+		const embed = popover.hoverEl.createDiv({ cls: 'markdown-embed is-loaded', attr: { 'data-path': file.path } });
+		const content = embed.createDiv('markdown-embed-content').createDiv('markdown-preview-view markdown-rendered');
+		if (file.extension === 'md') {
+			const text = sectionText(this.app, file, await this.app.vault.cachedRead(file), subpath);
+			await MarkdownRenderer.render(this.app, text, content, file.path, popover);
+		} else if (/^(png|jpe?g|gif|webp|svg|bmp|avif)$/i.test(file.extension)) {
+			content.createEl('img', { attr: { src: this.app.vault.getResourcePath(file), alt: file.name } });
+		} else {
+			content.createDiv({ cls: 'file-embed-title', text: file.name });
+		}
+	}
+}
+
 /** A core plugin as plugins see it: `plugins[id].enabled` and `.instance`. */
 export interface InternalPlugin {
 	enabled: boolean;
@@ -287,7 +350,7 @@ export interface InternalPlugin {
 }
 
 /** Core plugins that are on in a new vault. */
-const ENABLED_BY_DEFAULT = new Set(['daily-notes', 'templates']);
+const ENABLED_BY_DEFAULT = new Set(['daily-notes', 'templates', 'page-preview']);
 
 export class InternalPlugins {
 	plugins: Record<string, InternalPlugin> = {};
@@ -295,7 +358,7 @@ export class InternalPlugins {
 	config: Record<string, boolean> = {};
 	private app: App | null = null;
 
-	constructor(instances: InternalPluginInstance[] = [new DailyNotes(), new Templates()]) {
+	constructor(instances: InternalPluginInstance[] = [new DailyNotes(), new Templates(), new PagePreview()]) {
 		for (const instance of instances) this.plugins[instance.id] = { enabled: false, instance };
 	}
 

@@ -43,7 +43,7 @@ describe('core plugins', () => {
 
 		const fresh = await createTestApp();
 		await fresh.app.internalPlugins.load(fresh.app);
-		expect(fresh.app.internalPlugins.getEnabledPlugins().map((p) => p.id)).toEqual(['daily-notes', 'templates']);
+		expect(fresh.app.internalPlugins.getEnabledPlugins().map((p) => p.id)).toEqual(['daily-notes', 'templates', 'page-preview']);
 	});
 
 	it('creates the daily note in its folder from the template', async () => {
@@ -67,7 +67,7 @@ describe('core plugins', () => {
 		await app.internalPlugins.load(app);
 		await app.internalPlugins.setEnabled('templates', false);
 		expect(app.commands.findCommand('insert-template')).toBeUndefined();
-		expect(JSON.parse(config.files.get('.obsidian/core-plugins.json')!)).toEqual({ 'daily-notes': true, templates: false });
+		expect(JSON.parse(config.files.get('.obsidian/core-plugins.json')!)).toEqual({ 'daily-notes': true, templates: false, 'page-preview': true });
 		expect(app.workspace.leftRibbon.items.map((i) => i.title)).not.toContain('Insert template');
 	});
 

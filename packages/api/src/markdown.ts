@@ -11,6 +11,7 @@ import { obsidianMarkdown, parseLinktext, type TFile } from '@emeraldmd/core';
 import type { App } from './app';
 import { Component } from './component';
 import { renderMermaid } from './diagrams';
+import type { HoverPopover } from './hover-popover';
 import { getIcon, setIcon } from './icons';
 import { renderMath } from './math';
 import { getFrontMatterInfo, parseYaml, sanitizeHTMLToDom } from './util';
@@ -619,7 +620,7 @@ async function attachmentUrl(app: App, file: TFile, component: Component): Promi
 }
 
 /** The part of a note a `#Heading` or `#^block` subpath points at, or all of it. */
-function sectionText(app: App, file: TFile, text: string, subpath: string): string {
+export function sectionText(app: App, file: TFile, text: string, subpath: string): string {
 	const cache = app.metadataCache.getFileCache(file);
 	if (subpath.startsWith('#^')) {
 		const block = cache?.blocks?.[subpath.slice(2).toLowerCase()];
@@ -718,5 +719,12 @@ function linkInternalLinks(app: App, el: HTMLElement, sourcePath: string): void 
 			evt.preventDefault();
 			void app.workspace.openLinkText(href, sourcePath);
 		});
+		// Page preview: in the reading view no modifier key is needed.
+		a.addEventListener('mouseover', (event) => {
+			app.workspace.trigger('hover-link', { event, source: 'preview', hoverParent, targetEl: a, linktext: href, sourcePath });
+		});
 	}
 }
+
+/** Owns the popover of links in rendered Markdown that is not inside a view. */
+const hoverParent: { hoverPopover: HoverPopover | null } = { hoverPopover: null };

@@ -28,7 +28,8 @@ end-to-end tests; the rest is in priority order within each section.
       (`file-menu`), rename in place; links are rewritten when notes move
 - [x] Back/forward history (⌥⌘←/→, header buttons, mouse buttons)
 - [ ] Tabs and splits in the main area
-- [ ] Hover preview of links (page preview)
+- [x] Hover preview of links (page preview): reading view on hover, editor
+      with ⌘, sections and blocks, `hover-link` from plugins
 - [x] Daily notes and templates (core plugins, with their settings and
       the `{{date}}`/`{{time}}`/`{{title}}` variables)
 - [ ] Bookmarks, properties editor
@@ -45,13 +46,15 @@ end-to-end tests; the rest is in priority order within each section.
 
 - [x] Community plugins from `.obsidian/plugins` with restricted mode
       (15 of 16 popular plugins pass the smoke tests)
-- [ ] Browse and install plugins from the community list; update them
+- [x] Browse and install plugins from the community list (README, download
+      counts); update them; uninstall to the vault's `.trash`
 - [x] Themes and CSS snippets from `.obsidian/themes` and `.obsidian/snippets`
       (checked with Minimal, Things, AnuPpuccin, Blue Topaz and Border);
       snippets reload when edited on disk
 - [x] Settings → Appearance: light/dark/system, accent colour, theme, fonts,
       font size, ribbon, snippets
-- [ ] Browse and install themes from the community list
+- [x] Browse and install themes from the community list (screenshots,
+      light/dark filter)
 - [x] Settings: editor (default modes, line width, strict line breaks, line
       numbers, spellcheck, brackets, indentation), files and links (deletion
       prompt, new note location, link format and updates, attachments),

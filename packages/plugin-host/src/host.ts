@@ -162,6 +162,23 @@ export class PluginHost implements PluginsApi {
 		return true;
 	}
 
+	/** Turns the plugin off and moves its folder to the vault's trash. */
+	async uninstallPlugin(id: string): Promise<void> {
+		const manifest = this.manifests[id];
+		if (!manifest?.dir) return;
+		if (this.enabledPlugins.has(id)) await this.disablePluginAndSave(id);
+		await this.app.vault.adapter.rmdir(manifest.dir, true);
+		await this.loadManifests();
+	}
+
+	/** Reloads a plugin's code after an update, if it was running. */
+	async reloadPlugin(id: string): Promise<void> {
+		await this.loadManifests();
+		if (!this.plugins[id]) return;
+		await this.disablePlugin(id);
+		await this.enablePlugin(id);
+	}
+
 	/** Turns restricted mode on (unloads every plugin) or off (loads the enabled ones). */
 	async setRestricted(restricted: boolean): Promise<void> {
 		await this.trust.setTrusted(!restricted);

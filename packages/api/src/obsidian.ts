@@ -139,22 +139,7 @@ export class WorkspaceMobileDrawer extends WorkspaceParent {
 	}
 }
 
-export enum PopoverState {
-	Showing,
-	Shown,
-	Hiding,
-	Hidden,
-}
-
-/** Page previews are not implemented yet; the popover never shows. */
-export class HoverPopover extends Component {
-	hoverEl: HTMLElement = createDiv('popover hover-popover');
-	state: PopoverState = PopoverState.Hidden;
-
-	constructor(_parent: unknown, _targetEl: HTMLElement | null, _waitTime?: number, _staticPos?: unknown) {
-		super();
-	}
-}
+export { HoverPopover, PopoverState, type HoverParent, type Point } from './hover-popover';
 
 /** A file outside the vault. */
 export class TExternalFile {
