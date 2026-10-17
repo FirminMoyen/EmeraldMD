@@ -10,7 +10,6 @@ export const LOCAL_GRAPH_VIEW = 'localgraph';
 abstract class BaseGraphView extends ItemView {
 	protected graph: GraphView | null = null;
 	protected readonly refresh = debounce(() => this.redraw(), 300, true);
-	private fitted = false;
 
 	constructor(
 		leaf: WorkspaceLeaf,
@@ -40,10 +39,6 @@ abstract class BaseGraphView extends ItemView {
 		if (!this.graph) return;
 		this.graph.setData(buildGraph(graphInputFromVault(this.app.vault, this.app.metadataCache), this.filters()));
 		this.graph.setFocused(this.app.workspace.getActiveFile()?.path ?? null);
-		if (!this.fitted) {
-			this.fitted = true;
-			setTimeout(() => this.graph?.zoomToFit(), 1200);
-		}
 	}
 
 	private async openNode(node: GraphNode): Promise<void> {

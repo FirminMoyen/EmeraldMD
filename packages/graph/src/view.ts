@@ -43,6 +43,8 @@ export class GraphView {
 	private transform = { x: 0, y: 0, k: 1 };
 	private size = { width: 0, height: 0 };
 	private hovered: SimNode | null = null;
+	/** Until the user pans or zooms, the view keeps fitting the graph as the layout settles. */
+	private autoFit = true;
 	private focused: string | null = null;
 	private palette: Palette | null = null;
 	private frame = 0;
@@ -93,7 +95,15 @@ export class GraphView {
 			this.neighbours.get(t.id)?.add(s.id);
 		}
 		if (this.hovered && !this.neighbours.has(this.hovered.id)) this.hovered = null;
-		simulation.on('tick', () => this.requestDraw());
+		let ticks = 0;
+		simulation.on('tick', () => {
+			// Fit early so the graph is not a speck while it settles, then again at rest.
+			if (this.autoFit && ++ticks % 40 === 0) this.zoomToFit();
+			this.requestDraw();
+		});
+		simulation.on('end', () => {
+			if (this.autoFit) this.zoomToFit();
+		});
 		simulation.alpha(0.8).restart();
 	}
 
@@ -294,6 +304,7 @@ export class GraphView {
 			press.node.fx = gx;
 			press.node.fy = gy;
 		} else {
+			this.autoFit = false;
 			this.transform.x += event.movementX;
 			this.transform.y += event.movementY;
 		}
@@ -321,6 +332,7 @@ export class GraphView {
 
 	private readonly onWheel = (event: WheelEvent) => {
 		event.preventDefault();
+		this.autoFit = false;
 		const rect = this.canvas.getBoundingClientRect();
 		const [px, py] = [event.clientX - rect.left, event.clientY - rect.top];
 		const { x, y, k } = this.transform;
