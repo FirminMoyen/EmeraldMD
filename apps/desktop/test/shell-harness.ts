@@ -62,6 +62,8 @@ export async function startShell(files: Record<string, string>, config: Record<s
 					return store.write(a.path, a.data);
 				case 'config_list':
 					return store.list(a.path);
+				case 'config_trash':
+					return store.trash(a.path);
 				case 'config_mkdir':
 					return store.mkdir(a.path);
 				case 'config_stat': {

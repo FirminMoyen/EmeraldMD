@@ -32,6 +32,8 @@ export interface ConfigStore {
 	list(path: string): Promise<ListedFiles>;
 	stat(path: string): Promise<Stat | null>;
 	mkdir(path: string): Promise<void>;
+	/** Moves a plugin or theme folder to the vault's trash (uninstalling). Other paths are refused. */
+	trash?(path: string): Promise<void>;
 }
 
 export interface DataAdapter {
@@ -185,7 +187,10 @@ export class VaultAdapter implements DataAdapter {
 
 	async trashLocal(path: string): Promise<void> {
 		path = normalizePath(path);
-		if (this.isConfigPath(path)) throw unsupported('Moving to trash', path);
+		if (this.isConfigPath(path)) {
+			if (!this.config.trash) throw unsupported('Moving to trash', path);
+			return this.config.trash(path);
+		}
 		const file = this.vault.getAbstractFileByPath(path);
 		if (!file) throw notFound(path);
 		await this.vault.trash(file);

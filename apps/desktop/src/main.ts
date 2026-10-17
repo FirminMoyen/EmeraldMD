@@ -28,7 +28,7 @@ import {
 } from '@emeraldmd/core';
 import { MemoryConfigStore } from '@emeraldmd/api/testing';
 import { MarkdownEditor } from '@emeraldmd/editor';
-import { CommunityPluginsTab, PluginHost } from '@emeraldmd/plugin-host';
+import { CommunityDirectory, CommunityPluginsTab, PluginHost } from '@emeraldmd/plugin-host';
 import type { Extension } from '@codemirror/state';
 import { convertFileSrc, invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
@@ -303,8 +303,12 @@ class EmeraldApp {
 		// The order of Obsidian's settings.
 		app.setting.addBuiltInTab(new EditorTab(app));
 		app.setting.addBuiltInTab(new FilesTab(app));
+		const directory = new CommunityDirectory(app);
 		app.setting.addBuiltInTab(
-			new AppearanceTab(app, { showFolder: local ? (path) => invoke('show_config_folder', { path }) : undefined }),
+			new AppearanceTab(app, {
+				showFolder: local ? (path) => invoke('show_config_folder', { path }) : undefined,
+				directory: local ? directory : undefined,
+			}),
 		);
 		app.setting.addBuiltInTab(new HotkeysTab(app));
 		app.setting.addBuiltInTab(new CorePluginsTab(app));
@@ -360,7 +364,7 @@ class EmeraldApp {
 		}
 		const host = new PluginHost(app, tauriTrustStore);
 		this.host = host;
-		app.setting.addBuiltInTab(new CommunityPluginsTab(app, host));
+		app.setting.addBuiltInTab(new CommunityPluginsTab(app, host, directory));
 		try {
 			await host.initialize();
 		} catch (err) {

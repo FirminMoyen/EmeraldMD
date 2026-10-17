@@ -229,6 +229,24 @@ async fn config_mkdir(state: State<'_, AppState>, path: String) -> CmdResult<()>
     with_vault(&state, |v| v.create_config_folder(&path))
 }
 
+/// Moves a plugin's or theme's folder (`.obsidian/plugins/<id>`,
+/// `.obsidian/themes/<name>`) to the vault's `.trash`, for uninstalling.
+/// Other config paths are refused.
+#[tauri::command]
+async fn config_trash(state: State<'_, AppState>, path: String) -> CmdResult<String> {
+    let normalized = path.trim_matches('/');
+    let parts: Vec<&str> = normalized.split('/').collect();
+    let allowed = matches!(parts.as_slice(), [".obsidian", "plugins" | "themes", name] if !name.is_empty() && *name != "." && *name != "..");
+    if !allowed {
+        return Err(format!("only a plugin or theme folder can be moved to the trash: {path}"));
+    }
+    with_vault(&state, |v| {
+        // Resolves symbolic links and refuses anything outside the config folder.
+        v.config_path(normalized)?;
+        v.trash(normalized)
+    })
+}
+
 /// Config folders the UI may show in the file manager.
 const SHOWABLE_CONFIG_FOLDERS: [&str; 2] = [".obsidian/snippets", ".obsidian/themes"];
 
@@ -348,6 +366,7 @@ pub fn run() {
             config_list,
             config_stat,
             config_mkdir,
+            config_trash,
             show_config_folder,
             open_external,
             reveal_path,
