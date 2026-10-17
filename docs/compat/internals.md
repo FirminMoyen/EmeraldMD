@@ -143,4 +143,7 @@ the public theme documentation: `.modal-container > .modal > .modal-close-button
 - `vault.adapter.remove`/`rename` inside `.obsidian` (refused); outside it,
   `remove` moves files to the vault's `.trash`.
 - `onExternalSettingsChange` (plugins are not told when `data.json` changes on disk).
-- MathJax, Mermaid, PDF.js and Prism (`loadMathJax` and friends reject).
+- PDF.js and Prism (`loadPdfJs` and `loadPrism` reject). MathJax
+  (`loadMathJax`, `renderMath`, `window.MathJax.tex2svg`) and Mermaid
+  (`loadMermaid`) load on first use; MathJax renders SVG, so
+  `tex2chtml` returns SVG too.

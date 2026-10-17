@@ -26,6 +26,7 @@ import {
 } from '@codemirror/view';
 import type { SyntaxNode } from '@lezer/common';
 import { tags as t } from '@lezer/highlight';
+import { obsidianMarkdown } from '@emeraldmd/core';
 import { lineClasses, livePreview, type LivePreviewOptions } from './live-preview';
 
 export { lineClasses, livePreview, type LivePreviewOptions } from './live-preview';
@@ -173,7 +174,8 @@ export class MarkdownEditor {
 			highlightSelectionMatches(),
 			EditorView.lineWrapping,
 			// Frontmatter is YAML, not Markdown (otherwise `key: value` above `---` reads as a heading).
-			yamlFrontmatter({ content: markdown({ base: markdownLanguage }) }),
+			// Math and footnotes are part of the grammar, as in the renderer, so `$a_1 * b$` is not read as emphasis.
+			yamlFrontmatter({ content: markdown({ base: markdownLanguage, extensions: obsidianMarkdown }) }),
 			syntaxHighlighting(markdownHighlight),
 			decorate(WIKILINK, 'cm-hmd-internal-link'),
 			decorate(TAG, 'cm-hashtag'),

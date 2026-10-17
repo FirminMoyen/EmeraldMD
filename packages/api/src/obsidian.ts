@@ -270,14 +270,6 @@ function unavailable(name: string): Promise<never> {
 	return Promise.reject(new Error(`${name} is not available in EmeraldMD yet`));
 }
 
-export function loadMathJax(): Promise<void> {
-	return unavailable('MathJax');
-}
-
-export function loadMermaid(): Promise<never> {
-	return unavailable('Mermaid');
-}
-
 export function loadPdfJs(): Promise<never> {
 	return unavailable('PDF.js');
 }
@@ -286,9 +278,5 @@ export function loadPrism(): Promise<never> {
 	return unavailable('Prism');
 }
 
-/** Without MathJax, math is shown as its TeX source. */
-export function renderMath(source: string, display: boolean): HTMLElement {
-	return createEl(display ? 'div' : 'span', { cls: 'math', text: source });
-}
-
-export async function finishRenderMath(): Promise<void> {}
+export { finishRenderMath, loadMathJax, renderMath } from './math';
+export { loadMermaid } from './diagrams';

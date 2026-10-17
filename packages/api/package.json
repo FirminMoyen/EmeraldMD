@@ -15,7 +15,10 @@
     "@emeraldmd/core": "*",
     "@lezer/common": "^1.5.3",
     "@lezer/markdown": "^1.8.0",
+    "katex": "^0.18.11",
     "lucide": "^1.57.0",
+    "mathjax-full": "^3.2.2",
+    "mermaid": "^11.17.2",
     "moment": "^2.31.0",
     "yaml": "^2.9.1"
   },

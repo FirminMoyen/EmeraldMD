@@ -19,7 +19,8 @@ end-to-end tests; the rest is in priority order within each section.
       callouts and tables; source mode toggle (checked in the app, default
       theme and Minimal)
 - [x] Callouts, highlights, embedded notes and sections
-- [ ] Math, Mermaid, footnotes
+- [x] Math (MathJax), Mermaid diagrams and footnotes, in the reading view
+      and Live Preview
 - [x] Images and attachments: real binary files, image embeds, paste and
       drag-and-drop into notes, attachment folder setting
 - [x] File tree: drag-and-drop move, context menu (new note here, rename,
