@@ -1,7 +1,8 @@
 /**
- * Markdown source editor on CodeMirror 6. Token classes (`cm-header-1`,
- * `cm-strong`, `cm-hashtag`, …) use the names community themes style, so
- * existing themes apply. Live Preview comes later as an extra extension.
+ * Markdown editor on CodeMirror 6, in source mode or Live Preview
+ * (./live-preview.ts). Token classes (`cm-header-1`, `cm-strong`,
+ * `cm-hashtag`, …) and line classes (`HyperMD-header-1`…) use the names
+ * community themes style, so existing themes apply.
  */
 
 import { closeBrackets, closeBracketsKeymap } from '@codemirror/autocomplete';
@@ -10,7 +11,7 @@ import { markdown, markdownLanguage } from '@codemirror/lang-markdown';
 import { yamlFrontmatter } from '@codemirror/lang-yaml';
 import { HighlightStyle, indentOnInput, syntaxHighlighting, syntaxTree } from '@codemirror/language';
 import { highlightSelectionMatches, searchKeymap } from '@codemirror/search';
-import { Compartment, EditorState, type Extension } from '@codemirror/state';
+import { Compartment, EditorState, type Extension, type StateEffect } from '@codemirror/state';
 import {
 	Decoration,
 	type DecorationSet,
@@ -24,6 +25,9 @@ import {
 } from '@codemirror/view';
 import type { SyntaxNode } from '@lezer/common';
 import { tags as t } from '@lezer/highlight';
+import { lineClasses, livePreview, type LivePreviewOptions } from './live-preview';
+
+export { lineClasses, livePreview, type LivePreviewOptions } from './live-preview';
 
 const markdownHighlight = HighlightStyle.define([
 	{ tag: t.heading1, class: 'cm-header cm-header-1' },
@@ -104,6 +108,10 @@ export interface MarkdownEditorOptions {
 	onOpenLink?: (linktext: string) => void;
 	/** Files pasted or dropped into the editor, with the document position to insert at. */
 	onFiles?: (files: File[], pos: number) => void;
+	/** A click on a rendered external link in Live Preview. */
+	onOpenUrl?: (url: string) => void;
+	/** Rendering of embeds, callouts and tables in Live Preview. */
+	livePreview?: LivePreviewOptions;
 }
 
 export class MarkdownEditor {
@@ -112,8 +120,14 @@ export class MarkdownEditor {
 	/** Extensions added from outside (plugins), kept across documents. */
 	private readonly extra = new Compartment();
 	private extraExtensions: Extension = [];
+	private readonly mode = new Compartment();
+	private readonly livePreviewExtension: Extension;
+	private livePreviewOn = false;
+	private readonly parent: HTMLElement;
 
 	constructor(options: MarkdownEditorOptions) {
+		this.parent = options.parent;
+		this.livePreviewExtension = livePreview(options.livePreview);
 		this.extensions = [
 			history(),
 			drawSelection(),
@@ -126,6 +140,7 @@ export class MarkdownEditor {
 			syntaxHighlighting(markdownHighlight),
 			decorate(WIKILINK, 'cm-hmd-internal-link'),
 			decorate(TAG, 'cm-hashtag'),
+			lineClasses(),
 			placeholder('Start writing…'),
 			keymap.of([...closeBracketsKeymap, ...defaultKeymap, ...searchKeymap, ...historyKeymap, indentWithTab]),
 			EditorView.updateListener.of((update) => {
@@ -147,6 +162,17 @@ export class MarkdownEditor {
 					return true;
 				},
 				mousedown: (event, view) => {
+					// Live Preview: a click on a rendered link follows it.
+					const target = event.target instanceof Element ? event.target : null;
+					const rendered = this.livePreviewOn && event.button === 0 ? target?.closest<HTMLElement>('[data-lp-link], [data-lp-href]') : null;
+					if (rendered && !(event.metaKey || event.ctrlKey || event.shiftKey || event.altKey)) {
+						const { lpLink: link, lpHref: href } = rendered.dataset;
+						if (link !== undefined && options.onOpenLink) options.onOpenLink(link);
+						else if (href !== undefined && options.onOpenUrl) options.onOpenUrl(href);
+						else return false;
+						event.preventDefault();
+						return true;
+					}
 					if (!(event.metaKey || event.ctrlKey) || !options.onOpenLink) return false;
 					const pos = view.posAtCoords({ x: event.clientX, y: event.clientY });
 					if (pos === null) return false;
@@ -180,6 +206,17 @@ export class MarkdownEditor {
 		});
 	}
 
+	isLivePreview(): boolean {
+		return this.livePreviewOn;
+	}
+
+	/** Switches between Live Preview and source mode. `effects` go out in the same transaction. */
+	setLivePreview(on: boolean, effects: StateEffect<unknown>[] = []): void {
+		this.livePreviewOn = on;
+		this.parent.classList.toggle('is-live-preview', on);
+		this.view.dispatch({ effects: [this.mode.reconfigure(on ? this.livePreviewExtension : []), ...effects] });
+	}
+
 	/** Replaces the extensions added from outside (plugin editor extensions). */
 	setExtensions(extensions: Extension): void {
 		this.extraExtensions = extensions;
@@ -195,6 +232,9 @@ export class MarkdownEditor {
 	}
 
 	private createState(doc: string): EditorState {
-		return EditorState.create({ doc, extensions: [this.extensions, this.extra.of(this.extraExtensions)] });
+		return EditorState.create({
+			doc,
+			extensions: [this.extensions, this.mode.of(this.livePreviewOn ? this.livePreviewExtension : []), this.extra.of(this.extraExtensions)],
+		});
 	}
 }

@@ -14,8 +14,10 @@ end-to-end tests; the rest is in priority order within each section.
 - [x] YAML frontmatter shown as properties in the editor
 - [x] Reading view (⌘E) rendering Markdown with plugin post-processors
       (Dataview checked in the app)
-- [ ] Live Preview: Markdown syntax hidden away from the cursor, task
-      checkboxes, rendered links and image embeds
+- [x] Live Preview: Markdown syntax hidden away from the cursor, task
+      checkboxes, bullets, rendered links (click to follow), images, embeds,
+      callouts and tables; source mode toggle (checked in the app, default
+      theme and Minimal)
 - [x] Callouts, highlights, embedded notes and sections
 - [ ] Math, Mermaid, footnotes
 - [x] Images and attachments: real binary files, image embeds, paste and

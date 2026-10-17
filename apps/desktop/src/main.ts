@@ -1,10 +1,13 @@
 import {
 	App,
 	CodeMirrorEditor,
+	Component,
 	editorInfoExtensions,
+	MarkdownRenderer,
 	MarkdownView,
 	Notice,
 	setIcon,
+	setLivePreviewEffect,
 	setRequestBackend,
 	setTooltip,
 	Vault,
@@ -105,7 +108,19 @@ class EmeraldApp {
 			parent: this.el.editor,
 			onChange: () => this.onEdit(),
 			onOpenLink: (link) => void this.openLink(link),
+			onOpenUrl: (url) => void this.openExternal(url),
 			onFiles: (files, pos) => void this.insertAttachments(files, pos),
+			livePreview: {
+				renderMarkdown: (markdown, el) => this.renderInEditor(markdown, el),
+				isResolved: (link) => !this.metadataCache || Boolean(this.metadataCache.getFirstLinkpathDest(getLinkpath(link), this.activeFile?.path ?? '')),
+			},
+		});
+		// Links in rendered Markdown (reading view, Live Preview widgets, plugin views) open in the browser.
+		document.addEventListener('click', (event) => {
+			const link = event.target instanceof Element ? event.target.closest<HTMLAnchorElement>('a.external-link[href]') : null;
+			if (!link || event.defaultPrevented) return;
+			event.preventDefault();
+			void this.openExternal(link.href);
 		});
 		$('open-vault').addEventListener('click', () => void this.pickVault());
 		$('switch-vault').addEventListener('click', () => void this.pickVault());
@@ -316,6 +331,9 @@ class EmeraldApp {
 			setIcon(modeButton, mode === 'preview' ? 'pencil' : 'book-open');
 			modeButton.setAttribute('aria-label', mode === 'preview' ? 'Edit (⌘E)' : 'Reading view (⌘E)');
 		};
+		view.onLivePreviewChange = (on) => this.editor.setLivePreview(on, [setLivePreviewEffect.of(on)]);
+		view.livePreview = app.vault.getConfig('livePreview') !== false;
+		this.editor.setLivePreview(view.livePreview, [setLivePreviewEffect.of(view.livePreview)]);
 		view.actionsEl.append(this.el.trash);
 		view.contentEl.append(this.el.editor, this.el.noFile);
 		this.markdownView = view;
@@ -325,7 +343,7 @@ class EmeraldApp {
 			openFile: (file) => this.openFile(file),
 			save: () => this.flush(),
 			setEditorExtensions: (extensions: Extension[]) =>
-				this.editor.setExtensions([editorInfoExtensions(view, () => this.editor.view), ...extensions]),
+				this.editor.setExtensions([editorInfoExtensions(view, () => this.editor.view, () => this.editor.isLivePreview()), ...extensions]),
 		};
 		ws.setHost(host, view);
 	}
@@ -354,6 +372,16 @@ class EmeraldApp {
 			checkCallback: (checking) => {
 				if (!this.activeFile) return false;
 				if (!checking) void this.toggleReading();
+				return true;
+			},
+		});
+		add({
+			id: 'editor:toggle-source',
+			name: 'Toggle Live Preview/Source mode',
+			checkCallback: (checking) => {
+				const view = this.markdownView;
+				if (!view || !this.activeFile || view.getMode() !== 'source') return false;
+				if (!checking) view.setLivePreview(!view.livePreview);
 				return true;
 			},
 		});
@@ -403,6 +431,25 @@ class EmeraldApp {
 		}
 		if (!embeds.length || this.activeFile !== note) return;
 		this.editor.view.dispatch({ changes: { from: pos, insert: embeds.join('\n') }, selection: { anchor: pos + embeds.join('\n').length } });
+	}
+
+	/** Renders Markdown into a Live Preview widget (embeds, callouts, tables), like the reading view. */
+	private renderInEditor(markdown: string, el: HTMLElement): (() => void) | undefined {
+		const app = this.app;
+		if (!app) return undefined;
+		const component = new Component();
+		component.load();
+		void MarkdownRenderer.render(app, markdown, el, this.activeFile?.path ?? '', component).catch((err: unknown) => console.error(err));
+		return () => component.unload();
+	}
+
+	/** Opens a web or mail link in the default app. */
+	private async openExternal(url: string): Promise<void> {
+		try {
+			await invoke('open_external', { url });
+		} catch (err) {
+			this.notice(`Could not open ${url}: ${err}`);
+		}
 	}
 
 	/** Switches the open note between editing and the reading view (saving first). */

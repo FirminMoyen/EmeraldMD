@@ -226,6 +226,10 @@ export class MarkdownView extends TextFileView implements MarkdownFileInfo {
 	readonly sourceMode: MarkdownSubView;
 	/** @internal Called after the mode changes, so the shell can update its controls. */
 	onModeChange: ((mode: MarkdownViewModeType) => void) | null = null;
+	/** @internal Whether editing shows Live Preview (true) or plain source (false). */
+	livePreview = true;
+	/** @internal Set by the shell to switch its editor between Live Preview and source mode. */
+	onLivePreviewChange: ((on: boolean) => void) | null = null;
 	private readonly readingEl: HTMLElement;
 	private renderChild: MarkdownRenderChild | null = null;
 	private renderGeneration = 0;
@@ -268,13 +272,23 @@ export class MarkdownView extends TextFileView implements MarkdownFileInfo {
 		this.app.workspace.trigger('layout-change');
 	}
 
+	/** @internal Switches editing between Live Preview and source mode. */
+	setLivePreview(on: boolean): void {
+		if (on === this.livePreview) return;
+		this.livePreview = on;
+		this.onLivePreviewChange?.(on);
+		this.app.workspace.trigger('layout-change');
+	}
+
+	/** `source: true` is source mode, `false` Live Preview, as in the view state plugins read. */
 	override getState(): Record<string, unknown> {
-		return { ...super.getState(), mode: this.getMode() };
+		return { ...super.getState(), mode: this.getMode(), source: !this.livePreview };
 	}
 
 	override async setState(state: unknown, result: ViewStateResult): Promise<void> {
 		await super.setState(state, result);
-		const mode = (state as { mode?: unknown } | null)?.mode;
+		const { mode, source } = (state ?? {}) as { mode?: unknown; source?: unknown };
+		if (typeof source === 'boolean') this.setLivePreview(!source);
 		if (mode === 'preview' || mode === 'source') await this.setMode(mode);
 	}
 

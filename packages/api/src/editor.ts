@@ -23,7 +23,7 @@ import {
 	undo,
 } from '@codemirror/commands';
 import { foldAll, toggleFold, unfoldAll } from '@codemirror/language';
-import { EditorSelection as CMSelection, StateField, type ChangeSpec, type Extension, type Text } from '@codemirror/state';
+import { EditorSelection as CMSelection, StateEffect, StateField, type ChangeSpec, type Extension, type Text } from '@codemirror/state';
 import { EditorView, ViewPlugin, type Command as CMCommand } from '@codemirror/view';
 import type { App } from './app';
 import type { TFile } from '@emeraldmd/core';
@@ -374,10 +374,16 @@ export const editorEditorField = StateField.define<EditorView>({
 	update: (value) => value,
 });
 
-/** EmeraldMD edits in source mode only, for now. */
+/** @internal Switches `editorLivePreviewField`; dispatched with the editor's mode change. */
+export const setLivePreviewEffect = StateEffect.define<boolean>();
+
+/** Whether the editor is in Live Preview (true) or source mode (false). Plugins read it to decide what to render. */
 export const editorLivePreviewField = StateField.define<boolean>({
 	create: () => false,
-	update: (value) => value,
+	update: (value, tr) => {
+		for (const effect of tr.effects) if (effect.is(setLivePreviewEffect)) value = effect.value;
+		return value;
+	},
 });
 
 export interface LivePreviewStateType {
@@ -387,11 +393,11 @@ export interface LivePreviewStateType {
 export const livePreviewState = ViewPlugin.define<LivePreviewStateType & { destroy?: () => void }>(() => ({ mousedown: false }));
 
 /** The CodeMirror extensions that make the fields above available in an editor. */
-export function editorInfoExtensions(info: MarkdownFileInfo, view: () => EditorView): Extension {
+export function editorInfoExtensions(info: MarkdownFileInfo, view: () => EditorView, livePreview: () => boolean = () => false): Extension {
 	return [
 		editorInfoField.init(() => info),
 		editorEditorField.init(() => view()),
-		editorLivePreviewField.init(() => false),
+		editorLivePreviewField.init(() => livePreview()),
 		livePreviewState,
 	];
 }
