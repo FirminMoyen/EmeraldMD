@@ -83,6 +83,7 @@ export class EditorTab extends ConfigTab {
 		this.toggle('Spellcheck', 'Underline misspelled words while editing.', 'spellcheck');
 		this.toggle('Auto pair brackets', 'Type the closing bracket or quote along with the opening one.', 'autoPairBrackets');
 		this.toggle('Indent using tabs', 'Indent with tab characters; turn off to indent with spaces.', 'useTab');
+		this.toggle('Vim key bindings', 'Edit with Vim keys: normal, insert and visual modes, and :commands.', 'vimMode');
 		new Setting(this.containerEl)
 			.setName('Tab size')
 			.setDesc('How wide a tab is, and how many spaces an indent uses without tabs.')

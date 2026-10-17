@@ -59,7 +59,8 @@ end-to-end tests; the rest is in priority order within each section.
       numbers, spellcheck, brackets, indentation), files and links (deletion
       prompt, new note location, link format and updates, attachments),
       hotkeys (recorded, stored in hotkeys.json, conflicts shown)
-- [ ] Vim key bindings
+- [x] Vim key bindings (`vimMode`, Settings → Editor; `CodeMirrorAdapter.Vim`
+      for plugins)
 
 ### Native macOS
 
