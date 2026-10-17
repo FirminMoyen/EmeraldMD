@@ -13,12 +13,14 @@ import {
 	setRequestBackend,
 	setTooltip,
 	Vault,
+	type ConfigStore,
 	type WorkspaceHost,
 } from '@emeraldmd/api';
 import {
 	getLinkpath,
 	joinPath,
 	MetadataCache,
+	RemoteBackend,
 	TFile,
 	TFolder,
 	type TAbstractFile,
@@ -65,6 +67,21 @@ function $(id: string): HTMLElement {
 function countWords(text: string): number {
 	const body = text.replace(/^---\r?\n[\s\S]*?\r?\n---(\r?\n|$)/, '');
 	return body.match(/\S+/g)?.length ?? 0;
+}
+
+/** The config folder of a server vault, through the server's config endpoints. */
+async function remoteConfigStore(backend: VaultBackend): Promise<ConfigStore> {
+	if (!(backend instanceof RemoteBackend) || !(await backend.supportsConfig().catch(() => false))) return new MemoryConfigStore();
+	return {
+		read: (path) => backend.readConfig(path),
+		write: (path, data) => backend.writeConfig(path, data),
+		list: (path) => backend.listConfig(path),
+		stat: async (path) => {
+			const entry = await backend.statConfig(path);
+			return entry && { type: entry.kind, ctime: entry.ctime, mtime: entry.mtime, size: entry.size };
+		},
+		mkdir: (path) => backend.mkdirConfig(path),
+	};
 }
 
 function isInside(file: TAbstractFile, folder: TAbstractFile): boolean {
@@ -274,8 +291,9 @@ class EmeraldApp {
 		sessionStorage.removeItem(REOPEN_FILE_KEY);
 		const local = backend instanceof TauriBackend;
 		this.backend = backend;
-		// Remote vaults keep their settings in memory until the server serves `.obsidian`.
-		const vault = new Vault(backend, snapshot.name, snapshot.files, local ? new TauriConfigStore() : new MemoryConfigStore());
+		// Remote vaults keep `.obsidian` on the server; servers from before the config endpoints get it in memory.
+		const config = local ? new TauriConfigStore() : await remoteConfigStore(backend);
+		const vault = new Vault(backend, snapshot.name, snapshot.files, config);
 		await vault.loadConfig();
 		if (local) {
 			// Attachments load through Tauri's asset protocol (allowed for the open vault only).

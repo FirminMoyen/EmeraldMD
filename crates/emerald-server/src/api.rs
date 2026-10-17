@@ -77,6 +77,10 @@ pub fn router(state: AppState) -> Router {
         .route("/api/vaults/{id}/folders", post(create_folder).layer(small()))
         .route("/api/vaults/{id}/rename", post(rename).layer(small()))
         .route("/api/vaults/{id}/trash", post(trash).layer(small()))
+        .route("/api/vaults/{id}/config/list", get(config_list))
+        .route("/api/vaults/{id}/config/stat", get(config_stat))
+        .route("/api/vaults/{id}/config/file", axum::routing::put(config_write))
+        .route("/api/vaults/{id}/config/folders", post(config_folder).layer(small()))
         .route("/api/vaults/{id}/events/ticket", post(events_ticket).layer(small()))
         .route("/api/vaults/{id}/events", get(events::stream))
         // Applies to every route and to unknown paths alike.
@@ -477,6 +481,53 @@ async fn create_file(
 #[derive(Deserialize)]
 struct PathBody {
     path: String,
+}
+
+/// `GET /config/list?path=.obsidian/…`: the files and folders of a config folder.
+async fn config_list(
+    State(state): State<AppState>,
+    Extension(principal): Extension<Arc<Principal>>,
+    Path(id): Path<String>,
+    Query(query): Query<PathQuery>,
+) -> ApiResult<Json<emerald_core::ConfigListing>> {
+    let vault = state.vault(&principal, &id)?;
+    blocking(move || vault.list_config(&query.path)).await.map(Json)
+}
+
+/// `GET /config/stat?path=`: the entry, or `null` when there is none.
+async fn config_stat(
+    State(state): State<AppState>,
+    Extension(principal): Extension<Arc<Principal>>,
+    Path(id): Path<String>,
+    Query(query): Query<PathQuery>,
+) -> ApiResult<Json<Option<emerald_core::FileEntry>>> {
+    let vault = state.vault(&principal, &id)?;
+    blocking(move || vault.config_entry(&query.path)).await.map(Json)
+}
+
+/// `PUT /config/file?path=`: writes a config file from the body (UTF-8 text). Read it back with `GET /files`.
+async fn config_write(
+    State(state): State<AppState>,
+    Extension(principal): Extension<Arc<Principal>>,
+    Path(id): Path<String>,
+    Query(query): Query<PathQuery>,
+    data: String,
+) -> ApiResult<StatusCode> {
+    let vault = state.vault(&principal, &id)?;
+    blocking(move || vault.write_config(&query.path, &data)).await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+/// `POST /config/folders` with `{"path": ".obsidian/…"}`: creates a config folder and its parents.
+async fn config_folder(
+    State(state): State<AppState>,
+    Extension(principal): Extension<Arc<Principal>>,
+    Path(id): Path<String>,
+    Json(body): Json<PathBody>,
+) -> ApiResult<StatusCode> {
+    let vault = state.vault(&principal, &id)?;
+    blocking(move || vault.create_config_folder(&body.path)).await?;
+    Ok(StatusCode::NO_CONTENT)
 }
 
 async fn create_folder(

@@ -13,7 +13,7 @@
  */
 
 import type { SearchOptions, SearchResults } from './search';
-import type { VaultBackend, VaultSnapshot, VaultUpdate } from './types';
+import type { FileEntry, VaultBackend, VaultSnapshot, VaultUpdate } from './types';
 
 export interface RemoteVaultInfo {
 	id: string;
@@ -204,6 +204,43 @@ export class RemoteBackend implements VaultBackend {
 
 	writeBinary(path: string, data: ArrayBuffer): Promise<VaultUpdate> {
 		return this.update('PUT', '/raw', { query: { path }, bytes: data });
+	}
+
+	/** Whether the server keeps the vault's config folder (servers from before the config endpoints do not). */
+	async supportsConfig(): Promise<boolean> {
+		try {
+			await this.request('GET', '/config/stat', { query: { path: '.obsidian' } });
+			return true;
+		} catch (err) {
+			if (err instanceof RemoteError && err.status === 404) return false;
+			throw err;
+		}
+	}
+
+	/** A config file's text (`.obsidian/…`), or null when it does not exist. */
+	async readConfig(path: string): Promise<string | null> {
+		try {
+			return await this.read(path);
+		} catch (err) {
+			if (err instanceof RemoteError && err.status === 404) return null;
+			throw err;
+		}
+	}
+
+	async writeConfig(path: string, data: string): Promise<void> {
+		await this.request('PUT', '/config/file', { query: { path }, text: data });
+	}
+
+	async listConfig(path: string): Promise<{ files: string[]; folders: string[] }> {
+		return (await (await this.request('GET', '/config/list', { query: { path } })).json()) as { files: string[]; folders: string[] };
+	}
+
+	async statConfig(path: string): Promise<FileEntry | null> {
+		return (await (await this.request('GET', '/config/stat', { query: { path } })).json()) as FileEntry | null;
+	}
+
+	async mkdirConfig(path: string): Promise<void> {
+		await this.request('POST', '/config/folders', { json: { path } });
 	}
 
 	async search(query: string, options: SearchOptions = {}): Promise<SearchResults> {

@@ -59,6 +59,18 @@ pub fn check_readable(vault: &Vault, path: &str) -> VaultResult<()> {
     check_inside(vault, &normalized)
 }
 
+/// For the config endpoints: a path in the config folder (`.obsidian` or
+/// below), with no link out of it, and [`check_inside`].
+pub fn check_config(vault: &Vault, path: &str) -> VaultResult<()> {
+    vault.full_path(path)?;
+    let normalized = normalize_path(path);
+    if normalized.split('/').next() != Some(CONFIG_DIR) {
+        return Err(VaultError::NotConfigPath(normalized));
+    }
+    vault.config_path(&normalized)?;
+    check_inside(vault, &normalized)
+}
+
 /// For writes: [`check_inside`] for every path the change touches.
 pub fn check_writable(vault: &Vault, paths: &[&str]) -> VaultResult<()> {
     paths.iter().try_for_each(|path| check_inside(vault, path))

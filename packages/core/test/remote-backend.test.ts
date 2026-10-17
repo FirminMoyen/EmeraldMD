@@ -321,3 +321,33 @@ describe('RemoteBackend event stream', () => {
 		expect(statuses.at(-1)).toBe('closed');
 	});
 });
+
+describe('RemoteBackend config folder', () => {
+	it('reads, writes and lists .obsidian through the config endpoints', async () => {
+		const { fetch, calls } = mockFetch({
+			'GET /api/vaults/notes/config/stat': [json(null), json({ path: '.obsidian/themes', kind: 'folder', ctime: 1, mtime: 2, size: 0 })],
+			'GET /api/vaults/notes/files': [new Response('{"theme":"obsidian"}'), json({ error: 'not found' }, 404)],
+			'PUT /api/vaults/notes/config/file': new Response(null, { status: 204 }),
+			'GET /api/vaults/notes/config/list': json({ files: ['.obsidian/app.json'], folders: ['.obsidian/themes'] }),
+			'POST /api/vaults/notes/config/folders': new Response(null, { status: 204 }),
+		});
+		const backend = new RemoteBackend({ serverUrl: SERVER, vaultId: 'notes', token: 't', fetch });
+		expect(await backend.supportsConfig()).toBe(true);
+		expect(await backend.readConfig('.obsidian/appearance.json')).toBe('{"theme":"obsidian"}');
+		expect(await backend.readConfig('.obsidian/missing.json')).toBeNull();
+		await backend.writeConfig('.obsidian/appearance.json', '{}');
+		expect(await backend.listConfig('.obsidian')).toEqual({ files: ['.obsidian/app.json'], folders: ['.obsidian/themes'] });
+		expect((await backend.statConfig('.obsidian/themes'))?.kind).toBe('folder');
+		await backend.mkdirConfig('.obsidian/snippets');
+		const put = calls.find((c) => c.method === 'PUT')!;
+		expect(put.url.searchParams.get('path')).toBe('.obsidian/appearance.json');
+		expect(put.body).toBe('{}');
+		expect(JSON.parse(calls.find((c) => c.method === 'POST')!.body!)).toEqual({ path: '.obsidian/snippets' });
+	});
+
+	it('tells when the server has no config endpoints', async () => {
+		const { fetch } = mockFetch({ 'GET /api/vaults/notes/config/stat': json({ error: 'not found' }, 404) });
+		const backend = new RemoteBackend({ serverUrl: SERVER, vaultId: 'notes', token: 't', fetch });
+		expect(await backend.supportsConfig()).toBe(false);
+	});
+});
