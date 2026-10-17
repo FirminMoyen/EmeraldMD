@@ -39,12 +39,14 @@ impl HttpRemote {
         Ok(Self { client, base, vault: vault.to_owned(), token: token.to_owned(), client_id: client_id.to_owned() })
     }
 
+    /// `endpoint` may have several segments (`events/ticket`).
     fn url(&self, endpoint: &str) -> Url {
         let mut url = self.base.clone();
         url.path_segments_mut()
             .expect("checked in new")
             .pop_if_empty()
-            .extend(["api", "vaults", self.vault.as_str(), endpoint]);
+            .extend(["api", "vaults", self.vault.as_str()])
+            .extend(endpoint.split('/'));
         url
     }
 
@@ -64,6 +66,27 @@ impl HttpRemote {
             .and_then(|v| v.get("error").and_then(|e| e.as_str()).map(str::to_owned))
             .unwrap_or_default();
         Err(remote_error(format!("{status} {detail}").trim().to_owned()))
+    }
+}
+
+impl HttpRemote {
+    /// A one-time ticket that opens the vault's event stream.
+    pub(crate) fn events_ticket(&self) -> Result<String, SyncError> {
+        #[derive(serde::Deserialize)]
+        struct Ticket {
+            ticket: String,
+        }
+        let response = self.send(self.client.post(self.url("events/ticket")))?;
+        Ok(response.json::<Ticket>().map_err(|e| remote_error(e.to_string()))?.ticket)
+    }
+
+    /// The event stream's WebSocket address for `ticket`, leaving out this client's own changes.
+    pub(crate) fn events_url(&self, ticket: &str) -> Url {
+        let mut url = self.url("events");
+        let scheme = if url.scheme() == "https" { "wss" } else { "ws" };
+        url.set_scheme(scheme).expect("http(s) and ws(s) are interchangeable");
+        url.query_pairs_mut().append_pair("ticket", ticket).append_pair("client", &self.client_id);
+        url
     }
 }
 

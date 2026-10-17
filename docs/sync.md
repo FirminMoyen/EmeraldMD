@@ -70,7 +70,11 @@ While a synced vault is open, the app syncs:
 - when it opens;
 - 1.5 s after local edits (in the app or by other programs, through the file
   watcher);
-- every minute, for other devices' changes;
+- as soon as another device changes the server vault: the app keeps the
+  vault's event stream open (`emerald_sync::watch_changes`) and reconnects
+  on its own, waiting up to a minute between tries; its own changes are not
+  echoed back;
+- every minute, in case the stream is down;
 - on **Sync now** (command palette, or a click on the status bar item).
 
 The status bar shows *Syncing…*, *Synced* (hover for when), *Offline* (local
@@ -89,5 +93,6 @@ so a local test server works without Keychain prompts. Release builds ignore it.
 - Done in the desktop app: synced copies (see above), checked against a
   local server: first sync, server-to-Mac, Mac-to-server and a same-line
   conflict producing a conflict copy on both sides.
-- Next: changes pushed from the server's event stream instead of the
-  one-minute poll; syncing `.obsidian/` settings as an opt-in.
+- Done: changes pushed from the server's event stream (with the
+  one-minute poll as a fallback), tested against a running server.
+- Next: syncing `.obsidian/` settings as an opt-in.
