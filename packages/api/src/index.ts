@@ -16,7 +16,7 @@ export { addPluginStyle, CustomCss, type ThemeManifest } from './custom-css';
 export { Commands } from './commands';
 export { loadAsync } from './component';
 export { installDomHelpers } from './dom';
-export { CodeMirrorEditor, editorInfoExtensions } from './editor';
+export { CodeMirrorEditor, editorInfoExtensions, setLivePreviewEffect } from './editor';
 export { eventKey, eventModifiers, formatHotkey, isMacOS } from './keymap';
 export { renderMarkdownToDom } from './markdown';
 export { setRequestBackend, type RawResponse, type RequestBackend } from './request';

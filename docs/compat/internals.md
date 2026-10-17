@@ -99,6 +99,24 @@ themes ship):
   id) sets a callout type's icon, which snippets use for custom callouts.
 - Checked in the app with Minimal, Things, AnuPpuccin, Blue Topaz and Border.
 
+## Live Preview
+
+The editor (`packages/editor/src/live-preview.ts`) hides formatting marks
+away from the cursor and draws bullets, task checkboxes, rules, images,
+embeds, callouts and tables as widgets (the last four rendered by the reading
+view's pipeline, so post-processors run). Plugins see the mode in two ways:
+
+- `editorLivePreviewField` is `true` in Live Preview and `false` in source
+  mode, and changes when the user switches (`editor:toggle-source`);
+- the Markdown view state has `source: false` in Live Preview and `true` in
+  source mode, as `getState()` / `setState()` report it.
+
+The vault's `livePreview` setting (app.json, on by default) picks the mode a
+note opens in. Classes follow what themes style: `.markdown-source-view.is-live-preview`,
+`HyperMD-header-N`, `HyperMD-quote`, `HyperMD-codeblock(-begin|-end)`,
+`HyperMD-list-line-N`, `HyperMD-task-line[data-task]`, `.list-bullet`,
+`.task-list-item-checkbox`, `.cm-highlight`, `.cm-callout`, `.cm-embed-block`.
+
 ## DOM class names
 
 The UI uses the class names that plugin and theme CSS targets, as described in
@@ -115,9 +133,10 @@ the public theme documentation: `.modal-container > .modal > .modal-close-button
 
 - Node built-ins and `electron` (desktop-only plugins, and some that are not
   marked desktop-only, such as Auto Link Title, which requires `electron`).
-- Bases views and value classes, reading view and live preview, page previews
-  (`HoverPopover`), tabs and splits in the main area, popout windows.
-- Binary file access: `readBinary`/`writeBinary` treat content as UTF-8 text.
+- Bases views and value classes, page previews (`HoverPopover`), tabs and
+  splits in the main area, popout windows.
+- Live Preview widgets from plugins that rely on Obsidian's own Live Preview
+  internals beyond `editorLivePreviewField` (math and Mermaid rendering).
 - `vault.adapter.remove`/`rename` inside `.obsidian` (refused); outside it,
   `remove` moves files to the vault's `.trash`.
 - `onExternalSettingsChange` (plugins are not told when `data.json` changes on disk).

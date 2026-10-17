@@ -241,14 +241,31 @@ async fn show_config_folder(state: State<'_, AppState>, path: String) -> CmdResu
         v.create_config_folder(&path)?;
         v.config_path(&path)
     })?;
-    let opener = if cfg!(target_os = "macos") {
-        "open"
+    open_with_system(full.as_os_str())
+}
+
+/// Opens a web or mail link in the default app. Other schemes are refused.
+#[tauri::command]
+async fn open_external(url: String) -> CmdResult<()> {
+    let scheme = url.split_once(':').map(|(scheme, _)| scheme.to_ascii_lowercase());
+    if !matches!(scheme.as_deref(), Some("http" | "https" | "mailto")) {
+        return Err(format!("only web and mail links can be opened: {url}"));
+    }
+    open_with_system(std::ffi::OsStr::new(&url))
+}
+
+/// Hands a path or URL to the system's default handler (Finder, the browser…).
+fn open_with_system(target: &std::ffi::OsStr) -> CmdResult<()> {
+    let mut command = if cfg!(target_os = "macos") {
+        std::process::Command::new("open")
     } else if cfg!(target_os = "windows") {
-        "explorer"
+        let mut command = std::process::Command::new("rundll32");
+        command.arg("url.dll,FileProtocolHandler");
+        command
     } else {
-        "xdg-open"
+        std::process::Command::new("xdg-open")
     };
-    std::process::Command::new(opener).arg(&full).spawn().map_err(|e| e.to_string())?;
+    command.arg(target).spawn().map_err(|e| e.to_string())?;
     Ok(())
 }
 
@@ -302,6 +319,7 @@ pub fn run() {
             config_stat,
             config_mkdir,
             show_config_folder,
+            open_external,
             community_plugins_trusted,
             set_community_plugins_trusted,
             request_url,

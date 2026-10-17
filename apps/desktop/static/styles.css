@@ -327,6 +327,7 @@ body {
 	--hr-color: var(--background-modifier-border);
 	--hr-thickness: 1px;
 	--checkbox-color: var(--interactive-accent);
+	--list-marker-color: var(--text-faint);
 	--checklist-done-color: var(--text-muted);
 	--checklist-done-decoration: line-through;
 	--table-border-color: var(--background-modifier-border);
@@ -2054,6 +2055,125 @@ a.tag {
 .cm-quote .cm-hmd-internal-link,
 .cm-hmd-internal-link .cm-quote {
 	color: var(--link-color);
+}
+
+/* Code blocks in the editor (both modes): `HyperMD-codeblock` line classes */
+
+.markdown-source-view .HyperMD-codeblock {
+	background: var(--code-background);
+	color: var(--code-normal);
+	font-family: var(--font-monospace);
+	font-size: var(--code-size);
+}
+
+.markdown-source-view .HyperMD-codeblock-begin {
+	border-top-left-radius: var(--code-radius);
+	border-top-right-radius: var(--code-radius);
+}
+
+.markdown-source-view .HyperMD-codeblock-end {
+	border-bottom-left-radius: var(--code-radius);
+	border-bottom-right-radius: var(--code-radius);
+}
+
+/* Live Preview (packages/editor/src/live-preview.ts) */
+
+.is-live-preview .cm-hmd-internal-link,
+.is-live-preview .cm-link.cm-underline {
+	cursor: var(--cursor-link);
+	text-decoration: var(--link-decoration);
+}
+
+.is-live-preview .cm-hmd-internal-link:hover,
+.is-live-preview .cm-link.cm-underline:hover {
+	text-decoration: var(--link-decoration-hover);
+}
+
+.is-live-preview .cm-link.cm-underline {
+	color: var(--link-external-color);
+}
+
+.is-live-preview .cm-hmd-internal-link.is-unresolved {
+	color: var(--link-unresolved-color);
+	opacity: var(--link-unresolved-opacity);
+}
+
+.cm-highlight {
+	border-radius: 2px;
+	background: var(--text-highlight-bg);
+}
+
+.list-bullet::after {
+	content: '';
+	display: inline-block;
+	width: 5px;
+	height: 5px;
+	margin: 0 0.5em 0.2em 0.15em;
+	border-radius: 50%;
+	background: var(--list-marker-color);
+	vertical-align: middle;
+}
+
+.markdown-source-view .task-list-item-checkbox {
+	margin: 0 0.45em 0.15em 0;
+	vertical-align: middle;
+	accent-color: var(--checkbox-color);
+	cursor: var(--cursor-link);
+}
+
+.is-live-preview .HyperMD-task-line[data-task]:not([data-task=' ']) {
+	color: var(--checklist-done-color);
+	text-decoration: var(--checklist-done-decoration);
+}
+
+.is-live-preview .HyperMD-quote {
+	border-left: var(--blockquote-border-thickness) solid var(--blockquote-border-color);
+	padding-inline-start: 1em;
+	background: var(--blockquote-background-color);
+	color: var(--blockquote-color);
+	font-style: var(--blockquote-font-style);
+}
+
+.cm-hr-widget {
+	display: inline-block;
+	width: 100%;
+	vertical-align: middle;
+}
+
+.cm-hr-widget hr {
+	margin: 0.6em 0;
+	border: 0;
+	border-top: var(--hr-thickness) solid var(--hr-color);
+}
+
+.cm-callout,
+.cm-table-widget {
+	margin: 0.4em 0;
+	cursor: text;
+	white-space: normal;
+}
+
+.cm-callout > .callout,
+.cm-table-widget > table {
+	margin: 0;
+}
+
+.cm-embed-block,
+.cm-embed-image {
+	display: inline-block;
+	max-width: 100%;
+	white-space: normal;
+	vertical-align: top;
+}
+
+.cm-embed-block > p,
+.cm-embed-image > p {
+	margin: 0;
+}
+
+.cm-embed-image img,
+.cm-embed-block img {
+	max-width: 100%;
 }
 
 /* Scrollbars */
