@@ -8,7 +8,8 @@
     "build:web": "node build.mjs",
     "dev": "tauri dev",
     "build": "tauri build",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "build:preview": "node build.mjs --preview"
   },
   "dependencies": {
     "@emeraldmd/canvas": "*",

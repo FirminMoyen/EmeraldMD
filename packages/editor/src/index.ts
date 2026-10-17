@@ -7,6 +7,7 @@
 import { closeBrackets, closeBracketsKeymap } from '@codemirror/autocomplete';
 import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirror/commands';
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown';
+import { yamlFrontmatter } from '@codemirror/lang-yaml';
 import { HighlightStyle, indentOnInput, syntaxHighlighting, syntaxTree } from '@codemirror/language';
 import { highlightSelectionMatches, searchKeymap } from '@codemirror/search';
 import { Compartment, EditorState, type Extension } from '@codemirror/state';
@@ -41,6 +42,10 @@ const markdownHighlight = HighlightStyle.define([
 	{ tag: t.list, class: 'cm-list' },
 	{ tag: t.contentSeparator, class: 'cm-hr' },
 	{ tag: [t.processingInstruction, t.meta], class: 'cm-formatting' },
+	// YAML frontmatter (properties).
+	{ tag: [t.propertyName, t.definition(t.propertyName)], class: 'cm-hmd-frontmatter cm-property' },
+	{ tag: [t.string, t.number, t.bool, t.null, t.atom], class: 'cm-hmd-frontmatter cm-value' },
+	{ tag: [t.separator, t.punctuation, t.squareBracket, t.brace], class: 'cm-hmd-frontmatter cm-punctuation' },
 ]);
 
 /** True inside fenced, indented or inline code, where links and tags are plain text. */
@@ -114,7 +119,8 @@ export class MarkdownEditor {
 			closeBrackets(),
 			highlightSelectionMatches(),
 			EditorView.lineWrapping,
-			markdown({ base: markdownLanguage }),
+			// Frontmatter is YAML, not Markdown (otherwise `key: value` above `---` reads as a heading).
+			yamlFrontmatter({ content: markdown({ base: markdownLanguage }) }),
 			syntaxHighlighting(markdownHighlight),
 			decorate(WIKILINK, 'cm-hmd-internal-link'),
 			decorate(TAG, 'cm-hashtag'),

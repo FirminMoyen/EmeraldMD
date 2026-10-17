@@ -1377,3 +1377,22 @@ a.tag {
 	font-size: 11px;
 	text-transform: uppercase;
 }
+
+/* Frontmatter in the source editor */
+
+.cm-hmd-frontmatter {
+	font-family: var(--font-monospace);
+	font-size: 0.88em;
+}
+
+.cm-hmd-frontmatter.cm-property {
+	color: var(--text-accent);
+}
+
+.cm-hmd-frontmatter.cm-value {
+	color: var(--text-normal);
+}
+
+.cm-hmd-frontmatter.cm-punctuation {
+	color: var(--text-faint);
+}
