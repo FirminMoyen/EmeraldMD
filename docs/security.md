@@ -183,8 +183,12 @@ after a reload. Revoking the last token is allowed and locks everyone out.
   address, so one client sending wrong tokens makes devices that have not
   signed in yet wait. Set `trusted_proxies`.
 - **Tokens grant read and write** to whole vaults. There are no read-only
-  tokens or per-folder scopes yet. The config folder is readable, including
-  plugin `data.json` files, which can hold API keys.
+  tokens or per-folder scopes yet. The config folder is readable and
+  writable (`/config/…`, so the app can keep a remote vault's settings,
+  themes and hotkeys there), including plugin `data.json` files, which can
+  hold API keys, and plugin code. The app does not run plugins from server
+  vaults; a client that did would run code any holder of a token for that
+  vault could change.
 - **Search** runs with the vault's write lock (it caches note contents), so
   a heavy query delays writes to that vault. Regular expressions use the
   `regex` crate, which runs in linear time and caps compiled size.

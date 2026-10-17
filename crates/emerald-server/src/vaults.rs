@@ -17,7 +17,7 @@ use std::sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard, Weak};
 
 use axum::extract::ws::Utf8Bytes;
 use emerald_core::vault::Result as VaultResult;
-use emerald_core::{SearchError, SearchOptions, SearchResults, Vault, VaultSession, VaultSnapshot, VaultUpdate};
+use emerald_core::{ConfigListing, FileEntry, SearchError, SearchOptions, SearchResults, Vault, VaultSession, VaultSnapshot, VaultUpdate};
 use emerald_sync::{HashCache, Manifest};
 use notify::{RecursiveMode, Watcher};
 use serde::Serialize;
@@ -160,6 +160,35 @@ impl SharedVault {
         results.total_files = results.files.len();
         results.files.truncate(options.limit.unwrap_or(usize::MAX));
         Ok(results)
+    }
+
+    /// A folder of the config folder: its files and subfolders.
+    pub fn list_config(&self, path: &str) -> VaultResult<ConfigListing> {
+        let inner = self.read_inner();
+        paths::check_config(inner.session.vault(), path)?;
+        inner.session.vault().list_config(path)
+    }
+
+    /// A config file's or folder's entry, or `None` when it does not exist.
+    pub fn config_entry(&self, path: &str) -> VaultResult<Option<FileEntry>> {
+        let inner = self.read_inner();
+        paths::check_config(inner.session.vault(), path)?;
+        inner.session.vault().config_entry(path)
+    }
+
+    /// Writes a config file (settings, a theme, a plugin's data). Not indexed
+    /// and not announced on the event stream. Takes the write lock so writes
+    /// to the vault folder stay one at a time.
+    pub fn write_config(&self, path: &str, data: &str) -> VaultResult<()> {
+        let inner = self.write_inner();
+        paths::check_config(inner.session.vault(), path)?;
+        inner.session.vault().write_config(path, data)
+    }
+
+    pub fn create_config_folder(&self, path: &str) -> VaultResult<()> {
+        let inner = self.write_inner();
+        paths::check_config(inner.session.vault(), path)?;
+        inner.session.vault().create_config_folder(path)
     }
 
     /// Every visible file with its content hash, for sync clients.
