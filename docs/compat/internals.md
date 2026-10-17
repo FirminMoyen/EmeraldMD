@@ -54,6 +54,8 @@ machine does not switch plugins on.
 | `editor.cm` | The CodeMirror 6 `EditorView` behind an `Editor` | Linter, Outliner and other editor plugins |
 | `app.setTheme`, `app.changeTheme`, `app.getTheme`, `app.updateFontSize`, `app.updateFontFamily`, `app.updateAccentColor` | `setTheme('obsidian' \| 'moonstone' \| 'system')` shows a color scheme without saving it; `changeTheme` also saves it as `theme` in appearance.json; the `update*` methods re-apply appearance.json | Minimal Theme Settings |
 | `app.customCss` | `theme`, `themes` (manifests by name), `oldThemes`, `snippets`, `enabledSnippets` (Set), `setTheme`, `setCssEnabledStatus`, `isThemeInstalled`, `getThemeFolder`, `getThemePath`, `getSnippetsFolder`, `getSnippetPath`, `readThemes`, `readSnippets`, `requestLoadTheme`, `requestLoadSnippets` | Theme and snippet managers |
+| `workspace.on('file-menu')` | Fired with `(menu, file, 'file-explorer-context-menu', leaf)` before the file tree's context menu opens, so plugins can add items | Iconize, and most file-management plugins |
+| `fileManager.renameFile` | Renames or moves, then rewrites wikilinks (keeping heading and alias) and Markdown links to what moved; asks first unless `alwaysUpdateLinks` is on | Plugins that move or rename notes |
 | `workspace.on('css-change')` | Fired when the theme, a snippet or an appearance setting changes | Iconize, Minimal Theme Settings, Style Settings |
 
 ## Globals

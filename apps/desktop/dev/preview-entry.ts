@@ -76,13 +76,13 @@ function snapshotIndex(): { metadata: Record<string, CachedMetadata>; links: Rec
 	const resolver = new LinkResolver(paths);
 	const metadata: Record<string, CachedMetadata> = {};
 	const links: Record<string, LinkSets> = {};
-	const pos = (offset: number) => ({ start: { line: 0, col: 0, offset }, end: { line: 0, col: 0, offset } });
+	const pos = (offset: number, length = 0) => ({ start: { line: 0, col: 0, offset }, end: { line: 0, col: 0, offset: offset + length } });
 	for (const path of paths.filter((p) => p.endsWith('.md'))) {
 		const text = files[path] ?? '';
 		const sets: LinkSets = { resolved: {}, unresolved: {} };
 		const cache: CachedMetadata = { links: [], tags: [], headings: [] };
 		for (const m of text.matchAll(/!?\[\[([^\]|#]+)[^\]]*\]\]/g)) {
-			cache.links!.push({ link: m[1]!, original: m[0], displayText: m[1]!, position: pos(m.index) });
+			cache.links!.push({ link: m[1]!, original: m[0], displayText: m[1]!, position: pos(m.index, m[0].length) });
 			const target = resolver.resolve(m[1]!, path);
 			if (target) sets.resolved[target] = (sets.resolved[target] ?? 0) + 1;
 			else sets.unresolved[m[1]!] = (sets.unresolved[m[1]!] ?? 0) + 1;
@@ -140,6 +140,8 @@ mockIPC(
 				return stat && { path: a.path, kind: stat.type, ctime: 0, mtime: 0, size: stat.size };
 			}
 			case 'show_config_folder':
+			case 'reveal_path':
+			case 'open_external':
 				return null;
 			case 'community_plugins_trusted':
 				return false;

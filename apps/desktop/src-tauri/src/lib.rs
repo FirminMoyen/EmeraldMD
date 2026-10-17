@@ -244,6 +244,30 @@ async fn show_config_folder(state: State<'_, AppState>, path: String) -> CmdResu
     open_with_system(full.as_os_str())
 }
 
+/// Shows a file or folder of the open vault in Finder (Explorer, the file manager on Linux).
+#[tauri::command]
+async fn reveal_path(state: State<'_, AppState>, path: String) -> CmdResult<()> {
+    let full = with_vault(&state, |v| v.full_path(&path))?;
+    if !full.exists() {
+        return Err(format!("not found: {path}"));
+    }
+    let mut command = if cfg!(target_os = "macos") {
+        let mut command = std::process::Command::new("open");
+        command.arg("-R").arg(&full);
+        command
+    } else if cfg!(target_os = "windows") {
+        let mut command = std::process::Command::new("explorer");
+        command.arg(format!("/select,{}", full.display()));
+        command
+    } else {
+        let mut command = std::process::Command::new("xdg-open");
+        command.arg(full.parent().unwrap_or(&full));
+        command
+    };
+    command.spawn().map_err(|e| e.to_string())?;
+    Ok(())
+}
+
 /// Opens a web or mail link in the default app. Other schemes are refused.
 #[tauri::command]
 async fn open_external(url: String) -> CmdResult<()> {
@@ -320,6 +344,7 @@ pub fn run() {
             config_mkdir,
             show_config_folder,
             open_external,
+            reveal_path,
             community_plugins_trusted,
             set_community_plugins_trusted,
             request_url,
