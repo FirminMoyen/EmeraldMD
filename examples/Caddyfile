@@ -1,0 +1,9 @@
+# HTTPS for the EmeraldMD server. Caddy gets a certificate for the domain
+# from Let's Encrypt (ports 80 and 443 must be reachable), renews it, and
+# passes WebSocket upgrades and X-Forwarded-For on by itself.
+
+{$EMERALDMD_DOMAIN} {
+	encode zstd gzip
+	header Strict-Transport-Security "max-age=31536000"
+	reverse_proxy emeraldmd:8484
+}

@@ -5,6 +5,10 @@
 //! Query parameters: `epoch` and `since` (from the snapshot) to receive what
 //! happened after it, and `client` (the id the client sends as
 //! `X-EmeraldMD-Client`) to leave out its own changes.
+//!
+//! Each token may hold `max_streams_per_token` streams open. Clients have
+//! nothing to send, so incoming messages are capped at a few KiB. A config
+//! reload closes streams whose token was revoked or whose vault went away.
 
 use std::sync::Arc;
 use std::time::Duration;
@@ -13,6 +17,7 @@ use axum::Extension;
 use axum::extract::ws::{CloseFrame, Message, WebSocket, WebSocketUpgrade, close_code};
 use axum::extract::{Path, Query, State};
 use axum::response::Response;
+use tokio::sync::watch;
 use serde::Deserialize;
 use tokio::sync::broadcast::error::RecvError;
 
@@ -23,6 +28,8 @@ use crate::vaults::{Event, SharedVault, StreamMessage};
 
 /// Keeps idle connections alive through proxies, which often drop them after 60 s.
 const PING_INTERVAL: Duration = Duration::from_secs(30);
+/// Largest message or frame accepted from a client (they only send pings and closes).
+pub const MAX_CLIENT_MESSAGE: usize = 16 * 1024;
 
 #[derive(Deserialize)]
 pub struct StreamParams {
@@ -38,13 +45,44 @@ pub async fn stream(
     Query(params): Query<StreamParams>,
     ws: WebSocketUpgrade,
 ) -> Result<Response, ApiError> {
+    // Subscribed before the access check, so no reload can slip in between.
+    let reloads = state.reloads.subscribe();
     let vault = state.vault(&principal, &id)?;
-    let shutdown = state.shutdown.clone();
+    let Some(permit) = state.streams.acquire(&principal.key) else {
+        return Err(ApiError::too_many("too many open event streams for this token", PING_INTERVAL));
+    };
     tracing::debug!(vault = %id, token = %principal.name, "event stream opened");
-    Ok(ws.on_upgrade(move |socket| run(socket, vault, params, shutdown)))
+    let ws = ws.max_message_size(MAX_CLIENT_MESSAGE).max_frame_size(MAX_CLIENT_MESSAGE);
+    Ok(ws.on_upgrade(move |socket| async move {
+        let watch = Watch { state, principal, reloads };
+        run(socket, vault, params, watch).await;
+        drop(permit);
+    }))
 }
 
-async fn run(mut socket: WebSocket, vault: Arc<SharedVault>, params: StreamParams, mut shutdown: tokio::sync::watch::Receiver<bool>) {
+/// What can end a stream besides the client: shutdown, or a reload that
+/// revokes the token or stops serving the vault.
+struct Watch {
+    state: AppState,
+    principal: Arc<Principal>,
+    reloads: watch::Receiver<u64>,
+}
+
+impl Watch {
+    fn lost_access(&self, vault: &Arc<SharedVault>) -> Option<CloseFrame> {
+        let live = self.state.live();
+        if !live.vaults.get(&vault.id).is_some_and(|current| Arc::ptr_eq(current, vault)) {
+            return Some(CloseFrame { code: close_code::AWAY, reason: "vault no longer served".into() });
+        }
+        if !live.auth.allows(&self.principal.key, &vault.id) {
+            return Some(CloseFrame { code: close_code::POLICY, reason: "access revoked".into() });
+        }
+        None
+    }
+}
+
+async fn run(mut socket: WebSocket, vault: Arc<SharedVault>, params: StreamParams, mut watch: Watch) {
+    let mut shutdown = watch.state.shutdown.clone();
     let since = match (&params.epoch, params.since) {
         (Some(epoch), Some(version)) => Some((epoch.as_str(), version)),
         _ => None,
@@ -88,6 +126,13 @@ async fn run(mut socket: WebSocket, vault: Arc<SharedVault>, params: StreamParam
                 let frame = CloseFrame { code: close_code::AWAY, reason: "server shutting down".into() };
                 let _ = socket.send(Message::Close(Some(frame))).await;
                 return;
+            }
+            Ok(()) = watch.reloads.changed() => {
+                if let Some(frame) = watch.lost_access(&vault) {
+                    tracing::debug!(vault = %vault.id, token = %watch.principal.name, reason = %frame.reason, "closing event stream");
+                    let _ = socket.send(Message::Close(Some(frame))).await;
+                    return;
+                }
             }
         }
     }
