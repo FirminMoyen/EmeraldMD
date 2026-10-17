@@ -38,6 +38,8 @@ const LEGACY_ALIASES: Record<string, string> = {
 	sync: 'refresh-cw',
 	switch: 'repeat',
 	'three-horizontal-bars': 'menu',
+	'links-coming-in': 'arrow-down-left',
+	'links-going-out': 'arrow-up-right',
 	trash: 'trash-2',
 	'up-and-down-arrows': 'arrow-up-down',
 	'vertical-three-dots': 'more-vertical',

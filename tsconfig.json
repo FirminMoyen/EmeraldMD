@@ -13,5 +13,5 @@
     "skipLibCheck": true,
     "noEmit": true
   },
-  "include": ["packages/*/src", "packages/*/test", "apps/*/src", "apps/*/test", "compat/*.ts"]
+  "include": ["packages/*/src", "packages/*/test", "apps/*/src", "apps/*/test", "apps/*/dev", "compat/*.ts"]
 }

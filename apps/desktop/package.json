@@ -8,11 +8,14 @@
     "build:web": "node build.mjs",
     "dev": "tauri dev",
     "build": "tauri build",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "build:preview": "node build.mjs --preview"
   },
   "dependencies": {
+    "@emeraldmd/canvas": "*",
     "@emeraldmd/core": "*",
     "@emeraldmd/editor": "*",
+    "@emeraldmd/graph": "*",
     "@tauri-apps/api": "^2.12.4",
     "@tauri-apps/plugin-dialog": "^2.8.3"
   },

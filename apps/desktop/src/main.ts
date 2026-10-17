@@ -29,6 +29,7 @@ import { listen } from '@tauri-apps/api/event';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { ask, open as openDialog } from '@tauri-apps/plugin-dialog';
 import { CommandPalette } from './command-palette';
+import { registerCoreViews, revealSearch } from './core-views';
 import { RemoteVaults } from './remote';
 import { TauriBackend, TauriConfigStore, tauriRequestBackend, tauriTrustStore } from './tauri-backend';
 
@@ -229,6 +230,11 @@ class EmeraldApp {
 		this.activeFile = null;
 		this.mountWorkspace(app);
 		this.registerCommands(app);
+		registerCoreViews(app, {
+			search: backend.search ? (query, options) => backend.search!(query, options) : undefined,
+			openFile: (file, select) => this.openFileAt(file, select),
+			openSearch: (query) => revealSearch(app, query),
+		});
 
 		for (const name of ['create', 'delete', 'rename']) vault.on(name, () => this.queueTreeRender());
 		vault.on('rename', (file: TAbstractFile) => {
@@ -287,6 +293,12 @@ class EmeraldApp {
 		const view = new MarkdownView(ws.rootLeaf);
 		view.editor = new CodeMirrorEditor(this.editor.view);
 		view.titleEl.replaceWith(this.el.title);
+		// Reading view toggle, like the book/pencil button in Obsidian's note header.
+		const modeButton = view.addAction('book-open', 'Reading view (⌘E)', () => void this.toggleReading());
+		view.onModeChange = (mode) => {
+			setIcon(modeButton, mode === 'preview' ? 'pencil' : 'book-open');
+			modeButton.setAttribute('aria-label', mode === 'preview' ? 'Edit (⌘E)' : 'Reading view (⌘E)');
+		};
 		view.actionsEl.append(this.el.trash);
 		view.contentEl.append(this.el.editor, this.el.noFile);
 		this.markdownView = view;
@@ -319,6 +331,16 @@ class EmeraldApp {
 			},
 		});
 		add({
+			id: 'markdown:toggle-preview',
+			name: 'Toggle reading view',
+			hotkeys: [{ modifiers: ['Mod'], key: 'E' }],
+			checkCallback: (checking) => {
+				if (!this.activeFile) return false;
+				if (!checking) void this.toggleReading();
+				return true;
+			},
+		});
+		add({
 			id: 'app:delete-file',
 			name: 'Delete current file',
 			checkCallback: (checking) => {
@@ -327,7 +349,8 @@ class EmeraldApp {
 				return true;
 			},
 		});
-		add({ id: 'app:open-vault', name: 'Open another vault', hotkeys: [{ modifiers: ['Mod'], key: 'O' }], callback: () => this.pickVault() });
+		// Mod+O is the quick switcher, as in Obsidian.
+		add({ id: 'app:open-vault', name: 'Open another vault', callback: () => this.pickVault() });
 		add({ id: 'app:toggle-left-sidebar', name: 'Toggle left sidebar', callback: () => this.toggleSplit($('left-split')) });
 		add({ id: 'app:toggle-right-sidebar', name: 'Toggle right sidebar', callback: () => this.toggleSplit($('right-split')) });
 		add({ id: 'app:reload', name: 'Reload app without saving', callback: () => window.location.reload() });
@@ -336,6 +359,26 @@ class EmeraldApp {
 	private toggleSplit(el: HTMLElement): void {
 		el.toggleClass('is-collapsed', !el.hasClass('is-collapsed'));
 		this.app?.workspace.trigger('resize');
+	}
+
+	/** Switches the open note between editing and the reading view (saving first). */
+	private async toggleReading(): Promise<void> {
+		const view = this.markdownView;
+		if (!view || !this.activeFile) return;
+		await this.flush();
+		await view.setMode(view.getMode() === 'preview' ? 'source' : 'preview');
+	}
+
+	/** Opens a file; for notes, `select` is a UTF-16 range to select and scroll to. */
+	private async openFileAt(file: TFile, select?: { from: number; to: number }): Promise<void> {
+		await this.openFile(file);
+		const editor = this.markdownView?.editor;
+		if (!select || file !== this.activeFile || !editor) return;
+		const from = editor.offsetToPos(select.from);
+		const to = editor.offsetToPos(select.to);
+		editor.setSelection(from, to);
+		editor.scrollIntoView({ from, to }, true);
+		editor.focus();
 	}
 
 	private async openFile(file: TFile): Promise<void> {
@@ -359,6 +402,7 @@ class EmeraldApp {
 		this.markdownView.file = file;
 		this.markdownView.data = text;
 		this.editor.setValue(text);
+		void this.markdownView.renderPreview();
 		this.el.editor.hidden = false;
 		this.el.noFile.hidden = true;
 		this.renderHeader();
@@ -440,6 +484,7 @@ class EmeraldApp {
 		this.applyingExternalChange = true;
 		try {
 			this.editor.replaceValue(text);
+			void this.markdownView?.renderPreview();
 		} finally {
 			this.applyingExternalChange = false;
 		}

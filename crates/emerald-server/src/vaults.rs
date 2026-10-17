@@ -12,7 +12,7 @@ use std::sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard, Weak};
 
 use axum::extract::ws::Utf8Bytes;
 use emerald_core::vault::Result as VaultResult;
-use emerald_core::{VaultSession, VaultSnapshot, VaultUpdate};
+use emerald_core::{SearchError, SearchOptions, SearchResults, VaultSession, VaultSnapshot, VaultUpdate};
 use emerald_sync::{HashCache, Manifest};
 use notify::{RecursiveMode, Watcher};
 use serde::Serialize;
@@ -120,6 +120,11 @@ impl SharedVault {
 
     pub fn read_bytes(&self, path: &str) -> VaultResult<Vec<u8>> {
         self.read_inner().session.vault().read_bytes(path)
+    }
+
+    /// Full-text search; takes the write lock because the session caches note contents.
+    pub fn search(&self, query: &str, options: &SearchOptions) -> Result<SearchResults, SearchError> {
+        self.write_inner().session.search(query, options)
     }
 
     /// Every visible file with its content hash, for sync clients.

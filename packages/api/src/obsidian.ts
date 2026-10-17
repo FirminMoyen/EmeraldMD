@@ -79,6 +79,7 @@ export {
 } from './util';
 export { Vault } from './vault';
 export { EditableFileView, FileView, ItemView, MarkdownView, TextFileView, View } from './views';
+export type { MarkdownPreviewView } from './views';
 export { Workspace, WorkspaceItem, WorkspaceLeaf, WorkspaceParent, WorkspaceRibbon, WorkspaceRoot, WorkspaceSidedock } from './workspace';
 
 export type { DataAdapter, DataWriteOptions, ListedFiles, Stat } from './adapter';
