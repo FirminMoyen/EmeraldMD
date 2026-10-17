@@ -53,9 +53,10 @@ end-to-end tests; the rest is in priority order within each section.
 
 ### Native macOS
 
-- [ ] App menu (File, Edit, View, Window, Help) with standard shortcuts;
-      ⌘W, ⌘Q, ⌘, behave as on macOS
-- [ ] Window size, position and workspace (open note, sidebars) restored
+- [x] App menu (EmeraldMD, File, Edit, View, Window) with standard
+      shortcuts; ⌘W closes the note, ⌘Q saves before quitting, ⌘, opens
+      settings
+- [x] Window size, position and workspace (open note, sidebars) restored
 - [ ] Large vaults: 10,000 notes open in a few seconds; typing stays smooth
 - [ ] Signed and notarized DMG (needs an Apple Developer account: owner)
 

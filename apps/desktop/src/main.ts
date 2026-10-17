@@ -45,6 +45,9 @@ const REOPEN_FILE_KEY = 'emeraldmd:reopen-file';
 
 /** Same autosave delay as Obsidian. */
 const SAVE_DELAY_MS = 2000;
+/** Local storage keys (per vault, through `app.saveLocalStorage`). */
+const LAST_FILE_KEY = 'emerald-last-file';
+const SIDEBARS_KEY = 'emerald-sidebars';
 
 
 function $(id: string): HTMLElement {
@@ -90,6 +93,7 @@ class EmeraldApp {
 	private applyingExternalChange = false;
 	private renderQueued = false;
 	private explorer: FileExplorer | null = null;
+	private lastHandledShortcut = -Infinity;
 	private readonly editor: MarkdownEditor;
 	private readonly el = {
 		emptyState: $('empty-state'),
@@ -156,6 +160,26 @@ class EmeraldApp {
 			if (this.backend instanceof TauriBackend) this.vault?.applyUpdate(event.payload);
 		});
 		void getCurrentWindow().onCloseRequested(() => this.flush());
+		// The native menu (src-tauri/src/menu.rs) and quitting.
+		void listen<string>('menu-command', (event) => this.runMenuCommand(event.payload));
+		void listen('quit-requested', async () => {
+			await this.flush().catch((err: unknown) => console.error(err));
+			await invoke('quit_app');
+		});
+		window.addEventListener('keydown', (e) => {
+			// A shortcut the page handled; its menu item must not run the command again.
+			if (e.defaultPrevented && (e.metaKey || e.ctrlKey)) this.lastHandledShortcut = performance.now();
+		});
+		// Leaving the window saves, so nothing is lost if the app is quit from elsewhere.
+		window.addEventListener('blur', () => void this.flush());
+	}
+
+	/** A menu bar item: runs the command with that id, unless the page just ran it from the same shortcut. */
+	private runMenuCommand(id: string): void {
+		if (performance.now() - this.lastHandledShortcut < 300) return;
+		if (id === 'app:open-vault') return void this.pickVault();
+		if (id === 'emerald:connect-server') return this.remote.showDialog();
+		if (this.app) this.app.commands.executeCommandById(id);
 	}
 
 	private get vault(): Vault | null {
@@ -295,7 +319,13 @@ class EmeraldApp {
 		this.el.emptyState.hidden = true;
 		this.el.workspace.hidden = false;
 		this.renderTree();
-		const recent = (keep && vault.getFileByPath(keep)) || vault.getMarkdownFiles().sort((a, b) => b.stat.mtime - a.stat.mtime)[0];
+		// The note open when the app last closed, else the most recently edited one.
+		const last = app.loadLocalStorage(LAST_FILE_KEY);
+		const recent =
+			(keep && vault.getFileByPath(keep)) ||
+			(typeof last === 'string' && vault.getFileByPath(last)) ||
+			vault.getMarkdownFiles().sort((a, b) => b.stat.mtime - a.stat.mtime)[0];
+		this.restoreSidebars(app);
 		if (recent) await this.openFile(recent);
 		else this.closeFile();
 
@@ -387,6 +417,16 @@ class EmeraldApp {
 			},
 		});
 		add({
+			id: 'workspace:close',
+			name: 'Close current note',
+			hotkeys: [{ modifiers: ['Mod'], key: 'W' }],
+			checkCallback: (checking) => {
+				if (!this.activeFile) return false;
+				if (!checking) void this.flush().then(() => this.closeFile());
+				return true;
+			},
+		});
+		add({
 			id: 'editor:toggle-source',
 			name: 'Toggle Live Preview/Source mode',
 			checkCallback: (checking) => {
@@ -407,6 +447,7 @@ class EmeraldApp {
 		});
 		// Mod+O is the quick switcher, as in Obsidian.
 		add({ id: 'app:open-vault', name: 'Open another vault', callback: () => this.pickVault() });
+		add({ id: 'emerald:connect-server', name: 'Connect to a server vault', callback: () => this.remote.showDialog() });
 		add({ id: 'app:toggle-left-sidebar', name: 'Toggle left sidebar', callback: () => this.toggleSplit($('left-split')) });
 		add({ id: 'app:toggle-right-sidebar', name: 'Toggle right sidebar', callback: () => this.toggleSplit($('right-split')) });
 		add({ id: 'app:reload', name: 'Reload app without saving', callback: () => window.location.reload() });
@@ -414,7 +455,16 @@ class EmeraldApp {
 
 	private toggleSplit(el: HTMLElement): void {
 		el.toggleClass('is-collapsed', !el.hasClass('is-collapsed'));
+		this.app?.saveLocalStorage(SIDEBARS_KEY, { left: !$('left-split').hasClass('is-collapsed'), right: !$('right-split').hasClass('is-collapsed') });
 		this.app?.workspace.trigger('resize');
+	}
+
+	/** Shows or hides the sidebars as they were when the vault was last open. */
+	private restoreSidebars(app: App): void {
+		const saved = app.loadLocalStorage(SIDEBARS_KEY) as { left?: unknown; right?: unknown } | null;
+		if (!saved) return;
+		$('left-split').toggleClass('is-collapsed', saved.left === false);
+		$('right-split').toggleClass('is-collapsed', saved.right === false);
 	}
 
 	/**
@@ -512,10 +562,12 @@ class EmeraldApp {
 		this.renderSidePanels();
 		this.editor.focus();
 		ws.recordOpenFile(file);
+		this.app.saveLocalStorage(LAST_FILE_KEY, file.path);
 		ws.trigger('file-open', file);
 	}
 
 	private closeFile(): void {
+		this.app?.saveLocalStorage(LAST_FILE_KEY, null);
 		clearTimeout(this.saveTimer);
 		this.dirty = false;
 		this.activeFile = null;

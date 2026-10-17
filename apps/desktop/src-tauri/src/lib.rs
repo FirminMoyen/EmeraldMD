@@ -2,6 +2,7 @@
 //! changes made outside the app as `vault-changed` events.
 
 mod http;
+mod menu;
 mod remote;
 mod search;
 mod synced;
@@ -323,8 +324,13 @@ async fn request_url(request: http::HttpRequest) -> CmdResult<http::HttpResponse
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    tauri::Builder::default()
+    let builder = tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        // Window size and position, restored at launch.
+        .plugin(tauri_plugin_window_state::Builder::default().build());
+    #[cfg(target_os = "macos")]
+    let builder = builder.menu(menu::build).on_menu_event(menu::on_event);
+    builder
         .manage(AppState::default())
         .invoke_handler(tauri::generate_handler![
             last_vault,
@@ -359,7 +365,18 @@ pub fn run() {
             synced::forget_synced_vault,
             synced::open_vault_sync,
             synced::sync_now,
+            menu::quit_app,
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running EmeraldMD");
+        .build(tauri::generate_context!())
+        .expect("error while building EmeraldMD")
+        .run(|app, event| {
+            // Quitting from the Dock or the system: let the page save first.
+            if let tauri::RunEvent::ExitRequested { api, .. } = event
+                && !menu::may_exit()
+                && !app.webview_windows().is_empty()
+            {
+                api.prevent_exit();
+                menu::request_quit(app);
+            }
+        });
 }
