@@ -59,9 +59,10 @@ end-to-end tests; the rest is in priority order within each section.
 - [x] Online remote vaults in the app (Connect to server, token in Keychain)
 - [x] Sync engine (offline copy, three-way merge, conflict copies) and its
       server endpoints
-- [ ] Search on remote vaults (server endpoint)
-- [ ] Synced mode in the app: choose a local folder, sync on open, after
-      edits and on server events; status and conflict notices
+- [x] Search on remote vaults (server endpoint)
+- [x] Synced mode in the app: choose a local folder, sync on open, after
+      edits and every minute; status and conflict notices
+- [ ] Synced mode: sync immediately on server events (event stream)
 - [ ] `.obsidian` settings and plugins for remote and synced vaults
 - [ ] Server operations: health endpoint, token management CLI (list,
       revoke), Docker Compose example, published image

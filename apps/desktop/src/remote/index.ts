@@ -6,6 +6,8 @@
  */
 
 import { RemoteBackend, RemoteError, type RemoteStatus, type VaultBackend, type VaultSnapshot, type VaultUpdate } from '@emeraldmd/core';
+import { invoke } from '@tauri-apps/api/core';
+import { open as openDialog } from '@tauri-apps/plugin-dialog';
 import { ConnectModal, describeError, hostOf } from './connect-modal';
 import {
 	forgetRemoteVault,
@@ -27,6 +29,8 @@ export interface RemoteHost {
 	applyUpdate(update: VaultUpdate): void;
 	showEmptyState(): void;
 	notice(message: string): void;
+	/** Opens a local vault folder (used for synced copies). */
+	openLocal(path: string): Promise<void>;
 }
 
 const STATUS_TEXT: Record<RemoteStatus, string> = {
@@ -135,9 +139,29 @@ export class RemoteVaults {
 			...options,
 			recent: this.recent.filter((v) => !this.active || !sameVault(v, this.active.vault)),
 			open: (vault, token, remember) => this.connect(vault, token, remember),
+			openSynced: (vault, token) => this.openSynced(vault, token),
 			openRecent: (vault) => void this.openRecent(vault),
 		});
 		this.modal.show();
+	}
+
+	/**
+	 * Creates a synced copy: a folder named after the vault inside the chosen
+	 * location, registered with the server and token, then opened like any
+	 * local vault (the first sync fills it).
+	 */
+	private async openSynced(vault: RemoteVault, token: string): Promise<void> {
+		const parent = await openDialog({ directory: true, title: `Choose where to keep "${vault.name}" on this Mac` });
+		if (typeof parent !== 'string') throw new Error('Choose a folder for the synced copy.');
+		const name = vault.name.replace(/[\\/:]/g, '-').trim() || vault.vaultId;
+		const localPath = await invoke<string>('create_synced_vault', {
+			serverUrl: vault.serverUrl,
+			vaultId: vault.vaultId,
+			name: vault.name,
+			token,
+			localPath: `${parent}/${name}`,
+		});
+		await this.host.openLocal(localPath);
 	}
 
 	private async connect(vault: RemoteVault, token: string, remember: boolean): Promise<void> {

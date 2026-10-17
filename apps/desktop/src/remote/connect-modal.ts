@@ -8,6 +8,8 @@ export interface ConnectModalOptions {
 	recent: RemoteVault[];
 	/** Opens the chosen vault; a thrown error is shown in the dialog. */
 	open(vault: RemoteVault, token: string, remember: boolean): Promise<void>;
+	/** Sets up a synced local copy of the chosen vault instead of working online. */
+	openSynced(vault: RemoteVault, token: string): Promise<void>;
 	openRecent(vault: RemoteVault): void;
 }
 
@@ -51,6 +53,7 @@ export class ConnectModal {
 	private readonly urlInput = el('input');
 	private readonly tokenInput = el('input');
 	private readonly remember = el('input');
+	private readonly synced = el('input');
 	private readonly error = el('div', 'emerald-connect-error');
 	private readonly choice = el('div', 'emerald-connect-choice');
 	private readonly submit = el('button', 'mod-cta', 'Connect');
@@ -87,6 +90,8 @@ export class ConnectModal {
 		this.tokenInput.autocomplete = 'off';
 		this.remember.type = 'checkbox';
 		this.remember.checked = true;
+		this.synced.type = 'checkbox';
+		this.synced.checked = false;
 		this.error.setAttribute('role', 'alert');
 		this.error.hidden = !options.message;
 		this.error.textContent = options.message ?? '';
@@ -102,6 +107,7 @@ export class ConnectModal {
 			this.field('Server URL', this.urlInput),
 			this.field('Access token', this.tokenInput),
 			this.checkbox('Remember this server; the token is kept in the system keychain', this.remember),
+			this.checkbox('Keep a synced copy on this Mac, to work offline', this.synced),
 			this.error,
 			this.choice,
 			buttons,
@@ -219,7 +225,9 @@ export class ConnectModal {
 	private async openVault(serverUrl: string, info: RemoteVaultInfo, token: string): Promise<void> {
 		this.setBusy(true);
 		try {
-			await this.options.open({ serverUrl, vaultId: info.id, name: info.name }, token, this.remember.checked);
+			const vault = { serverUrl, vaultId: info.id, name: info.name };
+			if (this.synced.checked) await this.options.openSynced(vault, token);
+			else await this.options.open(vault, token, this.remember.checked);
 			this.close();
 		} catch (err) {
 			this.setBusy(false);
