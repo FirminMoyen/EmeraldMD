@@ -10,6 +10,7 @@ import { Appearance, type BaseTheme, type ThemeSetting } from './appearance';
 import { Commands } from './commands';
 import { CustomCss } from './custom-css';
 import { FileManager } from './file-manager';
+import { HotkeyManager } from './hotkeys';
 import { Keymap, Scope } from './keymap';
 import { MetadataTypeManager } from './metadata-types';
 import type { Modal } from './modal';
@@ -140,6 +141,8 @@ export class App {
 	appId: string;
 	/** @internal */
 	commands: Commands;
+	/** @internal Hotkeys per command; call `load()` once the vault is open. */
+	hotkeyManager: HotkeyManager;
 	/** @internal */
 	setting: AppSetting;
 	/** @internal */
@@ -181,6 +184,7 @@ export class App {
 		this.dom = { appContainerEl: document.body.querySelector<HTMLElement>('.app-container') ?? document.body };
 		this.workspace = new Workspace(this, options.workspaceEl);
 		this.fileManager = new FileManager(this);
+		this.hotkeyManager = new HotkeyManager(this);
 		this.commands = new Commands(this);
 		this.setting = new AppSetting(this);
 		this.metadataTypeManager = new MetadataTypeManager(this);

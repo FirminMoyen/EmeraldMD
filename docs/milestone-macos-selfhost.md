@@ -48,8 +48,11 @@ end-to-end tests; the rest is in priority order within each section.
 - [x] Settings → Appearance: light/dark/system, accent colour, theme, fonts,
       font size, ribbon, snippets
 - [ ] Browse and install themes from the community list
-- [ ] Settings: editor (line width, spellcheck, Vim), files and links (new
-      note location, link format), hotkeys
+- [x] Settings: editor (default modes, line width, strict line breaks, line
+      numbers, spellcheck, brackets, indentation), files and links (deletion
+      prompt, new note location, link format and updates, attachments),
+      hotkeys (recorded, stored in hotkeys.json, conflicts shown)
+- [ ] Vim key bindings
 
 ### Native macOS
 

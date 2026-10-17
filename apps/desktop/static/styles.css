@@ -699,7 +699,6 @@ button {
 }
 
 .markdown-source-view .cm-content {
-	max-width: var(--file-line-width);
 	margin: 0 auto;
 	padding: var(--file-margins);
 	padding-bottom: 50vh;
@@ -1776,8 +1775,13 @@ a.tag {
 	display: none !important;
 }
 
-.markdown-preview-view {
+/* Settings → Editor → Readable line length */
+.markdown-source-view.is-readable-line-width .cm-content,
+.markdown-preview-view.is-readable-line-width {
 	max-width: var(--file-line-width);
+}
+
+.markdown-preview-view {
 	margin: 0 auto;
 	padding: var(--file-margins);
 	padding-bottom: 30vh;
@@ -2238,6 +2242,77 @@ a.tag {
 
 ::-webkit-scrollbar-corner {
 	background: transparent;
+}
+
+/* Settings → Hotkeys */
+
+.setting-command-hotkeys {
+	display: flex;
+	flex-wrap: wrap;
+	justify-content: flex-end;
+	gap: 6px;
+}
+
+.setting-hotkey {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	padding: 2px 8px;
+	border-radius: var(--radius-s);
+	background: var(--background-modifier-hover);
+	font-size: var(--font-ui-smaller);
+	white-space: nowrap;
+}
+
+.setting-hotkey.mod-empty {
+	background: transparent;
+	color: var(--text-faint);
+}
+
+.setting-hotkey.mod-active {
+	outline: 1px solid var(--interactive-accent);
+	color: var(--text-accent);
+}
+
+.setting-delete-hotkey {
+	color: var(--text-faint);
+	cursor: var(--cursor-link);
+}
+
+.setting-delete-hotkey:hover {
+	color: var(--text-error);
+}
+
+.hotkey-setting.has-conflict .setting-hotkey,
+.hotkey-setting.has-conflict .setting-item-description {
+	color: var(--text-error);
+}
+
+.hotkey-search-container .setting-item-control,
+.hotkey-search-container .search-input-container {
+	flex: 1;
+}
+
+.hotkey-search-container input[type='search'] {
+	width: 100%;
+}
+
+/* Settings → Editor → Show line numbers */
+
+.markdown-source-view .cm-gutters {
+	border: 0;
+	background: transparent;
+	color: var(--text-faint);
+	font-size: var(--font-ui-smaller);
+}
+
+/* With a limited line width, the numbers stay next to the text: the free space goes either side of both. */
+.markdown-source-view.is-readable-line-width .cm-gutters {
+	margin-inline-start: auto;
+}
+
+.markdown-source-view.is-readable-line-width .cm-gutters ~ .cm-content {
+	margin-inline-start: 0;
 }
 
 /* Settings → Appearance */

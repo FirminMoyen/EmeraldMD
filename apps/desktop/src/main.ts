@@ -34,6 +34,7 @@ import { getCurrentWindow } from '@tauri-apps/api/window';
 import { ask, open as openDialog } from '@tauri-apps/plugin-dialog';
 import { AppearanceTab } from './appearance-tab';
 import { FileExplorer } from './file-explorer';
+import { EditorTab, FilesTab, HotkeysTab } from './settings-tabs';
 import { CommandPalette } from './command-palette';
 import { registerCoreViews, revealSearch } from './core-views';
 import { RemoteVaults } from './remote';
@@ -286,15 +287,22 @@ class EmeraldApp {
 			notice: (message) => this.notice(message),
 		});
 		await app.metadataTypeManager.load();
+		await app.hotkeyManager.load();
 		// Before plugins load, so their styles go under the theme's (see addPluginStyle).
 		app.appearance.load();
 		await app.customCss.load();
+		// The order of Obsidian's settings.
+		app.setting.addBuiltInTab(new EditorTab(app));
+		app.setting.addBuiltInTab(new FilesTab(app));
 		app.setting.addBuiltInTab(
 			new AppearanceTab(app, { showFolder: local ? (path) => invoke('show_config_folder', { path }) : undefined }),
 		);
+		app.setting.addBuiltInTab(new HotkeysTab(app));
 		if (local) void listen<string>('config-changed', (event) => app.customCss.onConfigFileChanged(event.payload));
 		this.activeFile = null;
 		this.mountWorkspace(app);
+		this.applyEditorSettings();
+		vault.on('config-changed', (key: string) => this.onConfigChanged(key));
 		this.registerCommands(app);
 		if (local) void setupSyncStatus(app, { notice: (message) => this.notice(message), reconnect: () => this.remote.showDialog() });
 		registerCoreViews(app, {
@@ -326,7 +334,10 @@ class EmeraldApp {
 			(typeof last === 'string' && vault.getFileByPath(last)) ||
 			vault.getMarkdownFiles().sort((a, b) => b.stat.mtime - a.stat.mtime)[0];
 		this.restoreSidebars(app);
-		if (recent) await this.openFile(recent);
+		if (recent) {
+			await this.openFile(recent);
+			if (vault.getConfig('defaultViewMode') === 'preview') await this.markdownView?.setMode('preview');
+		}
 		else this.closeFile();
 
 		if (!local) {
@@ -492,6 +503,29 @@ class EmeraldApp {
 		}
 		if (!embeds.length || this.activeFile !== note) return;
 		this.editor.view.dispatch({ changes: { from: pos, insert: embeds.join('\n') }, selection: { anchor: pos + embeds.join('\n').length } });
+	}
+
+	/** Applies Settings → Editor (app.json) to the editor and the reading view. */
+	private applyEditorSettings(): void {
+		const vault = this.vault;
+		if (!vault) return;
+		const get = (key: string) => vault.getConfig(key);
+		const readable = get('readableLineLength') !== false;
+		this.editor.configure({
+			lineNumbers: get('showLineNumber') === true,
+			spellcheck: get('spellcheck') === true,
+			tabSize: Math.min(8, Math.max(1, Number(get('tabSize')) || 4)),
+			useTab: get('useTab') !== false,
+			autoPairBrackets: get('autoPairBrackets') !== false,
+			readableLineLength: readable,
+		});
+		this.markdownView?.previewMode.containerEl.toggleClass('is-readable-line-width', readable);
+	}
+
+	private onConfigChanged(key: string): void {
+		if (['showLineNumber', 'spellcheck', 'tabSize', 'useTab', 'autoPairBrackets', 'readableLineLength'].includes(key)) this.applyEditorSettings();
+		else if (key === 'strictLineBreaks') void this.markdownView?.renderPreview();
+		else if (key === 'livePreview') this.markdownView?.setLivePreview(this.vault?.getConfig('livePreview') !== false);
 	}
 
 	/** Renders Markdown into a Live Preview widget (embeds, callouts, tables), like the reading view. */
@@ -698,8 +732,10 @@ class EmeraldApp {
 	private async trash(file: TAbstractFile): Promise<void> {
 		if (!this.vault) return;
 		const what = file instanceof TFolder ? `the folder "${file.name}" and everything in it` : `"${file.name}"`;
-		const ok = await ask(`Move ${what} to the vault's .trash folder?`, { title: 'Move to trash', kind: 'warning' });
-		if (!ok) return;
+		if (this.app?.vault.getConfig('promptDelete') !== false) {
+			const ok = await ask(`Move ${what} to the vault's .trash folder?`, { title: 'Move to trash', kind: 'warning' });
+			if (!ok) return;
+		}
 		try {
 			if (this.activeFile && isInside(this.activeFile, file)) await this.flush();
 			await this.vault.trash(file);

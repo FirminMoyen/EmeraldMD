@@ -9,7 +9,7 @@ import { closeBrackets, closeBracketsKeymap } from '@codemirror/autocomplete';
 import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirror/commands';
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown';
 import { yamlFrontmatter } from '@codemirror/lang-yaml';
-import { HighlightStyle, indentOnInput, syntaxHighlighting, syntaxTree } from '@codemirror/language';
+import { HighlightStyle, indentOnInput, indentUnit, syntaxHighlighting, syntaxTree } from '@codemirror/language';
 import { highlightSelectionMatches, searchKeymap } from '@codemirror/search';
 import { Compartment, EditorState, type Extension, type StateEffect } from '@codemirror/state';
 import {
@@ -18,6 +18,7 @@ import {
 	drawSelection,
 	EditorView,
 	keymap,
+	lineNumbers,
 	MatchDecorator,
 	placeholder,
 	ViewPlugin,
@@ -101,6 +102,41 @@ export function wikilinkAt(lineText: string, col: number): string | null {
 	return null;
 }
 
+/** The vault's editor settings (app.json), as the editor applies them. */
+export interface EditorSettings {
+	/** `showLineNumber` */
+	lineNumbers: boolean;
+	/** `spellcheck` */
+	spellcheck: boolean;
+	/** `tabSize` */
+	tabSize: number;
+	/** `useTab`: indent with tabs rather than spaces. */
+	useTab: boolean;
+	/** `autoPairBrackets` */
+	autoPairBrackets: boolean;
+	/** `readableLineLength`: the `is-readable-line-width` class on the container. */
+	readableLineLength: boolean;
+}
+
+export const DEFAULT_EDITOR_SETTINGS: EditorSettings = {
+	lineNumbers: false,
+	spellcheck: false,
+	tabSize: 4,
+	useTab: true,
+	autoPairBrackets: true,
+	readableLineLength: true,
+};
+
+function settingsExtensions(settings: EditorSettings): Extension {
+	return [
+		settings.lineNumbers ? lineNumbers() : [],
+		settings.autoPairBrackets ? closeBrackets() : [],
+		EditorState.tabSize.of(settings.tabSize),
+		indentUnit.of(settings.useTab ? '\t' : ' '.repeat(settings.tabSize)),
+		EditorView.contentAttributes.of({ spellcheck: String(settings.spellcheck), autocorrect: settings.spellcheck ? 'on' : 'off' }),
+	];
+}
+
 export interface MarkdownEditorOptions {
 	parent: HTMLElement;
 	onChange?: (text: string) => void;
@@ -121,6 +157,8 @@ export class MarkdownEditor {
 	private readonly extra = new Compartment();
 	private extraExtensions: Extension = [];
 	private readonly mode = new Compartment();
+	private readonly settingsCompartment = new Compartment();
+	private settings: EditorSettings = DEFAULT_EDITOR_SETTINGS;
 	private readonly livePreviewExtension: Extension;
 	private livePreviewOn = false;
 	private readonly parent: HTMLElement;
@@ -132,7 +170,6 @@ export class MarkdownEditor {
 			history(),
 			drawSelection(),
 			indentOnInput(),
-			closeBrackets(),
 			highlightSelectionMatches(),
 			EditorView.lineWrapping,
 			// Frontmatter is YAML, not Markdown (otherwise `key: value` above `---` reads as a heading).
@@ -186,6 +223,7 @@ export class MarkdownEditor {
 			}),
 		];
 		this.view = new EditorView({ parent: options.parent, state: this.createState('') });
+		this.parent.classList.toggle('is-readable-line-width', this.settings.readableLineLength);
 	}
 
 	getValue(): string {
@@ -204,6 +242,13 @@ export class MarkdownEditor {
 			changes: { from: 0, to: this.view.state.doc.length, insert: text },
 			selection: { anchor: head },
 		});
+	}
+
+	/** Applies the vault's editor settings. */
+	configure(settings: EditorSettings): void {
+		this.settings = settings;
+		this.parent.classList.toggle('is-readable-line-width', settings.readableLineLength);
+		this.view.dispatch({ effects: this.settingsCompartment.reconfigure(settingsExtensions(settings)) });
 	}
 
 	isLivePreview(): boolean {
@@ -234,7 +279,12 @@ export class MarkdownEditor {
 	private createState(doc: string): EditorState {
 		return EditorState.create({
 			doc,
-			extensions: [this.extensions, this.mode.of(this.livePreviewOn ? this.livePreviewExtension : []), this.extra.of(this.extraExtensions)],
+			extensions: [
+				this.extensions,
+				this.settingsCompartment.of(settingsExtensions(this.settings)),
+				this.mode.of(this.livePreviewOn ? this.livePreviewExtension : []),
+				this.extra.of(this.extraExtensions),
+			],
 		});
 	}
 }
