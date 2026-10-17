@@ -15,6 +15,8 @@ const files: Record<string, string> = {
 		'# Welcome\n\nThis is the browser preview of EmeraldMD. See [[Projects/Plan]] and [[Ideas]].\n\n## Getting started\n\nTry #inbox and #project/alpha, the quick switcher (⌘O) and the command palette (⌘P).\n\n## Search\n\nSearch for flour or plan.\n',
 	'Projects/Plan.md': '---\ntags: [project/alpha]\nstatus: draft\n---\n# Plan\n\nBack to [[Welcome]]. Buy flour.\n\n## Goals\n\n- [ ] ship [[Ideas]]\n- [x] write the plan\n',
 	'Ideas.md': '# Ideas\n\nLinked from [[Welcome]] #inbox\n\n- A canvas: [[Board.canvas]]\n',
+	'Styles.md':
+		'# Styles\n\nA **bold** and *italic* line with ==a highlight==, `inline code`, a [[Welcome|link]], a [[Missing note]] and #tag.\n\n> A quote, with a [[Ideas|link]].\n\n> [!tip] Callouts\n> Follow the theme\'s `--callout-*` colours.\n\n> [!warning]- Folded\n> Hidden until opened.\n\n| Setting | Where |\n| --- | --- |\n| Theme | appearance.json |\n| Snippets | .obsidian/snippets |\n\n```js\nconsole.log("code block");\n```\n\n---\n\n- [ ] a task\n- [x] a done task\n',
 	'Journal/2026-10-16.md': '# 2026-10-16\n\nWorked on [[Projects/Plan]] with flour. #journal\n',
 	'Board.canvas': JSON.stringify(
 		{
@@ -30,7 +32,18 @@ const files: Record<string, string> = {
 };
 
 const backend = new MemoryBackend(files);
-const config = new MemoryConfigStore({});
+/** A demo theme and two snippets, to try Settings → Appearance. */
+const config = new MemoryConfigStore({
+	'.obsidian/themes/Dusk/manifest.json': JSON.stringify({ name: 'Dusk', version: '1.0.0', minAppVersion: '1.0.0', author: 'EmeraldMD preview' }),
+	'.obsidian/themes/Dusk/theme.css': [
+		'body { --accent-h: 262; --accent-s: 70%; --accent-l: 62%; --font-text-theme: Georgia, serif; }',
+		'.theme-dark { --color-base-00: #1b1830; --color-base-10: #211d3a; --color-base-20: #262142; --color-base-30: #332c57; --color-base-35: #3d3566; }',
+		'.theme-light { --color-base-00: #fbfaff; --color-base-10: #f3f0ff; --color-base-20: #ece7ff; --color-base-30: #dcd4fb; }',
+		'body { --h1-color: var(--color-purple); --tag-radius: 4px; }',
+	].join('\n'),
+	'.obsidian/snippets/wide-lines.css': 'body { --file-line-width: 960px; }',
+	'.obsidian/snippets/red-links.css': 'body { --link-color: var(--color-red); }',
+});
 
 /** Case-insensitive substring search over the demo notes. */
 async function search(query: string): Promise<SearchResults> {
@@ -126,6 +139,8 @@ mockIPC(
 				const stat = await config.stat(a.path!);
 				return stat && { path: a.path, kind: stat.type, ctime: 0, mtime: 0, size: stat.size };
 			}
+			case 'show_config_folder':
+				return null;
 			case 'community_plugins_trusted':
 				return false;
 			case 'remote_vaults':

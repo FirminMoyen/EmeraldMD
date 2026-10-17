@@ -10,7 +10,7 @@ import { GFM, parser as baseParser } from '@lezer/markdown';
 import { parseLinktext, type TFile } from '@emeraldmd/core';
 import type { App } from './app';
 import { Component } from './component';
-import { setIcon } from './icons';
+import { getIcon, setIcon } from './icons';
 import { getFrontMatterInfo, parseYaml, sanitizeHTMLToDom } from './util';
 
 const parser = baseParser.configure(GFM);
@@ -142,6 +142,20 @@ const CALLOUT_ICONS: Record<string, string> = {
 	cite: 'quote',
 };
 
+/**
+ * Themes and snippets pick a callout's icon with `--callout-icon` (a Lucide
+ * id such as `lucide-star`), which is how custom callout types get theirs.
+ * It can only be read once the callout is on the page.
+ */
+function followCssIcon(callout: HTMLElement, iconEl: HTMLElement, shown: string): void {
+	if (typeof requestAnimationFrame !== 'function') return;
+	requestAnimationFrame(() => {
+		if (!callout.isConnected) return;
+		const icon = getComputedStyle(callout).getPropertyValue('--callout-icon').trim().replace(/^(['"])(.*)\1$/, '$2');
+		if (icon && icon !== shown && getIcon(icon)) setIcon(iconEl, icon);
+	});
+}
+
 /** Drops the callout's `[!type] title` line from the start of its content. */
 function removeFirstLine(content: HTMLElement): void {
 	const first = content.firstElementChild;
@@ -201,7 +215,10 @@ class Renderer {
 			attr: { 'data-callout': type, 'data-callout-fold': fold },
 		});
 		const titleEl = callout.createDiv('callout-title');
-		setIcon(titleEl.createDiv('callout-icon'), CALLOUT_ICONS[type] ?? 'pencil');
+		const icon = CALLOUT_ICONS[type] ?? 'pencil';
+		const iconEl = titleEl.createDiv('callout-icon');
+		setIcon(iconEl, icon);
+		followCssIcon(callout, iconEl, icon);
 		appendText(titleEl.createDiv('callout-title-inner'), title);
 		if (fold) {
 			setIcon(titleEl.createDiv('callout-fold'), 'chevron-down');

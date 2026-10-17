@@ -6,7 +6,9 @@
  */
 
 import { Events, type MetadataCache } from '@emeraldmd/core';
+import { Appearance, type BaseTheme, type ThemeSetting } from './appearance';
 import { Commands } from './commands';
+import { CustomCss } from './custom-css';
 import { FileManager } from './file-manager';
 import { Keymap, Scope } from './keymap';
 import { MetadataTypeManager } from './metadata-types';
@@ -148,6 +150,10 @@ export class App {
 	viewRegistry = new ViewRegistry();
 	/** @internal Property types; call `load()` once the vault is open. */
 	metadataTypeManager: MetadataTypeManager;
+	/** @internal Themes and CSS snippets; call `load()` once the vault is open. */
+	customCss: CustomCss;
+	/** @internal Color scheme, accent and fonts from appearance.json; call `load()` once the vault is open. */
+	appearance: Appearance;
 	/** @internal */
 	statusBar: StatusBar;
 	/** @internal */
@@ -178,6 +184,8 @@ export class App {
 		this.commands = new Commands(this);
 		this.setting = new AppSetting(this);
 		this.metadataTypeManager = new MetadataTypeManager(this);
+		this.customCss = new CustomCss(this);
+		this.appearance = new Appearance(this);
 		this.listen(window, 'keydown', (evt) => {
 			this.lastEvent = evt as KeyboardEvent;
 			this.keymap.onKeyEvent(evt as KeyboardEvent);
@@ -189,6 +197,36 @@ export class App {
 
 	isDarkMode(): boolean {
 		return document.body.classList.contains('theme-dark');
+	}
+
+	/** @internal `'obsidian'` (dark) or `'moonstone'` (light): the scheme shown now. */
+	getTheme(): BaseTheme {
+		return this.appearance.current();
+	}
+
+	/** @internal Shows a color scheme without saving it; plugins save it with `vault.setConfig('theme', …)`. */
+	setTheme(theme: ThemeSetting): void {
+		this.appearance.setTheme(theme);
+	}
+
+	/** @internal Saves and shows a color scheme. */
+	changeTheme(theme: ThemeSetting): void {
+		this.appearance.changeTheme(theme);
+	}
+
+	/** @internal Applies `accentColor`. */
+	updateAccentColor(): void {
+		this.appearance.updateAccentColor();
+	}
+
+	/** @internal Applies `baseFontSize`. */
+	updateFontSize(): void {
+		this.appearance.updateFontSize();
+	}
+
+	/** @internal Applies the font settings. */
+	updateFontFamily(): void {
+		this.appearance.updateFontFamily();
 	}
 
 	loadLocalStorage(key: string): unknown {
@@ -214,6 +252,8 @@ export class App {
 	destroy(): void {
 		for (const cleanup of this.cleanups.splice(0)) cleanup();
 		for (const modal of [...this.openModals]) modal.close();
+		this.appearance.unload();
+		this.customCss.unload();
 	}
 
 	private listen(target: Window, type: string, listener: (evt: Event) => void): void {

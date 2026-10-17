@@ -39,10 +39,14 @@ end-to-end tests; the rest is in priority order within each section.
 - [x] Community plugins from `.obsidian/plugins` with restricted mode
       (15 of 16 popular plugins pass the smoke tests)
 - [ ] Browse and install plugins from the community list; update them
-- [ ] Themes and CSS snippets from `.obsidian/themes` and `.obsidian/snippets`
-- [ ] Settings: appearance (light/dark/system, accent colour, fonts), editor
-      (line width, spellcheck, Vim), files and links (new note location,
-      link format), hotkeys
+- [x] Themes and CSS snippets from `.obsidian/themes` and `.obsidian/snippets`
+      (checked with Minimal, Things, AnuPpuccin, Blue Topaz and Border);
+      snippets reload when edited on disk
+- [x] Settings → Appearance: light/dark/system, accent colour, theme, fonts,
+      font size, ribbon, snippets
+- [ ] Browse and install themes from the community list
+- [ ] Settings: editor (line width, spellcheck, Vim), files and links (new
+      note location, link format), hotkeys
 
 ### Native macOS
 
@@ -64,9 +68,12 @@ end-to-end tests; the rest is in priority order within each section.
       edits and every minute; status and conflict notices
 - [ ] Synced mode: sync immediately on server events (event stream)
 - [ ] `.obsidian` settings and plugins for remote and synced vaults
-- [ ] Server operations: health endpoint, token management CLI (list,
-      revoke), Docker Compose example, published image
+- [x] Server operations: health endpoint, token management CLI (list,
+      revoke), Docker Compose example
+- [ ] Published server image (registry account: owner)
 - [ ] End-to-end check in the real app: connect, live edits from two
       devices, offline edits then reconnect
-- [ ] Security review: rate limits, request size limits, path handling,
+- [x] Hardening: rate limits, request size limits, trusted-proxy client
+      addresses, symlink-safe path handling
+- [ ] Security review of the whole server and the app's server client,
       dependency audit

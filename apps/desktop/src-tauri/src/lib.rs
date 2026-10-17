@@ -98,6 +98,11 @@ fn watch(app: AppHandle, root: PathBuf) -> notify::Result<notify::RecommendedWat
         }
         for path in &event.paths {
             let Some(vault_path) = open.session.vault().vault_path(path) else { continue };
+            // The config folder is not indexed; the webview reloads themes and snippets from it.
+            if vault_path.starts_with(".obsidian/") {
+                let _ = app.emit("config-changed", &vault_path);
+                continue;
+            }
             match open.session.sync_path(&vault_path) {
                 Ok(update) if !update.is_empty() => {
                     let _ = app.emit("vault-changed", &update);
@@ -223,6 +228,30 @@ async fn config_mkdir(state: State<'_, AppState>, path: String) -> CmdResult<()>
     with_vault(&state, |v| v.create_config_folder(&path))
 }
 
+/// Config folders the UI may show in the file manager.
+const SHOWABLE_CONFIG_FOLDERS: [&str; 2] = [".obsidian/snippets", ".obsidian/themes"];
+
+/// Opens a config folder (snippets or themes) in the system file manager, creating it if needed.
+#[tauri::command]
+async fn show_config_folder(state: State<'_, AppState>, path: String) -> CmdResult<()> {
+    if !SHOWABLE_CONFIG_FOLDERS.contains(&path.as_str()) {
+        return Err(format!("not a folder that can be shown: {path}"));
+    }
+    let full = with_vault(&state, |v| {
+        v.create_config_folder(&path)?;
+        v.config_path(&path)
+    })?;
+    let opener = if cfg!(target_os = "macos") {
+        "open"
+    } else if cfg!(target_os = "windows") {
+        "explorer"
+    } else {
+        "xdg-open"
+    };
+    std::process::Command::new(opener).arg(&full).spawn().map_err(|e| e.to_string())?;
+    Ok(())
+}
+
 fn open_vault_root(state: &AppState) -> CmdResult<String> {
     with_vault(state, |v| Ok(v.root().display().to_string()))
 }
@@ -272,6 +301,7 @@ pub fn run() {
             config_list,
             config_stat,
             config_mkdir,
+            show_config_folder,
             community_plugins_trusted,
             set_community_plugins_trusted,
             request_url,

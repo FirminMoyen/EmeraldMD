@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { Component, MarkdownRenderer } from '../src';
 import { createTestApp } from '../src/testing';
 
@@ -26,6 +26,21 @@ describe('MarkdownRenderer extras', () => {
 		(faq.querySelector('.callout-title') as HTMLElement).click();
 		expect(faq.classList.contains('is-collapsed')).toBe(false);
 		expect(el.querySelector('blockquote')?.textContent?.trim()).toBe('plain quote');
+	});
+
+	it("uses a callout icon chosen in CSS, as snippets do for custom callouts", async () => {
+		const style = document.head.createEl('style', { text: ".callout[data-callout='recipe'] { --callout-icon: lucide-chef-hat; }" });
+		const el = document.body.createDiv();
+		try {
+			const { app } = await createTestApp();
+			await MarkdownRenderer.render(app, '> [!recipe] Soup\n> Boil.\n\n> [!tip] Plain', el, 'Note.md', new Component());
+			const icon = (type: string) => el.querySelector(`.callout[data-callout='${type}'] .callout-icon svg`)?.getAttribute('class');
+			await vi.waitFor(() => expect(icon('recipe')).toContain('lucide-chef-hat'));
+			expect(icon('tip')).toContain('lucide-flame');
+		} finally {
+			style.remove();
+			el.remove();
+		}
 	});
 
 	it('uses the type as the title when there is none', async () => {
