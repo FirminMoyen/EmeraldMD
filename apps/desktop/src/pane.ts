@@ -322,6 +322,7 @@ export class NotePane {
 			autoPairBrackets: get('autoPairBrackets') !== false,
 			readableLineLength: readable,
 			vim: get('vimMode') === true,
+			folding: get('foldHeading') !== false || get('foldIndent') !== false,
 		});
 		this.view.previewMode.containerEl.toggleClass('is-readable-line-width', readable);
 	}

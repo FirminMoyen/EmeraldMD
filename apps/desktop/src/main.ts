@@ -2,6 +2,8 @@ import {
 	App,
 	DailyNotes,
 	isDangerousUrl,
+	registerEditorCommands,
+	type Editor,
 	isMacOS,
 	Menu,
 	moment,
@@ -26,7 +28,7 @@ import {
 	type VaultUpdate,
 } from '@emeraldmd/core';
 import { MemoryConfigStore } from '@emeraldmd/api/testing';
-import { Vim } from '@emeraldmd/editor';
+import { Vim, wikilinkAt } from '@emeraldmd/editor';
 
 // Plugins that add Vim commands or mappings reach the emulation as `CodeMirrorAdapter.Vim`.
 const vimAdapter = ((globalThis as { CodeMirrorAdapter?: Record<string, unknown> }).CodeMirrorAdapter ??= { commands: {} });
@@ -390,6 +392,7 @@ class EmeraldApp {
 		this.applyEditorSettings();
 		vault.on('config-changed', (key: string) => this.onConfigChanged(key));
 		this.registerCommands(app);
+		registerEditorCommands(app, { followLink: (editor, newTab) => this.followLinkAtCursor(editor, newTab) });
 		await app.internalPlugins.load(app);
 		if (local) {
 			void setupSyncStatus(app, {
@@ -688,6 +691,25 @@ class EmeraldApp {
 		this.saveLayout();
 	}
 
+	/** "Follow link under cursor": a wikilink, a Markdown link or a URL on the cursor's line. */
+	private followLinkAtCursor(editor: Editor, newTab: boolean): boolean {
+		const app = this.app!;
+		const pos = editor.getCursor();
+		const line = editor.getLine(pos.line);
+		const wikilink = wikilinkAt(line, pos.ch);
+		if (wikilink !== null) {
+			void app.workspace.openLinkText(wikilink, this.activeFile?.path ?? '', newTab);
+			return true;
+		}
+		const around = (re: RegExp) => [...line.matchAll(re)].find((m) => m.index <= pos.ch && pos.ch <= m.index + m[0].length);
+		const markdown = around(/\[[^\]]*\]\(([^)\s]+)\)/g);
+		const target = markdown?.[1] ?? around(/[a-z][a-z0-9+.-]*:\/\/[^\s)>\]]+/gi)?.[0];
+		if (!target) return false;
+		if (/^[a-z][a-z0-9+.-]*:/i.test(target)) void this.openExternal(target);
+		else void app.workspace.openLinkText(decodeURI(target), this.activeFile?.path ?? '', newTab);
+		return true;
+	}
+
 	/** Context menu of a tab header: close, split. */
 	private showTabMenu(pane: NotePane, tab: Tab, event: MouseEvent): void {
 		const menu = new Menu();
@@ -925,7 +947,7 @@ class EmeraldApp {
 
 	private onConfigChanged(key: string): void {
 		const panes = this.panes();
-		if (['showLineNumber', 'spellcheck', 'tabSize', 'useTab', 'autoPairBrackets', 'readableLineLength', 'vimMode'].includes(key)) this.applyEditorSettings();
+		if (['showLineNumber', 'spellcheck', 'tabSize', 'useTab', 'autoPairBrackets', 'readableLineLength', 'vimMode', 'foldHeading', 'foldIndent'].includes(key)) this.applyEditorSettings();
 		else if (key === 'strictLineBreaks') for (const pane of panes) void pane.view.renderPreview();
 		else if (key === 'livePreview') for (const pane of panes) pane.view.setLivePreview(this.vault?.getConfig('livePreview') !== false);
 		else if (key === 'propertiesInDocument') for (const pane of panes) pane.refreshProperties();

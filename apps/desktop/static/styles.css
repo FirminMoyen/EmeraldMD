@@ -3473,3 +3473,34 @@ body.mod-macos.is-hidden-frameless:not(.is-fullscreen) {
 .mod-macos.is-hidden-frameless .empty-state {
 	padding-top: var(--header-height);
 }
+
+/* Folding (editor settings Fold heading / Fold indent): arrows next to headings and lists, shown on hover. */
+.markdown-source-view .cm-foldGutter .cm-gutterElement {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 18px;
+	color: var(--collapse-icon-color, var(--text-faint));
+	cursor: pointer;
+	opacity: 0;
+	transition: opacity 120ms;
+}
+
+.markdown-source-view .cm-editor:hover .cm-foldGutter .cm-gutterElement,
+.markdown-source-view .cm-foldGutter .cm-gutterElement:has(.is-collapsed) {
+	opacity: 1;
+}
+
+.cm-fold-indicator.is-collapsed svg {
+	transform: rotate(-90deg);
+}
+
+.markdown-source-view .cm-foldPlaceholder {
+	margin: 0 4px;
+	padding: 0 6px;
+	border: none;
+	border-radius: var(--radius-s);
+	background: var(--background-modifier-hover);
+	color: var(--text-muted);
+	cursor: pointer;
+}

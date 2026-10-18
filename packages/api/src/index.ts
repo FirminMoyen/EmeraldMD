@@ -21,6 +21,7 @@ export { confirmAction, type ConfirmOptions } from './confirm';
 export { loadAsync } from './component';
 export { installDomHelpers } from './dom';
 export { CodeMirrorEditor, editorInfoExtensions, setLivePreviewEffect } from './editor';
+export { editorCommands, registerEditorCommands, setHeading, toggleBullet, toggleChecklist, toggleNumbered, toggleQuote, toggleWrap } from './editor-commands';
 export { eventKey, eventModifiers, formatHotkey, isMacOS } from './keymap';
 export { renderMarkdownToDom } from './markdown';
 export { setRequestBackend, type RawResponse, type RequestBackend } from './request';
