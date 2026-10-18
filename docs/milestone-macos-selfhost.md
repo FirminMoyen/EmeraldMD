@@ -66,7 +66,8 @@ end-to-end tests; the rest is in priority order within each section.
 ### Navigation and core panes
 
 - [x] Search pane (Obsidian query syntax), quick switcher (⌘O), command
-      palette (⌘P)
+      palette (⌘P) with pinned commands (`command-palette.json`), recent
+      ones remembered, and the user's hotkeys
 - [x] Backlinks, outline, tags, graph view (⌘G), local graph
 - [x] Canvas files (`.canvas`): view and edit
 - [x] Backlinks with the line of each link; unlinked mentions (name and

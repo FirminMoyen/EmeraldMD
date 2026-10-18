@@ -46,7 +46,7 @@ import { BacklinksPane } from './backlinks';
 import { FileExplorer } from './file-explorer';
 import { EditorTab, FilesTab, HotkeysTab } from './settings-tabs';
 import { CorePluginsTab, DailyNotesTab, FileRecoveryTab, NoteComposerTab, TemplatesTab, UniqueNoteCreatorTab } from './core-plugin-tabs';
-import { CommandPalette } from './command-palette';
+import { CommandPalette, CommandPaletteTab, loadPinnedCommands } from './command-palette';
 import { registerCoreViews, revealSearch } from './core-views';
 import { RemoteVaults } from './remote';
 import { hostOf } from './remote/connect-modal';
@@ -387,6 +387,8 @@ class EmeraldApp {
 		);
 		app.setting.addBuiltInTab(new HotkeysTab(app));
 		app.setting.addBuiltInTab(new CorePluginsTab(app));
+		app.setting.addCorePluginTab(new CommandPaletteTab(app));
+		void loadPinnedCommands(app);
 		app.setting.addCorePluginTab(new DailyNotesTab(app));
 		app.setting.addCorePluginTab(new TemplatesTab(app));
 		app.setting.addCorePluginTab(new FileRecoveryTab(app));
