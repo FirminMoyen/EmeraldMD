@@ -90,6 +90,11 @@ end-to-end tests; the rest is in priority order within each section.
 - [x] App menu (EmeraldMD, File, Edit, View, Window) with standard
       shortcuts; ⌘T/⌘W/⇧⌘T for tabs, ⌘Q saves before quitting, ⌘, opens
       settings
+- [x] Title bar hidden as in Obsidian on macOS: the window buttons sit in
+      the row of tab headers (ribbon and first header leave them room, none
+      in full screen); empty parts of the header rows move the window;
+      Obsidian's `mod-macos`, `is-frameless`, `is-hidden-frameless` and
+      `is-fullscreen` body classes for themes
 - [x] Window size, position and workspace (open note, sidebars) restored
 - [x] Large vaults: 10,000 notes (39 MB) open in about 0.5 s on an M-series
       Mac (index 0.3 s with parallel parsing, UI 60 ms); opening a note takes

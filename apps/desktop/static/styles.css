@@ -3427,3 +3427,49 @@ a.tag {
 	color: var(--text-faint);
 	font-style: italic;
 }
+
+/*
+ * macOS with the title bar hidden (main.ts: markFrame): the window's buttons
+ * sit over the top-left corner, in the row of tab headers. Out of their way:
+ * the ribbon's icons, and the first header row on the left.
+ */
+body.mod-macos.is-hidden-frameless:not(.is-fullscreen) {
+	--frame-left-space: 76px;
+}
+
+.mod-macos.is-hidden-frameless:not(.is-fullscreen) .workspace-ribbon.side-dock-ribbon {
+	padding-top: var(--header-height);
+}
+
+.mod-macos.is-hidden-frameless .workspace-sidedock > .workspace-tab-header-container {
+	min-height: var(--header-height);
+	align-items: center;
+}
+
+.mod-macos.is-hidden-frameless:not(.is-fullscreen) .mod-left-split .workspace-sidedock > .workspace-tab-header-container {
+	padding-left: max(8px, calc(var(--frame-left-space) - var(--ribbon-width)));
+}
+
+.mod-macos.is-hidden-frameless.hide-ribbon:not(.is-fullscreen) .mod-left-split .workspace-sidedock > .workspace-tab-header-container {
+	padding-left: var(--frame-left-space);
+}
+
+/* Left sidebar hidden: the main area's first tab bar is in the corner. */
+.mod-macos.is-hidden-frameless:not(.is-fullscreen) .mod-left-split.is-collapsed ~ .workspace-split.mod-root > .workspace-tabs:first-child .workspace-tab-header-container,
+.mod-macos.is-hidden-frameless:not(.is-fullscreen) .mod-left-split.is-collapsed ~ .workspace-split.mod-root > .workspace-split:first-child > .workspace-tabs:first-child .workspace-tab-header-container {
+	padding-left: max(8px, calc(var(--frame-left-space) - var(--ribbon-width)));
+}
+
+.mod-macos.is-hidden-frameless.hide-ribbon:not(.is-fullscreen) .mod-left-split.is-collapsed ~ .workspace-split.mod-root > .workspace-tabs:first-child .workspace-tab-header-container {
+	padding-left: var(--frame-left-space);
+}
+
+.workspace-tab-header-spacer {
+	flex: 1;
+	min-width: 16px;
+}
+
+/* No vault open: room for the window's buttons above the card. */
+.mod-macos.is-hidden-frameless .empty-state {
+	padding-top: var(--header-height);
+}

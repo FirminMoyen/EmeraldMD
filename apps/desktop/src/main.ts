@@ -2,6 +2,7 @@ import {
 	App,
 	DailyNotes,
 	isDangerousUrl,
+	isMacOS,
 	Menu,
 	moment,
 	Notice,
@@ -186,6 +187,7 @@ class EmeraldApp {
 			}
 		});
 		this.followSystemTheme();
+		this.markFrame();
 		this.remote = new RemoteVaults({
 			attach: (backend, snapshot, options) => this.attach(backend, snapshot, options),
 			applyUpdate: (update) => this.vault?.applyUpdate(update),
@@ -255,6 +257,20 @@ class EmeraldApp {
 			}
 		}
 		this.showEmptyState();
+	}
+
+	/**
+	 * macOS, where the title bar is hidden (tauri.conf.json): Obsidian's body
+	 * classes, which themes use to leave room for the window's buttons; none
+	 * of it in full screen, where the buttons are gone.
+	 */
+	private markFrame(): void {
+		if (!isMacOS || !('__TAURI_INTERNALS__' in window)) return;
+		document.body.addClass('mod-macos', 'is-frameless', 'is-hidden-frameless');
+		const win = getCurrentWindow();
+		const update = async () => document.body.toggleClass('is-fullscreen', (await win.isFullscreen().catch(() => false)) === true);
+		void win.onResized(() => void update());
+		void update();
 	}
 
 	private followSystemTheme(): void {
@@ -448,6 +464,8 @@ class EmeraldApp {
 		const ws = app.workspace;
 		const ribbon = ws.leftRibbon.containerEl;
 		$('ribbon').replaceChildren(ribbon);
+		// Its empty parts move the window, like the title bar they replace on macOS.
+		ribbon.setAttribute('data-tauri-drag-region', '');
 		const settings = ribbon.createDiv('side-dock-settings').createDiv({ cls: 'clickable-icon side-dock-ribbon-action', attr: { 'aria-label': 'Settings' } });
 		setIcon(settings, 'settings');
 		setTooltip(settings, 'Settings', { placement: 'right' });

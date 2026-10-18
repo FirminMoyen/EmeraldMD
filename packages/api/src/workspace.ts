@@ -314,7 +314,7 @@ export class WorkspaceSidedock extends WorkspaceParent {
 		this.side = side;
 		this.containerEl = containerEl;
 		this.containerEl.addClass('workspace-sidedock', `mod-${side}`);
-		this.headerEl = this.containerEl.createDiv('workspace-tab-header-container');
+		this.headerEl = this.containerEl.createDiv({ cls: 'workspace-tab-header-container', attr: { 'data-tauri-drag-region': '' } });
 		this.tabsEl = this.containerEl.createDiv('workspace-tab-container');
 		this.updateHeader();
 	}
