@@ -3659,3 +3659,32 @@ body.mod-macos.is-hidden-frameless:not(.is-fullscreen) {
 .workspaces-empty {
 	color: var(--text-muted);
 }
+
+/* Properties view (core-views/properties.ts). */
+.all-properties-pane,
+.file-properties-pane {
+	padding: var(--size-4-2);
+}
+
+.all-properties-bar {
+	display: flex;
+	align-items: center;
+	gap: var(--size-4-1);
+	margin-bottom: var(--size-4-2);
+}
+
+.all-properties-filter {
+	flex: 1;
+	min-width: 0;
+}
+
+.all-properties-item .tree-item-icon {
+	display: flex;
+	margin-right: var(--size-4-1);
+	color: var(--icon-color);
+}
+
+.all-properties-item .tree-item-icon svg {
+	width: 14px;
+	height: 14px;
+}

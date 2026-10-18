@@ -29,3 +29,30 @@ it('lists the active note’s links, those not created yet, and unlinked mention
 	[...pane.querySelectorAll<HTMLElement>('.outgoing-link-header')].find((el) => el.textContent?.startsWith('Unlinked mentions'))!.click();
 	await vi.waitFor(() => expect(names()).toEqual(['Ideas', 'Plan', 'Missing', 'Archive', 'Roadmap']));
 });
+
+it('lists every property with its count (a click searches for it), and edits the open note’s properties', async () => {
+	const shell = (globalThis as { app?: import('@emeraldmd/api').App }).app!;
+	shell.vault.applyUpdate({
+		renamed: [],
+		removed: [],
+		upserted: [],
+		metadata: { 'Plan.md': { frontmatter: { status: 'draft', tags: ['x'] } }, 'Ideas.md': { frontmatter: { status: 'done' } } },
+		links: {},
+	});
+	shell.commands.executeCommandById('properties:open');
+	const pane = await vi.waitFor(() => {
+		const el = document.querySelector<HTMLElement>('.all-properties-pane');
+		if (!el?.querySelector('.all-properties-item')) throw new Error('no properties listed');
+		return el;
+	});
+	const rows = () => [...pane.querySelectorAll<HTMLElement>('.all-properties-item')].map((el) => `${el.dataset.propertyKey}:${el.querySelector('.tree-item-flair')?.textContent}`);
+	expect(rows()).toEqual(['status:2', 'aliases:1', 'tags:1']);
+	const filter = pane.querySelector<HTMLInputElement>('.all-properties-filter')!;
+	filter.value = 'sta';
+	filter.dispatchEvent(new Event('input'));
+	expect(rows()).toEqual(['status:2']);
+
+	await shell.workspace.openLinkText('Plan', '');
+	shell.commands.executeCommandById('properties:open-local');
+	await vi.waitFor(() => expect(document.querySelector('.file-properties-pane .metadata-property[data-property-key="status"]')).not.toBeNull());
+});

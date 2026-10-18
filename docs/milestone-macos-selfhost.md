@@ -73,6 +73,9 @@ end-to-end tests; the rest is in priority order within each section.
       aliases, whole words, outside links) turned into links in one click
 - [x] Outgoing links pane: the note's links, those not created yet, and
       unlinked mentions of other notes in its text
+- [x] Properties view: all properties of the vault with their counts (a
+      click searches `[property]`), and the open note's properties to edit
+      in the sidebar
 
 ### Plugins and appearance
 
