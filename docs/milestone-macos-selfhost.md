@@ -92,6 +92,9 @@ end-to-end tests; the rest is in priority order within each section.
 - [x] Editor context menu as Obsidian's (clipboard, Format, Paragraph and
       Insert submenus) extended by plugins (`editor-menu`); with
       spellcheck on, the system menu with spelling suggestions
+- [x] Search and replace in the note (⌘F, ⌥⌘F): a bar at the top of the
+      editor with the match count, previous/next, match case, regex,
+      Replace and Replace all
 
 ### Native macOS
 

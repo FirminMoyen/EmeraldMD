@@ -3511,3 +3511,115 @@ body.mod-macos.is-hidden-frameless:not(.is-fullscreen) {
 	padding-left: var(--size-4-3);
 	color: var(--text-faint);
 }
+
+/* Search in the note (packages/editor/src/search-panel.ts), at the top of the editor. */
+.markdown-source-view .cm-panels-top {
+	border-bottom: 1px solid var(--background-modifier-border);
+	background: var(--background-primary);
+}
+
+.document-search-container {
+	display: flex;
+	flex-direction: column;
+	gap: var(--size-4-2);
+	max-width: var(--file-line-width, 700px);
+	margin: 0 auto;
+	padding: var(--size-4-2) var(--size-4-4, 16px);
+}
+
+.document-search,
+.document-replace {
+	display: flex;
+	align-items: center;
+	gap: var(--size-4-2);
+}
+
+.document-replace[hidden] {
+	display: none;
+}
+
+.document-search-field {
+	flex: 1;
+	min-width: 0;
+	position: relative;
+	display: flex;
+	align-items: center;
+}
+
+.document-search-container input.document-search-input,
+.document-search-container input.document-replace-input {
+	flex: 1;
+	min-width: 0;
+	height: 30px;
+	padding-right: 84px;
+}
+
+.document-search-container input.document-replace-input {
+	padding-right: 8px;
+}
+
+.document-search-count {
+	position: absolute;
+	right: 8px;
+	color: var(--text-faint);
+	font-size: var(--font-ui-smaller);
+	pointer-events: none;
+}
+
+.document-search-container.mod-no-results input.document-search-input {
+	border-color: var(--text-error);
+}
+
+.document-search-buttons {
+	display: flex;
+	align-items: center;
+	gap: 2px;
+}
+
+.document-search-button {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	min-width: 26px;
+	height: 26px;
+	padding: 0 4px;
+	border-radius: var(--radius-s);
+	color: var(--icon-color);
+	font-family: var(--font-monospace);
+	font-size: var(--font-ui-small);
+	cursor: pointer;
+}
+
+.document-search-button:hover {
+	background: var(--background-modifier-hover);
+	color: var(--icon-color-hover);
+}
+
+.document-search-button.is-active {
+	background: var(--background-modifier-active-hover);
+	color: var(--text-accent);
+}
+
+.document-replace-button {
+	height: 30px;
+	padding: 0 12px;
+	border: 1px solid var(--background-modifier-border);
+	border-radius: var(--radius-s);
+	background: var(--interactive-normal, var(--background-secondary));
+	color: var(--text-normal);
+	font-size: var(--font-ui-small);
+	cursor: pointer;
+}
+
+.document-replace-button:hover {
+	background: var(--interactive-hover);
+}
+
+.markdown-source-view .cm-searchMatch {
+	background: rgba(var(--color-yellow-rgb), 0.3);
+	border-radius: 2px;
+}
+
+.markdown-source-view .cm-searchMatch-selected {
+	background: rgba(var(--color-orange-rgb), 0.5);
+}

@@ -889,6 +889,22 @@ class EmeraldApp {
 				},
 			});
 		}
+		for (const [id, name, replace, hotkey] of [
+			['editor:open-search', 'Search current file', false, [{ modifiers: ['Mod'], key: 'F' }]],
+			['editor:open-search-replace', 'Search & replace in current file', true, [{ modifiers: ['Mod', 'Alt'], key: 'F' }]],
+		] as const) {
+			add({
+				id,
+				name,
+				hotkeys: hotkey.map((h) => ({ modifiers: [...h.modifiers], key: h.key })),
+				checkCallback: (checking) => {
+					const pane = this.pane;
+					if (!pane?.activeFile || pane.view.getMode() !== 'source') return false;
+					if (!checking) pane.editor.openSearch(replace);
+					return true;
+				},
+			});
+		}
 		add({
 			id: 'markdown:add-metadata-property',
 			name: 'Add file property',
