@@ -32,7 +32,9 @@ end-to-end tests; the rest is in priority order within each section.
       with ⌘, sections and blocks, `hover-link` from plugins
 - [x] Daily notes and templates (core plugins, with their settings and
       the `{{date}}`/`{{time}}`/`{{title}}` variables)
-- [ ] Bookmarks, properties editor
+- [x] Bookmarks (core plugin, `.obsidian/bookmarks.json`, groups, follow
+      renames, left sidebar pane, file menu item)
+- [ ] Properties editor
 
 ### Navigation and core panes
 

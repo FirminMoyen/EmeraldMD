@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
-import { describe, expect, it } from 'vitest';
-import { applyTemplateVariables, DailyNotes, moment, Templates } from '../src';
+import { describe, expect, it, vi } from 'vitest';
+import { applyTemplateVariables, Bookmarks, DailyNotes, moment, Templates } from '../src';
 import { createTestApp } from '../src/testing';
 
 const json = (value: unknown) => JSON.stringify(value);
@@ -43,7 +43,7 @@ describe('core plugins', () => {
 
 		const fresh = await createTestApp();
 		await fresh.app.internalPlugins.load(fresh.app);
-		expect(fresh.app.internalPlugins.getEnabledPlugins().map((p) => p.id)).toEqual(['daily-notes', 'templates', 'page-preview']);
+		expect(fresh.app.internalPlugins.getEnabledPlugins().map((p) => p.id)).toEqual(['daily-notes', 'templates', 'page-preview', 'bookmarks']);
 	});
 
 	it('creates the daily note in its folder from the template', async () => {
@@ -67,7 +67,7 @@ describe('core plugins', () => {
 		await app.internalPlugins.load(app);
 		await app.internalPlugins.setEnabled('templates', false);
 		expect(app.commands.findCommand('insert-template')).toBeUndefined();
-		expect(JSON.parse(config.files.get('.obsidian/core-plugins.json')!)).toEqual({ 'daily-notes': true, templates: false, 'page-preview': true });
+		expect(JSON.parse(config.files.get('.obsidian/core-plugins.json')!)).toEqual({ 'daily-notes': true, templates: false, 'page-preview': true, bookmarks: true });
 		expect(app.workspace.leftRibbon.items.map((i) => i.title)).not.toContain('Insert template');
 	});
 
@@ -79,5 +79,26 @@ describe('core plugins', () => {
 		await app.internalPlugins.load(app);
 		const templates = app.internalPlugins.getEnabledPluginById('templates') as Templates;
 		expect(templates.templateFiles().map((f) => f.path)).toEqual(['Templates/Meeting.md', 'Templates/Sub/Weekly.md']);
+	});
+});
+
+describe('Bookmarks', () => {
+	it('bookmarks files, keeps groups, follows renames and saves bookmarks.json', async () => {
+		const { app, config } = await createTestApp(
+			{ 'Plan.md': '# Plan', 'Projects/Spec.md': '', 'Projects/Notes.md': '' },
+			{ '.obsidian/bookmarks.json': json({ items: [{ type: 'group', title: 'Work', items: [{ type: 'file', path: 'Projects/Spec.md' }] }, { type: 'search', query: 'tag:#todo' }] }) },
+		);
+		await app.internalPlugins.load(app);
+		const bookmarks = app.internalPlugins.getEnabledPluginById('bookmarks') as Bookmarks;
+		expect(bookmarks.find('Projects/Spec.md')).not.toBeNull();
+
+		bookmarks.toggle(app.vault.getFileByPath('Plan.md')!);
+		expect(bookmarks.items.map((i) => i.path ?? i.title ?? i.query)).toEqual(['Work', 'tag:#todo', 'Plan.md']);
+		await app.vault.rename(app.vault.getFolderByPath('Projects')!, 'Archive');
+		expect(bookmarks.find('Archive/Spec.md')).not.toBeNull();
+		bookmarks.toggle(app.vault.getFileByPath('Plan.md')!);
+		expect(bookmarks.find('Plan.md')).toBeNull();
+		await vi.waitFor(() => expect(JSON.parse(config.files.get('.obsidian/bookmarks.json')!).items[0].items[0].path).toBe('Archive/Spec.md'));
+		expect(app.commands.findCommand('bookmarks:bookmark-current-view')).toBeDefined();
 	});
 });
