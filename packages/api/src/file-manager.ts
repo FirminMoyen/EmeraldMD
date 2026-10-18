@@ -78,6 +78,35 @@ export class FileManager {
 		}
 	}
 
+	/**
+	 * @internal Points every link to `from` (in other notes) at `to` instead,
+	 * keeping headings, blocks and aliases; for merging notes. Returns how
+	 * many links changed.
+	 */
+	async redirectLinks(from: TFile, to: TFile): Promise<number> {
+		const edits = new Map<TFile, { from: number; to: number; original: string; text: string }[]>();
+		for (const { source, ref } of this.linksTo([from])) {
+			if (source === from) continue;
+			const text = this.rewriteLink(ref, to, source.path);
+			if (text === ref.original) continue;
+			const list = edits.get(source) ?? [];
+			list.push({ from: ref.position.start.offset, to: ref.position.end.offset, original: ref.original, text });
+			edits.set(source, list);
+		}
+		let count = 0;
+		for (const [source, list] of edits) {
+			await this.app.vault.process(source, (text) => {
+				for (const edit of [...list].sort((a, b) => b.from - a.from)) {
+					if (text.slice(edit.from, edit.to) !== edit.original) continue;
+					text = text.slice(0, edit.from) + edit.text + text.slice(edit.to);
+					count++;
+				}
+				return text;
+			});
+		}
+		return count;
+	}
+
 	/** Links (and embeds) in notes that resolve to one of `files`, read before they move. */
 	private linksTo(files: TFile[]): IncomingLink[] {
 		const { metadataCache, vault } = this.app;

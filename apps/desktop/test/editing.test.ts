@@ -46,7 +46,7 @@ it('has Obsidian’s editor menu, with submenus and items from plugins (editor-m
 	editor.setSelection({ line: 0, ch: 0 }, { line: 0, ch: 5 });
 	document.querySelector('.cm-content')!.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 0, clientY: 0 }));
 	const titles = () => [...document.querySelectorAll('.menu:not(.mod-submenu) > .menu-item .menu-item-title')].map((el) => el.textContent);
-	expect(titles()).toEqual(['Cut', 'Copy', 'Paste', 'Select all', 'Format', 'Paragraph', 'Insert', 'From a plugin']);
+	expect(titles()).toEqual(['Cut', 'Copy', 'Paste', 'Select all', 'Format', 'Paragraph', 'Insert', 'Extract current selection…', 'From a plugin']);
 	expect(seen).toEqual(['plain words']);
 	// Format opens its submenu; Bold acts on the selection.
 	const format = [...document.querySelectorAll<HTMLElement>('.menu-item')].find((el) => el.textContent === 'Format')!;
