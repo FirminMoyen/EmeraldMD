@@ -36,7 +36,9 @@ end-to-end tests; the rest is in priority order within each section.
       with ⌘, sections and blocks, `hover-link` from plugins
 - [x] Daily notes and templates (core plugins, with their settings and
       the `{{date}}`/`{{time}}`/`{{title}}` variables)
-- [ ] Bookmarks, properties editor
+- [x] Bookmarks (core plugin, `.obsidian/bookmarks.json`, groups, follow
+      renames, left sidebar pane, file menu item)
+- [ ] Properties editor
 
 ### Navigation and core panes
 
@@ -100,5 +102,5 @@ end-to-end tests; the rest is in priority order within each section.
       devices, offline edits then reconnect
 - [x] Hardening: rate limits, request size limits, trusted-proxy client
       addresses, symlink-safe path handling
-- [ ] Security review of the whole server and the app's server client,
-      dependency audit
+- [x] Security review of the desktop app (docs/security-desktop.md: inert
+      notes, command limits, plugin trust) and dependency audits (npm, cargo)

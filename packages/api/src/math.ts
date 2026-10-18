@@ -8,6 +8,8 @@
  * SVG) for plugins that call MathJax directly.
  */
 
+import { sanitizeSvg } from './util';
+
 type MathJaxModule = typeof import('./lazy/mathjax');
 
 let module: MathJaxModule | null = null;
@@ -31,7 +33,9 @@ export function loadMathJax(): Promise<void> {
 
 function fill(el: HTMLElement, source: string, display: boolean, mathjax: MathJaxModule): void {
 	try {
-		el.replaceChildren(mathjax.tex2svg(source, display));
+		const formula = mathjax.tex2svg(source, display);
+		sanitizeSvg(formula);
+		el.replaceChildren(formula);
 		el.addClass('is-loaded');
 	} catch (err) {
 		el.setText(source);
