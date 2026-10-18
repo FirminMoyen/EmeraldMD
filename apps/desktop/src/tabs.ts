@@ -73,6 +73,9 @@ export class TabBar {
 		setIcon(add, 'plus');
 		setTooltip(add, 'New tab (⌘T)');
 		add.addEventListener('click', () => host.newTab());
+		// The empty end of the bar moves the window (macOS, where the title bar is hidden).
+		this.containerEl.createDiv({ cls: 'workspace-tab-header-spacer', attr: { 'data-tauri-drag-region': '' } });
+		this.containerEl.setAttribute('data-tauri-drag-region', '');
 		// Dropping a dragged tab here moves it, before the header under the pointer.
 		this.containerEl.addEventListener('dragover', (event) => {
 			if (!dragged || !this.host.drop) return;
