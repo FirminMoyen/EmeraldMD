@@ -123,13 +123,22 @@ describe('tabs', () => {
 		await vi.waitFor(() => expect(titles()).toEqual(['A', 'New tab', 'C']));
 		await shell.app.fileManager.renameFile(file('A.md'), 'Alpha.md');
 		await vi.waitFor(() => expect(titles()).toEqual(['Alpha', 'New tab', 'C']));
-		expect(shell.app.loadLocalStorage('emerald-tabs')).toEqual({
-			tabs: [
-				{ file: 'Alpha.md', mode: 'source' },
-				{ file: null, mode: 'source' },
-				{ file: 'C.md', mode: 'source' },
+		expect(shell.app.loadLocalStorage('emerald-layout')).toEqual({
+			type: 'split',
+			direction: 'vertical',
+			sizes: [1],
+			children: [
+				{
+					type: 'tabs',
+					tabs: [
+						{ file: 'Alpha.md', mode: 'source' },
+						{ file: null, mode: 'source' },
+						{ file: 'C.md', mode: 'source' },
+					],
+					active: 2,
+					current: true,
+				},
 			],
-			active: 2,
 		});
 	});
 

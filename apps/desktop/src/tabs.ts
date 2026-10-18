@@ -34,6 +34,8 @@ export interface TabBarHost {
 	activate(tab: Tab): void;
 	close(tab: Tab): void;
 	newTab(): void;
+	/** The header's context menu. */
+	menu?(tab: Tab, event: MouseEvent): void;
 }
 
 export function emptyTab(mode: Tab['mode'] = 'source'): Tab {
@@ -84,6 +86,10 @@ export class TabBar {
 				}
 			});
 			header.addEventListener('click', () => this.host.activate(tab));
+			header.addEventListener('contextmenu', (event) => {
+				event.preventDefault();
+				this.host.menu?.(tab, event);
+			});
 		}
 		this.innerEl.querySelector('.workspace-tab-header.is-active')?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
 	}

@@ -1,27 +1,19 @@
 import {
 	App,
-	CodeMirrorEditor,
-	Component,
 	DailyNotes,
-	isPropertiesYaml,
-	moment,
-	editorInfoExtensions,
-	MarkdownRenderer,
-	MarkdownView,
 	isDangerousUrl,
+	Menu,
+	moment,
 	Notice,
-	PropertiesEditor,
 	setIcon,
-	setLivePreviewEffect,
 	setRequestBackend,
 	setTooltip,
 	Vault,
 	type ConfigStore,
-	type MarkdownViewModeType,
 	type WorkspaceHost,
+	type WorkspaceLeaf,
 } from '@emeraldmd/api';
 import {
-	getLinkpath,
 	joinPath,
 	MetadataCache,
 	RemoteBackend,
@@ -33,7 +25,7 @@ import {
 	type VaultUpdate,
 } from '@emeraldmd/core';
 import { MemoryConfigStore } from '@emeraldmd/api/testing';
-import { frontmatterAt, MarkdownEditor, Vim } from '@emeraldmd/editor';
+import { Vim } from '@emeraldmd/editor';
 
 // Plugins that add Vim commands or mappings reach the emulation as `CodeMirrorAdapter.Vim`.
 const vimAdapter = ((globalThis as { CodeMirrorAdapter?: Record<string, unknown> }).CodeMirrorAdapter ??= { commands: {} });
@@ -54,20 +46,20 @@ import { registerCoreViews, revealSearch } from './core-views';
 import { RemoteVaults } from './remote';
 import { hostOf } from './remote/connect-modal';
 import { setupSyncStatus } from './synced';
-import { emptyTab, isEmptyTab, TabBar, type Tab } from './tabs';
+import { NotePane, type PaneHost } from './pane';
+import { SplitLayout, type SavedLayout, type SplitDirection } from './splits';
+import { isEmptyTab, type Tab } from './tabs';
 import { TauriBackend, TauriConfigStore, tauriRequestBackend, tauriTrustStore } from './tauri-backend';
 
 /** A note to reopen after the page reloads to switch vaults (see `attach`). */
 const REOPEN_FILE_KEY = 'emeraldmd:reopen-file';
 
-/** Same autosave delay as Obsidian. */
-const SAVE_DELAY_MS = 2000;
 /** Local storage keys (per vault, through `app.saveLocalStorage`). */
 const LAST_FILE_KEY = 'emerald-last-file';
-/** The open tabs: `{ tabs: [{ file, mode }], active }`. */
+/** The main area: panes with their tabs (see `SavedLayout` in splits.ts). */
+const LAYOUT_KEY = 'emerald-layout';
+/** The tabs of the single pane, as saved before splits: `{ tabs: [{ file, mode }], active }`. */
 const TABS_KEY = 'emerald-tabs';
-/** How many notes back/forward remembers. */
-const HISTORY_LIMIT = 50;
 /** How many closed tabs ⇧⌘T can reopen. */
 const CLOSED_TABS_LIMIT = 20;
 const SIDEBARS_KEY = 'emerald-sidebars';
@@ -124,62 +116,31 @@ class EmeraldApp {
 	private backend: VaultBackend | null = null;
 	private readonly remote: RemoteVaults;
 	private host: PluginHost | null = null;
-	private markdownView: MarkdownView | null = null;
-	private activeFile: TFile | null = null;
-	private saveTimer: ReturnType<typeof setTimeout> | undefined;
-	private dirty = false;
-	private saving = false;
-	private applyingExternalChange = false;
 	private renderQueued = false;
 	private explorer: FileExplorer | null = null;
 	private backlinks: BacklinksPane | null = null;
-	/** The tabs of the main area; the current one shows in the note view (see tabs.ts). */
-	private tabBar: TabBar | null = null;
-	/** Closed tabs and where they were, most recent last, for "Reopen closed tab". */
-	private readonly closedTabs: { tab: Tab; index: number }[] = [];
+	/** The panes of the main area (splits), and the current one, where commands act and files open. */
+	private layout: SplitLayout | null = null;
+	private pane: NotePane | null = null;
+	private paneHost: PaneHost | null = null;
+	/** Closed tabs, where they were, most recent last, for "Undo close tab". */
+	private readonly closedTabs: { pane: NotePane; tab: Tab; index: number }[] = [];
 	private tabClock = 0;
-	/** Increases each time a tab starts to show, so a slower earlier one gives up. */
-	private showing = 0;
-	/** The save in progress, if any: a note is read again only after it. */
+	/** Saves of every pane, one after another: a note is read again only after them. */
 	private pendingSave: Promise<void> = Promise.resolve();
-	private readonly noHistory = { back: [] as TFile[], forward: [] as TFile[] };
-	private navigating = false;
-	private navButtons: { back: HTMLElement; forward: HTMLElement } | null = null;
+	/** Editor extensions registered by plugins, for every pane's editor. */
+	private editorExtensions: Extension[] = [];
 	private lastHandledShortcut = -Infinity;
-	private readonly editor: MarkdownEditor;
 	private readonly el = {
 		emptyState: $('empty-state'),
 		workspace: $('workspace'),
 		vaultName: $('vault-name'),
 		tree: $('file-tree'),
-		title: $('file-title') as HTMLInputElement,
-		trash: $('trash-file'),
-		editor: $('editor'),
-		noFile: $('no-file'),
 		backlinks: $('backlinks'),
 		status: $('status-core'),
 	};
 
 	constructor() {
-		this.editor = new MarkdownEditor({
-			parent: this.el.editor,
-			onChange: () => this.onEdit(),
-			onOpenLink: (link, newTab) => void this.openLink(link, newTab),
-			onOpenUrl: (url) => void this.openExternal(url),
-			onHoverLink: (event, linktext, targetEl) => {
-				const view = this.markdownView;
-				if (!view || !this.app) return;
-				this.app.workspace.trigger('hover-link', { event, source: 'editor', hoverParent: view, targetEl, linktext, sourcePath: this.activeFile?.path ?? '' });
-			},
-			onFiles: (files, pos) => void this.insertAttachments(files, pos),
-			livePreview: {
-				renderMarkdown: (markdown, el) => this.renderInEditor(markdown, el),
-				isResolved: (link) => !this.metadataCache || Boolean(this.metadataCache.getFirstLinkpathDest(getLinkpath(link), this.activeFile?.path ?? '')),
-				renderProperties: (yaml, el) => this.renderProperties(yaml, el),
-				validProperties: isPropertiesYaml,
-				propertiesInDocument: () => this.propertiesInDocument(),
-			},
-		});
 		// Links that would run code or replace the page (javascript:, data:…) are never followed,
 		// whatever drew them: notes are untrusted, and the page can call the app's commands.
 		document.addEventListener(
@@ -204,15 +165,6 @@ class EmeraldApp {
 		$('switch-vault').addEventListener('click', () => void this.pickVault());
 		$('new-note').addEventListener('click', () => void this.newNote());
 		$('new-folder').addEventListener('click', () => void this.newFolder());
-		this.el.trash.addEventListener('click', () => void (this.activeFile && this.trash(this.activeFile)));
-		this.el.title.addEventListener('keydown', (e) => {
-			if (e.key === 'Enter') this.el.title.blur();
-			if (e.key === 'Escape') {
-				this.el.title.value = this.activeFile?.basename ?? '';
-				this.el.title.blur();
-			}
-		});
-		this.el.title.addEventListener('change', () => void this.renameActiveFile(this.el.title.value));
 		// Once a vault is open, shortcuts are commands (see registerCommands); before that, only this one.
 		window.addEventListener('keydown', (e) => {
 			if (!this.app && (e.metaKey || e.ctrlKey) && !e.altKey && e.key === 'o') {
@@ -259,17 +211,17 @@ class EmeraldApp {
 		return this.app?.vault ?? null;
 	}
 
-	private get tab(): Tab | null {
-		return this.tabBar?.active ?? null;
-	}
-
-	/** Notes visited before and after the open one in the current tab (back/forward). */
-	private get history(): Tab['history'] {
-		return this.tab?.history ?? this.noHistory;
-	}
-
 	private get metadataCache(): MetadataCache | null {
 		return this.app?.metadataCache ?? null;
+	}
+
+	/** The note in the current pane's editor. */
+	private get activeFile(): TFile | null {
+		return this.pane?.activeFile ?? null;
+	}
+
+	private panes(): NotePane[] {
+		return this.layout?.panes() ?? [];
 	}
 
 	async start(): Promise<void> {
@@ -359,8 +311,8 @@ class EmeraldApp {
 		});
 		this.app = app;
 		this.explorer = new FileExplorer(app, this.el.tree, {
-			activeFile: () => this.tab?.file ?? null,
-			openFile: (file, newTab) => this.openFile(file, { newTab }),
+			activeFile: () => this.pane?.tab?.file ?? null,
+			openFile: (file, newTab) => this.pane!.openFile(file, { newTab }),
 			flush: () => this.flush(),
 			newNote: (folder) => this.newNote(folder),
 			newFolder: (folder) => this.newFolder(folder),
@@ -370,7 +322,7 @@ class EmeraldApp {
 		});
 		this.backlinks = new BacklinksPane(app, this.el.backlinks, {
 			activeFile: () => this.activeFile,
-			openFileAt: (file, select) => this.openFileAt(file, select),
+			openFileAt: (file, select) => this.pane!.openFileAt(file, select),
 			search: backend.search ? (query, options) => backend.search!(query, options) : undefined,
 			notice: (message) => this.notice(message),
 		});
@@ -394,7 +346,6 @@ class EmeraldApp {
 		app.setting.addCorePluginTab(new DailyNotesTab(app));
 		app.setting.addCorePluginTab(new TemplatesTab(app));
 		if (local) void listen<string>('config-changed', (event) => app.customCss.onConfigFileChanged(event.payload));
-		this.activeFile = null;
 		this.mountWorkspace(app);
 		this.applyEditorSettings();
 		vault.on('config-changed', (key: string) => this.onConfigChanged(key));
@@ -409,20 +360,23 @@ class EmeraldApp {
 		}
 		registerCoreViews(app, {
 			search: backend.search ? (query, options) => backend.search!(query, options) : undefined,
-			openFile: (file, select) => this.openFileAt(file, select),
+			openFile: (file, select) => this.pane!.openFileAt(file, select),
 			openSearch: (query) => revealSearch(app, query),
 		});
 
 		for (const name of ['create', 'delete', 'rename']) vault.on(name, () => this.queueTreeRender());
 		vault.on('rename', (file: TAbstractFile) => {
-			if (!this.tabBar?.tabs.some((tab) => tab.file && isInside(tab.file, file))) return;
-			this.tabBar.render();
-			this.renderHeader();
-			this.saveTabs();
+			let shown = false;
+			for (const pane of this.panes()) shown = pane.onRenamed(file) || shown;
+			if (!shown) return;
+			this.renderWindowTitle();
+			this.saveLayout();
 		});
-		vault.on('delete', (file: TAbstractFile) => this.onDeleted(file));
+		vault.on('delete', (file: TAbstractFile) => {
+			for (const pane of this.panes()) pane.onDeleted(file);
+		});
 		vault.on('modify', (file: TFile) => {
-			if (file === this.activeFile) void this.reloadIfChangedOnDisk(file);
+			for (const pane of this.panes()) pane.onModified(file);
 		});
 		metadataCache.on('resolved', () => this.renderSidePanels());
 
@@ -431,10 +385,12 @@ class EmeraldApp {
 		this.el.workspace.hidden = false;
 		this.renderTree();
 		this.restoreSidebars(app);
-		this.restoreTabs(app, keep);
+		this.restoreLayout(app, keep);
+		// Every pane shows its current tab; the current pane last, so it keeps the focus.
+		for (const pane of this.panes()) if (pane !== this.pane) await pane.showTab(pane.tab!);
 		const daily = app.internalPlugins.getEnabledPluginById('daily-notes');
 		if (daily instanceof DailyNotes && daily.options.autorun === true && !keep) await daily.openDay(moment());
-		else await this.showTab(this.tab!);
+		else await this.pane!.showTab(this.pane!.tab!);
 
 		// Server vaults keep their plugins in `.obsidian` on the server; servers without the config endpoints have none.
 		const server = local ? null : this.remote.activeVault();
@@ -457,7 +413,7 @@ class EmeraldApp {
 		}
 	}
 
-	/** Puts the workspace pieces (ribbon, side docks, root leaf with the note editor) into the page. */
+	/** Puts the workspace pieces (ribbon, side docks, the main area's first pane) into the page. */
 	private mountWorkspace(app: App): void {
 		const ws = app.workspace;
 		const ribbon = ws.leftRibbon.containerEl;
@@ -472,60 +428,225 @@ class EmeraldApp {
 		$('right-split').append(ws.rightSplit.containerEl);
 		ws.rightSplit.addStaticTab('backlinks', 'Backlinks', 'links-coming-in', $('backlinks-pane'));
 
-		const view = new MarkdownView(ws.rootLeaf);
-		view.editor = new CodeMirrorEditor(this.editor.view);
-		view.titleEl.replaceWith(this.el.title);
-		// Reading view toggle, like the book/pencil button in Obsidian's note header.
-		const modeButton = view.addAction('book-open', 'Reading view (⌘E)', () => void this.toggleReading());
-		view.onModeChange = (mode) => {
-			setIcon(modeButton, mode === 'preview' ? 'pencil' : 'book-open');
-			modeButton.setAttribute('aria-label', mode === 'preview' ? 'Edit (⌘E)' : 'Reading view (⌘E)');
-			const tab = this.tab;
-			if (tab && ws.rootLeaf.view === view && tab.file === this.activeFile && tab.mode !== mode) {
-				tab.mode = mode;
-				this.saveTabs();
-			}
+		this.paneHost = {
+			app,
+			notice: (message, duration) => this.notice(message, duration),
+			queueSave: (save) => (this.pendingSave = this.pendingSave.then(save)),
+			saved: () => this.pendingSave,
+			activate: (pane) => this.activatePane(pane),
+			isCurrent: (pane) => pane === this.pane,
+			saveLayout: () => this.saveLayout(),
+			shown: (pane) => {
+				if (pane === this.pane) this.onCurrentNoteChanged();
+			},
+			statusChanged: (pane) => {
+				if (pane === this.pane) this.renderStatus();
+			},
+			closed: (pane, tab, index) => {
+				this.closedTabs.push({ pane, tab, index });
+				if (this.closedTabs.length > CLOSED_TABS_LIMIT) this.closedTabs.shift();
+			},
+			removeIfEmpty: (pane) => this.removePane(pane),
+			nextTabClock: () => ++this.tabClock,
+			openExternal: (url) => this.openExternal(url),
+			trash: (file) => this.trash(file),
+			propertiesInDocument: () => this.propertiesInDocument(),
+			editorExtensions: () => this.editorExtensions,
+			tabMenu: (pane, tab, event) => this.showTabMenu(pane, tab, event),
 		};
-		const navButton = (icon: string, label: string, direction: -1 | 1) => {
-			const el = view.navButtonsEl.createEl('button', { cls: 'clickable-icon view-header-nav-button is-disabled', attr: { 'aria-label': label } });
-			setIcon(el, icon);
-			setTooltip(el, label);
-			el.addEventListener('click', () => void this.navigate(direction));
-			return el;
-		};
-		this.navButtons = { back: navButton('arrow-left', 'Navigate back (⌥⌘←)', -1), forward: navButton('arrow-right', 'Navigate forward (⌥⌘→)', 1) };
-		// The mouse's back and forward buttons.
-		view.containerEl.addEventListener('mouseup', (event) => {
-			if (event.button === 3 || event.button === 4) void this.navigate(event.button === 3 ? -1 : 1);
+		// The first pane uses the note view's parts in index.html.
+		const first = new NotePane(this.paneHost, ws.rootLeaf, {
+			title: $('file-title') as HTMLInputElement,
+			trash: $('trash-file'),
+			editor: $('editor'),
+			noFile: $('no-file'),
 		});
-		view.onLivePreviewChange = (on) => this.editor.setLivePreview(on, [setLivePreviewEffect.of(on)]);
-		view.livePreview = app.vault.getConfig('livePreview') !== false;
-		this.editor.setLivePreview(view.livePreview, [setLivePreviewEffect.of(view.livePreview)]);
-		view.actionsEl.append(this.el.trash);
-		view.contentEl.append(this.el.editor, this.el.noFile);
-		this.markdownView = view;
-		// The root split as themes expect it: `.workspace-tabs.mod-top > .workspace-tab-header-container + .workspace-tab-container > .workspace-leaf`.
-		this.tabBar = new TabBar({
-			activate: (tab) => this.activateTab(tab),
-			close: (tab) => this.closeTab(tab),
-			newTab: () => this.newTab(),
-		});
-		const tabsEl = ws.rootSplit.containerEl.createDiv('workspace-tabs mod-top mod-active');
-		tabsEl.append(this.tabBar.containerEl);
-		tabsEl.createDiv('workspace-tab-container').append(ws.rootLeaf.containerEl);
-		ws.rootSplit.onLeafUpdated = () => this.syncTabWithLeaf();
+		this.pane = first;
+		first.setActive(true);
+		this.layout = new SplitLayout(ws.rootSplit.containerEl, first);
+		this.layout.onResize = () => this.saveLayout();
+		ws.rootSplit.onLeafUpdated = (leaf) => this.paneOf(leaf)?.syncWithLeaf();
 		$('root-split').replaceWith(ws.rootSplit.containerEl);
 
 		const host: WorkspaceHost = {
-			openFile: (file) => this.openFile(file),
-			openInTab: (file) => this.openFile(file),
-			newTab: () => void this.newTab(),
-			closeTab: () => this.tab && this.closeTab(this.tab),
+			openFile: (file, leaf) => this.paneFor(leaf).openFile(file),
+			openInTab: (file, leaf) => this.paneFor(leaf).openFile(file),
+			newTab: (leaf) => void this.paneFor(leaf).newTab(),
+			closeTab: (leaf) => {
+				const pane = this.paneFor(leaf);
+				if (pane.tab) pane.closeTab(pane.tab);
+			},
+			split: (leaf, direction, before) => this.splitPane(this.paneFor(leaf), direction, { before }).leaf,
+			activatePane: (leaf) => {
+				const pane = this.paneOf(leaf);
+				if (pane) this.activatePane(pane);
+			},
 			save: () => this.flush(),
-			setEditorExtensions: (extensions: Extension[]) =>
-				this.editor.setExtensions([editorInfoExtensions(view, () => this.editor.view, () => this.editor.isLivePreview()), ...extensions]),
+			setEditorExtensions: (extensions: Extension[]) => {
+				this.editorExtensions = extensions;
+				for (const pane of this.panes()) pane.setExtensions(extensions);
+			},
 		};
-		ws.setHost(host, view);
+		ws.setHost(host, first.view);
+	}
+
+	private paneOf(leaf: WorkspaceLeaf | undefined): NotePane | null {
+		return (leaf && this.panes().find((pane) => pane.leaf === leaf)) || null;
+	}
+
+	/** The pane of `leaf`, else the current one. */
+	private paneFor(leaf: WorkspaceLeaf | undefined): NotePane {
+		return this.paneOf(leaf) ?? this.pane!;
+	}
+
+	/** A new pane (not yet in the layout) with a new leaf and note view. */
+	private createPane(): NotePane {
+		const ws = this.app!.workspace;
+		const pane = new NotePane(this.paneHost!, ws.createRootLeaf());
+		ws.addRootLeaf(pane.leaf, pane.view);
+		pane.applySettings();
+		return pane;
+	}
+
+	/** Keeps the workspace's pane leaves in layout order. */
+	private syncRootLeaves(): void {
+		const ws = this.app!.workspace;
+		ws.rootLeaves = this.panes().map((pane) => pane.leaf);
+	}
+
+	/** Makes `pane` the current one: commands act there and files open there. */
+	private activatePane(pane: NotePane): void {
+		if (this.pane === pane || !this.panes().includes(pane)) return;
+		this.pane = pane;
+		for (const other of this.panes()) other.setActive(other === pane);
+		const ws = this.app!.workspace;
+		ws.setActiveLeaf(pane.leaf);
+		this.onCurrentNoteChanged();
+		ws.trigger('file-open', pane.leaf.view === pane.view ? pane.activeFile : ((pane.leaf.view as { file?: TFile | null }).file ?? null));
+		this.saveLayout();
+	}
+
+	/**
+	 * Opens a new pane next to `pane`: on its right (`vertical`) or below it
+	 * (`horizontal`). With `duplicate`, it shows the same note (as Obsidian's
+	 * "Split right"); else an empty tab, for a plugin to fill.
+	 */
+	private splitPane(pane: NotePane, direction: SplitDirection, options: { before?: boolean; duplicate?: boolean } = {}): NotePane {
+		void pane.flush();
+		const added = this.createPane();
+		this.layout!.split(pane, added, direction, options.before);
+		this.syncRootLeaves();
+		const tab = pane.tab;
+		added.restore(null, options.duplicate && tab?.file ? tab.file : null);
+		if (options.duplicate && tab) added.tab!.mode = tab.mode;
+		this.activatePane(added);
+		if (added.tab?.file) void added.showTab(added.tab);
+		else added.showEmptyTab();
+		this.saveLayout();
+		return added;
+	}
+
+	/** Takes out a pane whose last tab closed; false if it is the only one. */
+	private removePane(pane: NotePane): boolean {
+		const panes = this.panes();
+		if (panes.length < 2) return false;
+		void pane.flush();
+		const next = panes[panes.indexOf(pane) - 1] ?? panes[panes.indexOf(pane) + 1]!;
+		this.layout!.remove(pane);
+		this.syncRootLeaves();
+		if (this.pane === pane) {
+			this.pane = null;
+			this.activatePane(next);
+			next.focus();
+		}
+		this.app!.workspace.removeRootLeaf(pane.leaf);
+		pane.destroy();
+		this.saveLayout();
+		return true;
+	}
+
+	/** The current pane's note changed (or the current pane did): file tree, side panels, window title. */
+	private onCurrentNoteChanged(): void {
+		const file = this.pane?.tab?.file ?? null;
+		this.renderWindowTitle();
+		this.explorer?.setActive(file);
+		this.renderSidePanels();
+		if (file) this.app?.saveLocalStorage(LAST_FILE_KEY, file.path);
+	}
+
+	/** Saves the panes and their tabs (per vault) for the next start. */
+	private saveLayout(): void {
+		if (!this.app || !this.layout) return;
+		this.app.saveLocalStorage(LAYOUT_KEY, this.layout.serialize(this.pane));
+	}
+
+	/**
+	 * The panes and tabs open when the app last closed (only the current tab
+	 * of each pane loads its note); else one tab with the last note, or the
+	 * most recently edited one. `keep` is a note to show after a reload.
+	 */
+	private restoreLayout(app: App, keep: string | null): void {
+		const vault = app.vault;
+		const first = this.pane!;
+		const last = app.loadLocalStorage(LAST_FILE_KEY);
+		const fallback =
+			(typeof last === 'string' && vault.getFileByPath(last)) || vault.getMarkdownFiles().sort((a, b) => b.stat.mtime - a.stat.mtime)[0] || null;
+		const saved = app.loadLocalStorage(LAYOUT_KEY) as SavedLayout | null;
+		if (saved && typeof saved === 'object' && (saved.type === 'split' || saved.type === 'tabs')) {
+			const current = this.layout!.restore(saved, first, (tabs, isFirst) => {
+				const pane = isFirst ? first : this.createPane();
+				pane.restore(tabs, isFirst ? fallback : null);
+				return pane;
+			});
+			this.syncRootLeaves();
+			// Nothing saved for the first pane (an older layout): it still needs a tab.
+			if (!first.tab) first.restore(null, fallback);
+			this.activatePane(current);
+		} else {
+			first.restore(app.loadLocalStorage(TABS_KEY), fallback);
+		}
+		const kept = keep ? vault.getFileByPath(keep) : null;
+		if (kept) {
+			const pane = this.panes().find((p) => p.tabBar.tabs.some((tab) => tab.file === kept)) ?? this.pane!;
+			this.activatePane(pane);
+			pane.selectFile(kept);
+		}
+		this.saveLayout();
+	}
+
+	/** Context menu of a tab header: close, split. */
+	private showTabMenu(pane: NotePane, tab: Tab, event: MouseEvent): void {
+		const menu = new Menu();
+		const split = (direction: SplitDirection) => {
+			pane.activateTab(tab);
+			this.splitPane(pane, direction, { duplicate: true });
+		};
+		menu.addItem((item) => item.setTitle('Close').setIcon('x').setSection('close').onClick(() => pane.closeTab(tab)));
+		menu.addItem((item) =>
+			item
+				.setTitle('Close others')
+				.setIcon('x-circle')
+				.setSection('close')
+				.setDisabled(pane.tabBar.tabs.length < 2)
+				.onClick(() => {
+					for (const other of [...pane.tabBar.tabs]) if (other !== tab) pane.closeTab(other);
+				}),
+		);
+		menu.addItem((item) => item.setTitle('Split right').setIcon('separator-vertical').setSection('split').onClick(() => split('vertical')));
+		menu.addItem((item) => item.setTitle('Split down').setIcon('separator-horizontal').setSection('split').onClick(() => split('horizontal')));
+		menu.showAtMouseEvent(event);
+	}
+
+	/** Reopens the last closed tab where it was (its note, history and editor state), unless its file is gone. */
+	private reopenClosedTab(): void {
+		let closed: { pane: NotePane; tab: Tab; index: number } | undefined;
+		while ((closed = this.closedTabs.pop()) && closed.tab.file && !this.vault?.getFileByPath(closed.tab.file.path)) {}
+		if (!closed) return;
+		const pane = this.panes().includes(closed.pane) ? closed.pane : this.pane!;
+		// Editor state belongs to the editor it came from: in another pane, the note loads afresh.
+		if (pane !== closed.pane) closed.tab.state = null;
+		this.activatePane(pane);
+		pane.reopen(closed.tab, closed.index);
 	}
 
 	/** Built-in commands, with the shortcuts the app has always had. */
@@ -550,7 +671,7 @@ class EmeraldApp {
 			hotkeys: [{ modifiers: ['Mod'], key: 'S' }],
 			checkCallback: (checking) => {
 				if (!this.activeFile) return false;
-				if (!checking) void this.flush();
+				if (!checking) void this.pane!.flush();
 				return true;
 			},
 		});
@@ -560,22 +681,23 @@ class EmeraldApp {
 			hotkeys: [{ modifiers: ['Mod'], key: 'E' }],
 			checkCallback: (checking) => {
 				if (!this.activeFile) return false;
-				if (!checking) void this.toggleReading();
+				if (!checking) void this.pane!.toggleReading();
 				return true;
 			},
 		});
-		add({ id: 'app:go-back', name: 'Navigate back', hotkeys: [{ modifiers: ['Mod', 'Alt'], key: 'ArrowLeft' }], callback: () => this.navigate(-1) });
-		add({ id: 'app:go-forward', name: 'Navigate forward', hotkeys: [{ modifiers: ['Mod', 'Alt'], key: 'ArrowRight' }], callback: () => this.navigate(1) });
-		add({ id: 'workspace:new-tab', name: 'New tab', hotkeys: [{ modifiers: ['Mod'], key: 'T' }], callback: () => void this.newTab() });
+		add({ id: 'app:go-back', name: 'Navigate back', hotkeys: [{ modifiers: ['Mod', 'Alt'], key: 'ArrowLeft' }], callback: () => this.pane?.navigate(-1) });
+		add({ id: 'app:go-forward', name: 'Navigate forward', hotkeys: [{ modifiers: ['Mod', 'Alt'], key: 'ArrowRight' }], callback: () => this.pane?.navigate(1) });
+		add({ id: 'workspace:new-tab', name: 'New tab', hotkeys: [{ modifiers: ['Mod'], key: 'T' }], callback: () => void this.pane?.newTab() });
 		add({
 			id: 'workspace:close',
 			name: 'Close current tab',
 			hotkeys: [{ modifiers: ['Mod'], key: 'W' }],
 			checkCallback: (checking) => {
-				const tab = this.tab;
-				// The only tab, already empty: nothing to close.
-				if (!tab || (isEmptyTab(tab) && this.tabBar!.tabs.length === 1)) return false;
-				if (!checking) this.closeTab(tab);
+				const pane = this.pane;
+				const tab = pane?.tab;
+				// The only tab of the only pane, already empty: nothing to close.
+				if (!pane || !tab || (isEmptyTab(tab) && pane.tabBar.tabs.length === 1 && this.panes().length === 1)) return false;
+				if (!checking) pane.closeTab(tab);
 				return true;
 			},
 		});
@@ -583,9 +705,10 @@ class EmeraldApp {
 			id: 'workspace:close-others',
 			name: 'Close all other tabs',
 			checkCallback: (checking) => {
-				const tab = this.tab;
-				if (!tab || this.tabBar!.tabs.length < 2) return false;
-				if (!checking) for (const other of [...this.tabBar!.tabs]) if (other !== tab) this.closeTab(other);
+				const pane = this.pane;
+				const tab = pane?.tab;
+				if (!pane || !tab || pane.tabBar.tabs.length < 2) return false;
+				if (!checking) for (const other of [...pane.tabBar.tabs]) if (other !== tab) pane.closeTab(other);
 				return true;
 			},
 		});
@@ -605,9 +728,9 @@ class EmeraldApp {
 				name,
 				hotkeys,
 				checkCallback: (checking) => {
-					const bar = this.tabBar;
+					const bar = this.pane?.tabBar;
 					if (!bar?.active || bar.tabs.length < 2) return false;
-					if (!checking) this.activateTab(bar.neighbour(bar.active, direction));
+					if (!checking) this.pane!.activateTab(bar.neighbour(bar.active, direction));
 					return true;
 				},
 			});
@@ -619,9 +742,9 @@ class EmeraldApp {
 				name: `Go to tab #${n}`,
 				hotkeys: [{ modifiers: ['Mod'], key: String(n) }],
 				checkCallback: (checking) => {
-					const tab = this.tabBar?.tabs[n - 1];
+					const tab = this.pane?.tabBar.tabs[n - 1];
 					if (!tab) return false;
-					if (!checking) this.activateTab(tab);
+					if (!checking) this.pane!.activateTab(tab);
 					return true;
 				},
 			});
@@ -631,19 +754,52 @@ class EmeraldApp {
 			name: 'Go to last tab',
 			hotkeys: [{ modifiers: ['Mod'], key: '9' }],
 			checkCallback: (checking) => {
-				const tab = this.tabBar?.tabs.at(-1);
+				const tab = this.pane?.tabBar.tabs.at(-1);
 				if (!tab) return false;
-				if (!checking) this.activateTab(tab);
+				if (!checking) this.pane!.activateTab(tab);
 				return true;
 			},
 		});
+		// Splits (Obsidian's ids): the new pane shows the same note.
+		add({ id: 'workspace:split-vertical', name: 'Split right', callback: () => void this.splitPane(this.pane!, 'vertical', { duplicate: true }) });
+		add({ id: 'workspace:split-horizontal', name: 'Split down', callback: () => void this.splitPane(this.pane!, 'horizontal', { duplicate: true }) });
+		add({
+			id: 'workspace:close-tab-group',
+			name: 'Close this tab group',
+			checkCallback: (checking) => {
+				const pane = this.pane;
+				if (!pane || this.panes().length < 2) return false;
+				if (!checking) for (const tab of [...pane.tabBar.tabs]) pane.closeTab(tab);
+				return true;
+			},
+		});
+		for (const [side, name] of [
+			['left', 'left'],
+			['right', 'right'],
+			['top', 'above'],
+			['bottom', 'below'],
+		] as const) {
+			add({
+				id: `editor:focus-${side}`,
+				name: `Focus on tab group ${name}`,
+				checkCallback: (checking) => {
+					const target = this.pane && this.layout?.neighbour(this.pane, side);
+					if (!target) return false;
+					if (!checking) {
+						this.activatePane(target);
+						target.focus();
+					}
+					return true;
+				},
+			});
+		}
 		add({
 			id: 'markdown:add-metadata-property',
 			name: 'Add file property',
 			hotkeys: [{ modifiers: ['Mod'], key: ';' }],
 			checkCallback: (checking) => {
-				if (!this.activeFile || !this.markdownView) return false;
-				if (!checking) void this.addProperty();
+				if (!this.activeFile) return false;
+				if (!checking) void this.pane!.addProperty();
 				return true;
 			},
 		});
@@ -651,7 +807,7 @@ class EmeraldApp {
 			id: 'editor:toggle-source',
 			name: 'Toggle Live Preview/Source mode',
 			checkCallback: (checking) => {
-				const view = this.markdownView;
+				const view = this.pane?.view;
 				if (!view || !this.activeFile || view.getMode() !== 'source') return false;
 				if (!checking) view.setLivePreview(!view.livePreview);
 				return true;
@@ -688,109 +844,22 @@ class EmeraldApp {
 		$('right-split').toggleClass('is-collapsed', saved.right === false);
 	}
 
-	/**
-	 * Saves pasted or dropped files as attachments (where the vault's settings
-	 * say) and inserts embeds for them, like Obsidian: "Pasted image <time>.png".
-	 */
-	private async insertAttachments(files: File[], pos: number): Promise<void> {
-		const app = this.app;
-		const note = this.activeFile;
-		if (!app || !note) return;
-		const embeds: string[] = [];
-		for (const file of files) {
-			const dot = file.name.lastIndexOf('.');
-			const extension = dot > 0 ? file.name.slice(dot + 1).toLowerCase() : (file.type.split('/')[1] ?? 'bin');
-			const generic = !file.name || /^image\.\w+$/i.test(file.name);
-			const stamp = new Date().toISOString().replace(/\D/g, '').slice(0, 14);
-			const base = generic ? `Pasted image ${stamp}` : file.name.slice(0, dot > 0 ? dot : undefined);
-			try {
-				const path = await app.fileManager.getAvailablePathForAttachment(`${base}.${extension}`, note.path);
-				const created = await app.vault.createBinary(path, await file.arrayBuffer());
-				embeds.push(`!${app.fileManager.generateMarkdownLink(created, note.path)}`);
-			} catch (err) {
-				this.notice(`Could not save ${file.name || 'the pasted file'}: ${err}`);
-			}
-		}
-		if (!embeds.length || this.activeFile !== note) return;
-		this.editor.view.dispatch({ changes: { from: pos, insert: embeds.join('\n') }, selection: { anchor: pos + embeds.join('\n').length } });
-	}
-
-	/** Applies Settings → Editor (app.json) to the editor and the reading view. */
+	/** Applies Settings → Editor (app.json) to every pane. */
 	private applyEditorSettings(): void {
-		const vault = this.vault;
-		if (!vault) return;
-		const get = (key: string) => vault.getConfig(key);
-		const readable = get('readableLineLength') !== false;
-		this.editor.configure({
-			lineNumbers: get('showLineNumber') === true,
-			spellcheck: get('spellcheck') === true,
-			tabSize: Math.min(8, Math.max(1, Number(get('tabSize')) || 4)),
-			useTab: get('useTab') !== false,
-			autoPairBrackets: get('autoPairBrackets') !== false,
-			readableLineLength: readable,
-			vim: get('vimMode') === true,
-		});
-		this.markdownView?.previewMode.containerEl.toggleClass('is-readable-line-width', readable);
+		for (const pane of this.panes()) pane.applySettings();
 	}
 
 	private onConfigChanged(key: string): void {
+		const panes = this.panes();
 		if (['showLineNumber', 'spellcheck', 'tabSize', 'useTab', 'autoPairBrackets', 'readableLineLength', 'vimMode'].includes(key)) this.applyEditorSettings();
-		else if (key === 'strictLineBreaks') void this.markdownView?.renderPreview();
-		else if (key === 'livePreview') this.markdownView?.setLivePreview(this.vault?.getConfig('livePreview') !== false);
-		else if (key === 'propertiesInDocument') {
-			this.editor.refreshLivePreview();
-			void this.markdownView?.renderPreview();
-		}
-	}
-
-	/** The note's properties at the top of Live Preview; edits go into the note's text. */
-	private renderProperties(yaml: string, el: HTMLElement) {
-		const app = this.app;
-		const view = this.markdownView;
-		if (!app || !view) return null;
-		const properties = new PropertiesEditor(app, el, { sourcePath: () => this.activeFile?.path ?? '', save: (data) => view.saveProperties(data) });
-		properties.setYaml(yaml);
-		return { update: (next: string) => properties.setYaml(next), destroy: () => properties.destroy() };
-	}
-
-	/** "Add file property": a new row in the properties editor, or a new line in the YAML (source mode, hidden properties). */
-	private async addProperty(): Promise<void> {
-		const view = this.markdownView!;
-		const cm = this.editor.view;
-		let frontmatter = frontmatterAt(cm.state.doc);
-		if (!frontmatter) {
-			cm.dispatch({ changes: { from: 0, insert: '---\n---\n' } });
-			frontmatter = frontmatterAt(cm.state.doc)!;
-		}
-		const reading = view.getMode() === 'preview';
-		if (this.propertiesInDocument() === 'visible' && (reading || this.editor.isLivePreview())) {
-			if (reading) await view.renderPreview();
-			const root = reading ? view.previewMode.containerEl : cm.dom;
-			root.querySelector<HTMLElement>('.metadata-add-button')?.click();
-			return;
-		}
-		if (reading) await view.setMode('source');
-		// A new line at the end of the YAML.
-		const closing = cm.state.doc.lineAt(frontmatter.to);
-		const empty = closing.number === 2;
-		const at = empty ? closing.from : cm.state.doc.line(closing.number - 1).to;
-		cm.dispatch({ changes: { from: at, insert: '\n' }, selection: { anchor: empty ? at : at + 1 } });
-		cm.focus();
+		else if (key === 'strictLineBreaks') for (const pane of panes) void pane.view.renderPreview();
+		else if (key === 'livePreview') for (const pane of panes) pane.view.setLivePreview(this.vault?.getConfig('livePreview') !== false);
+		else if (key === 'propertiesInDocument') for (const pane of panes) pane.refreshProperties();
 	}
 
 	private propertiesInDocument(): 'visible' | 'hidden' | 'source' {
 		const mode = this.vault?.getConfig('propertiesInDocument');
 		return mode === 'hidden' || mode === 'source' ? mode : 'visible';
-	}
-
-	/** Renders Markdown into a Live Preview widget (embeds, callouts, tables), like the reading view. */
-	private renderInEditor(markdown: string, el: HTMLElement): (() => void) | undefined {
-		const app = this.app;
-		if (!app) return undefined;
-		const component = new Component();
-		component.load();
-		void MarkdownRenderer.render(app, markdown, el, this.activeFile?.path ?? '', component).catch((err: unknown) => console.error(err));
-		return () => component.unload();
 	}
 
 	/** Opens a web or mail link in the default app. */
@@ -802,434 +871,21 @@ class EmeraldApp {
 		}
 	}
 
-	/** Opens the previous (-1) or next (1) note in the history, skipping deleted ones. */
-	private async navigate(direction: -1 | 1): Promise<void> {
-		const from = direction < 0 ? this.history.back : this.history.forward;
-		const to = direction < 0 ? this.history.forward : this.history.back;
-		let target: TFile | undefined;
-		while ((target = from.pop()) && !this.vault?.getFileByPath(target.path)) {}
-		if (!target) return this.renderNavButtons();
-		const current = this.tab?.file;
-		if (current && current !== target) to.push(current);
-		this.navigating = true;
-		try {
-			await this.openFile(target);
-		} finally {
-			this.navigating = false;
-		}
-	}
-
-	private renderNavButtons(): void {
-		const exists = (file: TFile) => Boolean(this.vault?.getFileByPath(file.path));
-		this.navButtons?.back.toggleClass('is-disabled', !this.history.back.some(exists));
-		this.navButtons?.forward.toggleClass('is-disabled', !this.history.forward.some(exists));
-	}
-
-	/** Switches the open note between editing and the reading view (saving first). */
-	private async toggleReading(): Promise<void> {
-		const view = this.markdownView;
-		if (!view || !this.activeFile) return;
-		await this.flush();
-		await view.setMode(view.getMode() === 'preview' ? 'source' : 'preview');
-	}
-
-	/** Opens a file; for notes, `select` is a UTF-16 range to select and scroll to. */
-	private async openFileAt(file: TFile, select?: { from: number; to: number }): Promise<void> {
-		await this.openFile(file);
-		const editor = this.markdownView?.editor;
-		if (!select || file !== this.activeFile || !editor) return;
-		const from = editor.offsetToPos(select.from);
-		const to = editor.offsetToPos(select.to);
-		editor.setSelection(from, to);
-		editor.scrollIntoView({ from, to }, true);
-		editor.focus();
-	}
-
-	/** Opens a file in the current tab, or in a new one. */
-	private async openFile(file: TFile, options: { newTab?: boolean } = {}): Promise<void> {
-		const app = this.app;
-		const view = this.markdownView;
-		if (!app || !view || !this.tabBar) return;
-		const type = file.extension === 'md' ? 'markdown' : app.viewRegistry.getTypeByExtension(file.extension);
-		if (!type) {
-			this.notice(`${file.name}: there is no viewer for this kind of file.`);
-			return;
-		}
-		if (options.newTab) this.newTab();
-		const tab = this.tab!;
-		const shown = app.workspace.rootLeaf.view as { file?: unknown };
-		// Already open here: keep the cursor and undo history.
-		if (tab.file === file && (this.activeFile === file || shown.file === file)) return this.editor.focus();
-		if (!this.navigating && tab.file && tab.file !== file) {
-			tab.history.back.push(tab.file);
-			if (tab.history.back.length > HISTORY_LIMIT) tab.history.back.shift();
-			tab.history.forward = [];
-		}
-		void this.flush();
-		tab.file = file;
-		tab.state = null;
-		tab.scroll = 0;
-		tab.viewState = type === 'markdown' ? null : { type, state: { file: file.path } };
-		tab.title = tab.icon = undefined;
-		this.tabBar.render();
-		this.saveTabs();
-		await this.showTab(tab);
-	}
-
-	/** Makes `tab` current: keeps the state of the one being left and shows this one. */
-	private activateTab(tab: Tab): void {
-		const bar = this.tabBar;
-		if (!bar || tab === bar.active || !bar.tabs.includes(tab)) return;
-		this.leaveTab();
-		this.setActiveTab(tab);
-		void this.showTab(tab);
-	}
-
-	private setActiveTab(tab: Tab): void {
-		const bar = this.tabBar!;
-		bar.active = tab;
-		tab.lastActive = ++this.tabClock;
-		bar.render();
-		this.saveTabs();
-	}
-
-	/** Before another tab shows: saves the current note and keeps the editor's state (or the view's) with the tab. */
-	private leaveTab(): void {
-		const tab = this.tab;
-		const view = this.markdownView;
-		const ws = this.app?.workspace;
-		if (!tab || !view || !ws) return;
-		// flush() reads the text before its first await, so the editor can change right after.
-		void this.flush();
-		if (ws.rootLeaf.view === view) {
-			if (tab.file && tab.file === this.activeFile) {
-				tab.state = this.editor.getState();
-				tab.mode = view.getMode();
-				tab.scroll = view.currentMode.getScroll();
-			}
-		} else if (!isEmptyTab(tab)) {
-			tab.viewState = ws.rootLeaf.getViewState();
-		}
-	}
-
-	/** An empty tab after the current one, made current. */
-	private newTab(): Tab {
-		const bar = this.tabBar!;
-		this.leaveTab();
-		const tab = emptyTab(this.defaultMode());
-		bar.tabs.splice(bar.active ? bar.tabs.indexOf(bar.active) + 1 : bar.tabs.length, 0, tab);
-		this.setActiveTab(tab);
-		// Synchronous, so a plugin can put its own view in the leaf right after `getLeaf(true)`.
-		this.showEmptyTab();
-		return tab;
-	}
-
-	/** Closes a tab; closing the current one goes back to the tab used most recently, or an empty tab. */
-	private closeTab(tab: Tab): void {
-		const bar = this.tabBar;
-		const i = bar ? bar.tabs.indexOf(tab) : -1;
-		if (!bar || i === -1) return;
-		const current = tab === bar.active;
-		if (current) this.leaveTab();
-		if (!isEmptyTab(tab)) {
-			this.closedTabs.push({ tab, index: i });
-			if (this.closedTabs.length > CLOSED_TABS_LIMIT) this.closedTabs.shift();
-		}
-		bar.tabs.splice(i, 1);
-		if (!current) {
-			bar.render();
-			this.saveTabs();
-			return;
-		}
-		const next = bar.tabs.reduce<Tab | null>((best, t) => (!best || t.lastActive > best.lastActive ? t : best), null);
-		if (next) {
-			this.setActiveTab(next);
-			void this.showTab(next);
-		} else {
-			const empty = emptyTab(this.defaultMode());
-			bar.tabs.push(empty);
-			this.setActiveTab(empty);
-			this.showEmptyTab();
-		}
-	}
-
-	/** Reopens the last closed tab where it was (its note, history and editor state), unless its file is gone. */
-	private reopenClosedTab(): void {
-		const bar = this.tabBar;
-		if (!bar) return;
-		let closed: { tab: Tab; index: number } | undefined;
-		while ((closed = this.closedTabs.pop()) && closed.tab.file && !this.vault?.getFileByPath(closed.tab.file.path)) {}
-		if (!closed) return;
-		const current = bar.active;
-		this.leaveTab();
-		// An empty tab gives its place to the reopened one.
-		if (current && isEmptyTab(current) && !current.history.back.length) bar.tabs.splice(bar.tabs.indexOf(current), 1);
-		bar.tabs.splice(Math.min(closed.index, bar.tabs.length), 0, closed.tab);
-		this.setActiveTab(closed.tab);
-		void this.showTab(closed.tab);
-	}
-
-	/** Tabs showing a deleted file become empty. */
-	private onDeleted(file: TAbstractFile): void {
-		const bar = this.tabBar;
-		if (!bar) return;
-		let changed = false;
-		for (const tab of bar.tabs) {
-			if (!tab.file || !isInside(tab.file, file)) continue;
-			changed = true;
-			tab.file = null;
-			tab.state = null;
-			tab.viewState = null;
-			if (tab === bar.active) this.showEmptyTab();
-		}
-		if (!changed) return;
-		bar.render();
-		this.saveTabs();
-	}
-
-	/** Shows a tab in the root leaf: its note in the editor (restoring its state), another view, or nothing. */
-	private async showTab(tab: Tab): Promise<void> {
-		const app = this.app;
-		const view = this.markdownView;
-		if (!app || !view) return;
-		if (isEmptyTab(tab)) return this.showEmptyTab();
-		const ws = app.workspace;
-		const seq = ++this.showing;
-		const current = () => seq === this.showing && this.tab === tab;
-		// A save of this note may be in flight (the tab was left a moment ago).
-		await this.pendingSave;
-		if (!current()) return;
-		const file = tab.file;
-		let viewState = tab.viewState;
-		if (!viewState && file && file.extension !== 'md') {
-			const type = app.viewRegistry.getTypeByExtension(file.extension);
-			if (type) viewState = tab.viewState = { type, state: { file: file.path } };
-		}
-		if (viewState || !file || file.extension !== 'md') {
-			this.clearNote();
-			if (viewState) await ws.rootLeaf.setViewState(viewState);
-			else this.notice(`${file?.name ?? 'This tab'}: there is no viewer for this kind of file.`);
-			if (current()) this.afterShow(tab.file);
-			return;
-		}
-		const text = await app.vault.read(file);
-		if (!current()) return;
-		if (ws.rootLeaf.view !== view) await ws.rootLeaf.open(view);
-		if (!current()) return;
-		this.activeFile = file;
-		view.file = file;
-		view.data = text;
-		const state = tab.state;
-		tab.state = null;
-		if (state) {
-			this.editor.restoreState(state, [setLivePreviewEffect.of(view.livePreview)]);
-			// Changed on disk while the tab was in the background: show the new text, keeping undo.
-			if (state.doc.toString() !== text) this.applyExternalText(text);
-		} else {
-			this.editor.setValue(text);
-		}
-		this.el.editor.hidden = false;
-		this.el.noFile.hidden = true;
-		if (view.getMode() !== tab.mode) await view.setMode(tab.mode);
-		else await view.renderPreview();
-		if (!current()) return;
-		const scroll = tab.scroll;
-		if (scroll) requestAnimationFrame(() => current() && view.currentMode.applyScroll(scroll));
-		if (tab.mode === 'source') this.editor.focus();
-		this.afterShow(file);
-	}
-
-	/** An empty tab: the note view with nothing open ("No file is open"). */
-	private showEmptyTab(): void {
-		const ws = this.app?.workspace;
-		const view = this.markdownView;
-		if (!ws || !view) return;
-		++this.showing;
-		this.clearNote();
-		if (ws.rootLeaf.view !== view) void ws.rootLeaf.open(view);
-		this.el.editor.hidden = true;
-		this.el.noFile.hidden = false;
-		this.afterShow(null);
-	}
-
-	/** Empties the note editor (its edits were saved when the tab was left). */
-	private clearNote(): void {
-		clearTimeout(this.saveTimer);
-		this.dirty = false;
-		this.activeFile = null;
-		if (this.markdownView) this.markdownView.file = null;
-		this.editor.setValue('');
-	}
-
-	private afterShow(file: TFile | null): void {
-		const app = this.app!;
-		this.renderHeader();
-		this.explorer?.setActive(file);
-		this.renderSidePanels();
-		this.renderNavButtons();
-		this.tabBar?.render();
-		if (file) {
-			app.workspace.recordOpenFile(file);
-			app.saveLocalStorage(LAST_FILE_KEY, file.path);
-		}
-		app.workspace.trigger('file-open', file);
-	}
-
-	/** A plugin (or a view) changed what the root leaf shows: the current tab follows. */
-	private syncTabWithLeaf(): void {
-		const tab = this.tab;
-		const shown = this.app?.workspace.rootLeaf.view;
-		if (!tab || !shown || shown === this.markdownView) return;
-		const file = (shown as { file?: unknown }).file;
-		if (this.activeFile) {
-			void this.flush();
-			this.clearNote();
-		}
-		tab.file = file instanceof TFile ? file : null;
-		tab.title = shown.getDisplayText();
-		tab.icon = shown.getIcon();
-		if (!tab.viewState || tab.viewState.type !== shown.getViewType()) tab.viewState = { type: shown.getViewType() };
-		this.tabBar!.render();
-		this.saveTabs();
-	}
-
-	private defaultMode(): MarkdownViewModeType {
-		return this.vault?.getConfig('defaultViewMode') === 'preview' ? 'preview' : 'source';
-	}
-
-	/** Remembers the open tabs (per vault) for the next start. */
-	private saveTabs(): void {
-		const bar = this.tabBar;
-		if (!bar || !this.app) return;
-		this.app.saveLocalStorage(TABS_KEY, {
-			tabs: bar.tabs.map((tab) => ({ file: tab.file?.path ?? null, mode: tab.mode })),
-			active: bar.active ? bar.tabs.indexOf(bar.active) : 0,
-		});
-	}
-
-	/**
-	 * The tabs open when the app last closed (only the current one is loaded
-	 * now); else one tab with the last note, or the most recently edited one.
-	 * `keep` is a note to show after a reload.
-	 */
-	private restoreTabs(app: App, keep: string | null): void {
-		const bar = this.tabBar!;
-		const vault = app.vault;
-		const saved = app.loadLocalStorage(TABS_KEY) as { tabs?: unknown; active?: unknown } | null;
-		let active: Tab | null = null;
-		const entries: unknown[] = Array.isArray(saved?.tabs) ? saved.tabs : [];
-		for (const [i, entry] of entries.entries()) {
-			const { file: path, mode } = (entry ?? {}) as { file?: unknown; mode?: unknown };
-			const file = typeof path === 'string' ? vault.getFileByPath(path) : null;
-			// A note deleted or renamed outside the app since: its tab goes.
-			if (typeof path === 'string' && !file) continue;
-			const tab = emptyTab(mode === 'preview' ? 'preview' : 'source');
-			tab.file = file;
-			bar.tabs.push(tab);
-			if (i === saved?.active) active = tab;
-		}
-		const kept = keep ? vault.getFileByPath(keep) : null;
-		if (kept) active = bar.tabs.find((tab) => tab.file === kept) ?? null;
-		if (!bar.tabs.length || (kept && !active)) {
-			const last = app.loadLocalStorage(LAST_FILE_KEY);
-			const tab = emptyTab(this.defaultMode());
-			tab.file =
-				kept ||
-				(typeof last === 'string' && vault.getFileByPath(last)) ||
-				vault.getMarkdownFiles().sort((a, b) => b.stat.mtime - a.stat.mtime)[0] ||
-				null;
-			bar.tabs.push(tab);
-			active = tab;
-		}
-		this.setActiveTab(active ?? bar.tabs[0]!);
-	}
-
-	private async openLink(linktext: string, newTab = false): Promise<void> {
-		if (!this.vault || !this.metadataCache) return;
-		const linkpath = getLinkpath(linktext);
-		if (!linkpath) return;
-		let target = this.metadataCache.getFirstLinkpathDest(linkpath, this.activeFile?.path ?? '');
-		if (!target) {
-			// Like Obsidian, following a link to a missing note creates it.
-			const path = linkpath.toLowerCase().endsWith('.md') ? linkpath : `${linkpath}.md`;
-			try {
-				target = await this.vault.create(path, '');
-			} catch (err) {
-				this.notice(`Could not create ${path}: ${err}`);
-				return;
-			}
-		}
-		await this.openFile(target, { newTab });
-	}
-
-	private onEdit(): void {
-		if (!this.activeFile || this.applyingExternalChange) return;
-		this.dirty = true;
-		clearTimeout(this.saveTimer);
-		this.saveTimer = setTimeout(() => void this.flush(), SAVE_DELAY_MS);
-		this.renderStatus();
-		const view = this.markdownView;
-		if (view) this.app?.workspace.trigger('editor-change', view.editor, view);
-	}
-
-	/**
-	 * Saves pending edits to the active file now. The text is taken before
-	 * this returns, so the editor may show another note right after; saves
-	 * run one after another (`pendingSave`).
-	 */
+	/** Saves pending edits in every pane now. */
 	private flush(): Promise<void> {
-		clearTimeout(this.saveTimer);
-		const vault = this.vault;
-		const file = this.activeFile;
-		if (!this.dirty || !file || !vault) return this.pendingSave;
-		const text = this.editor.getValue();
-		this.dirty = false;
-		this.saving = true;
-		this.renderStatus();
-		const save = this.pendingSave.then(async () => {
-			try {
-				await vault.modify(file, text);
-				if (this.markdownView?.file === file) this.markdownView.data = text;
-			} catch (err) {
-				if (file === this.activeFile) this.dirty = true;
-				this.notice(`Could not save ${file.path}: ${err}`);
-			} finally {
-				this.saving = false;
-				this.renderStatus();
-			}
-		});
-		this.pendingSave = save;
-		return save;
-	}
-
-	/** Shows a change made outside the app, unless there are unsaved edits here. */
-	private async reloadIfChangedOnDisk(file: TFile): Promise<void> {
-		if (!this.vault || this.dirty) return;
-		const text = await this.vault.cachedRead(file);
-		if (file !== this.activeFile || this.dirty || text === this.editor.getValue()) return;
-		this.applyExternalText(text);
-		void this.markdownView?.renderPreview();
-		this.renderStatus();
-	}
-
-	/** Puts text changed outside the app into the editor, keeping undo history and the cursor where possible. */
-	private applyExternalText(text: string): void {
-		this.applyingExternalChange = true;
-		try {
-			this.editor.replaceValue(text);
-		} finally {
-			this.applyingExternalChange = false;
-		}
+		for (const pane of this.panes()) void pane.flush();
+		return this.pendingSave;
 	}
 
 	/** A new note in `folder`, or where the vault's "Default location for new notes" says. */
 	private async newNote(folder?: TFolder): Promise<void> {
 		const app = this.app;
-		if (!app) return;
+		const pane = this.pane;
+		if (!app || !pane) return;
 		const parent = folder ?? app.fileManager.getNewFileParent(this.activeFile?.path ?? '');
 		try {
-			await this.openFile(await app.vault.create(app.vault.getAvailablePath(joinPath(parent.isRoot() ? '' : parent.path, 'Untitled'), 'md'), ''));
-			this.el.title.select();
+			await pane.openFile(await app.vault.create(app.vault.getAvailablePath(joinPath(parent.isRoot() ? '' : parent.path, 'Untitled'), 'md'), ''));
+			pane.selectTitle();
 		} catch (err) {
 			this.notice(`Could not create a note: ${err}`);
 		}
@@ -1248,29 +904,6 @@ class EmeraldApp {
 		}
 	}
 
-	private async renameActiveFile(newName: string): Promise<void> {
-		const file = this.activeFile;
-		if (!file || !this.vault) return;
-		newName = newName.trim();
-		if (!newName || newName === file.basename) {
-			this.el.title.value = file.basename;
-			return;
-		}
-		if (/[\\/:]/.test(newName)) {
-			this.notice('Note names cannot contain \\ / or :');
-			this.el.title.value = file.basename;
-			return;
-		}
-		const folder = file.parent && !file.parent.isRoot() ? file.parent.path + '/' : '';
-		try {
-			await this.flush();
-			await this.app!.fileManager.renameFile(file, `${folder}${newName}.${file.extension}`);
-		} catch (err) {
-			this.notice(`Could not rename: ${err}`);
-			this.el.title.value = file.basename;
-		}
-	}
-
 	/** Moves a file or folder to the vault's `.trash`, after asking. */
 	private async trash(file: TAbstractFile): Promise<void> {
 		if (!this.vault) return;
@@ -1280,7 +913,7 @@ class EmeraldApp {
 			if (!ok) return;
 		}
 		try {
-			if (this.activeFile && isInside(this.activeFile, file)) await this.flush();
+			if (this.panes().some((pane) => pane.activeFile && isInside(pane.activeFile, file))) await this.flush();
 			await this.vault.trash(file);
 		} catch (err) {
 			this.notice(`Could not move to trash: ${err}`);
@@ -1297,12 +930,8 @@ class EmeraldApp {
 		});
 	}
 
-	private renderHeader(): void {
-		const file = this.activeFile;
-		this.el.title.value = file?.basename ?? '';
-		this.el.title.disabled = !file;
-		this.el.trash.hidden = !file;
-		const shown = this.tab?.file ?? file;
+	private renderWindowTitle(): void {
+		const shown = this.pane?.tab?.file ?? null;
 		const vaultName = this.vault?.getName() ?? '';
 		void getCurrentWindow().setTitle(shown ? `${shown.extension === 'md' ? shown.basename : shown.name} - ${vaultName} - EmeraldMD` : `${vaultName} - EmeraldMD`);
 	}
@@ -1317,14 +946,15 @@ class EmeraldApp {
 	}
 
 	private renderStatus(): void {
+		const pane = this.pane;
 		const file = this.activeFile;
-		if (!file || !this.metadataCache) {
+		if (!pane || !file || !this.metadataCache) {
 			this.el.status.textContent = '';
 			return;
 		}
 		const backlinks = this.metadataCache.getBacklinks(file).length;
-		const words = countWords(this.editor.getValue());
-		const state = this.saving ? 'Saving…' : this.dirty ? 'Unsaved changes' : 'Saved';
+		const words = countWords(pane.editor.getValue());
+		const state = pane.saving ? 'Saving…' : pane.hasUnsavedEdits ? 'Unsaved changes' : 'Saved';
 		this.el.status.textContent = `${state} · ${words} words · ${backlinks} backlink${backlinks === 1 ? '' : 's'}`;
 	}
 

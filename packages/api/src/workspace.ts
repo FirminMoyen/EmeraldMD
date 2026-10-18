@@ -35,25 +35,33 @@ export interface OpenViewState {
 	group?: WorkspaceLeaf;
 }
 
-/** What the desktop shell (or a headless test) provides to the workspace. */
+/**
+ * What the desktop shell (or a headless test) provides to the workspace.
+ * The main area has one leaf per pane (tab group); `leaf` says which pane,
+ * the current one when left out.
+ */
 export interface WorkspaceHost {
-	/** Shows `file` in the root leaf's editor. */
-	openFile(file: TFile): Promise<void>;
-	/** Saves the root editor's pending changes. */
+	/** Shows `file` in a pane's note editor. */
+	openFile(file: TFile, leaf?: WorkspaceLeaf): Promise<void>;
+	/** Saves pending changes in every note editor. */
 	save(): Promise<void>;
-	/** Applies plugin editor extensions to the editor. */
+	/** Applies plugin editor extensions to the note editors. */
 	setEditorExtensions(extensions: Extension[]): void;
-	/** Opens an empty tab in the main area and makes it current (for `getLeaf(true)`). */
-	newTab?(): void;
-	/** Opens any file a view can show (notes, canvases…) in the current tab; without it, only notes go through `openFile`. */
-	openInTab?(file: TFile): Promise<void>;
-	/** Closes the current tab (`detach` on the root leaf). */
-	closeTab?(): void;
+	/** Opens an empty tab in a pane and makes it current (for `getLeaf(true)`). */
+	newTab?(leaf?: WorkspaceLeaf): void;
+	/** Opens any file a view can show (notes, canvases…) in a pane's current tab; without it, only notes go through `openFile`. */
+	openInTab?(file: TFile, leaf?: WorkspaceLeaf): Promise<void>;
+	/** Closes a pane's current tab (`detach` on its leaf). */
+	closeTab?(leaf?: WorkspaceLeaf): void;
+	/** Splits the main area next to `leaf`'s pane; returns the new pane's leaf, made current. */
+	split?(leaf: WorkspaceLeaf, direction: SplitDirection, before?: boolean): WorkspaceLeaf;
+	/** A pane's leaf became the active leaf (`setActiveLeaf`). */
+	activatePane?(leaf: WorkspaceLeaf): void;
 }
 
 const headlessHost = (workspace: Workspace): WorkspaceHost => ({
-	async openFile(file) {
-		const view = workspace.markdownView;
+	async openFile(file, leaf) {
+		const view = workspace.noteViews.get(leaf ?? workspace.rootLeaf);
 		if (view) view.file = file;
 		workspace.trigger('file-open', file);
 	},
@@ -180,11 +188,12 @@ export class WorkspaceLeaf extends WorkspaceItem {
 
 	async setViewState(viewState: ViewState, eState?: unknown): Promise<void> {
 		const workspace = this.app.workspace;
-		if (viewState.type === 'markdown' && this === workspace.rootLeaf && workspace.markdownView) {
+		const noteView = workspace.noteViews.get(this);
+		if (viewState.type === 'markdown' && noteView) {
 			const path = viewState.state?.file;
 			const file = typeof path === 'string' ? this.app.vault.getFileByPath(path) : null;
 			if (file) await workspace.openFileInLeaf(this, file);
-			else await this.open(workspace.markdownView);
+			else await this.open(noteView);
 		} else if (viewState.type !== this.view.getViewType()) {
 			const creator = this.app.viewRegistry.getViewCreatorByType(viewState.type);
 			await this.open(creator ? creator(this) : new EmptyView(this));
@@ -225,10 +234,11 @@ export class WorkspaceLeaf extends WorkspaceItem {
 
 	detach(): void {
 		const workspace = this.app.workspace;
-		if (this === workspace.rootLeaf) {
-			// The root leaf stays: with tabs, detaching it closes the current tab; else it shows the note editor again.
-			if (workspace.host.closeTab) workspace.host.closeTab();
-			else if (workspace.markdownView && this.view !== workspace.markdownView) void this.open(workspace.markdownView);
+		const noteView = workspace.noteViews.get(this);
+		if (noteView) {
+			// A pane's leaf stays: with tabs, detaching it closes the pane's current tab; else it shows the note editor again.
+			if (workspace.host.closeTab) workspace.host.closeTab(this);
+			else if (this.view !== noteView) void this.open(noteView);
 			return;
 		}
 		void closeView(this.view);
@@ -473,10 +483,12 @@ export class Workspace extends Events {
 	containerEl: HTMLElement;
 	layoutReady = false;
 	requestSaveLayout: Debouncer<[], Promise<void>>;
-	/** @internal */
+	/** @internal The pane leaf used last: where files open, and what commands act on. */
 	rootLeaf: WorkspaceLeaf;
-	/** @internal The shell's note editor, shown in the root leaf. */
-	markdownView: MarkdownView | null = null;
+	/** @internal The main area's leaves, one per pane (tab group), in layout order. */
+	rootLeaves: WorkspaceLeaf[];
+	/** @internal Each pane leaf's note view (the shell's editor). */
+	readonly noteViews = new Map<WorkspaceLeaf, MarkdownView>();
 	/** @internal */
 	host: WorkspaceHost;
 	/** @internal */
@@ -498,6 +510,7 @@ export class Workspace extends Events {
 		this.host = headlessHost(this);
 		this.rootSplit = new WorkspaceRoot(createDiv('workspace-split mod-root'));
 		this.rootLeaf = new WorkspaceLeaf(app, this.rootSplit);
+		this.rootLeaves = [this.rootLeaf];
 		this.rootSplit.containerEl.appendChild(this.rootLeaf.containerEl);
 		this.activeLeaf = this.rootLeaf;
 		this.leftSplit = new WorkspaceSidedock(app, 'left');
@@ -508,13 +521,43 @@ export class Workspace extends Events {
 		this.requestLayoutChangeDebounced = debounce(() => this.trigger('layout-change'), 0);
 	}
 
-	/** @internal Connects the shell. */
+	/** @internal Connects the shell, with the first pane's note view. */
 	setHost(host: WorkspaceHost, markdownView: MarkdownView): void {
 		this.host = host;
-		this.markdownView = markdownView;
-		this.rootLeaf.persistentViews.add(markdownView);
-		void this.rootLeaf.open(markdownView);
+		this.addRootLeaf(this.rootLeaf, markdownView);
 		this.updateOptions();
+	}
+
+	/** @internal The current pane's note view. */
+	get markdownView(): MarkdownView | null {
+		return this.noteViews.get(this.rootLeaf) ?? null;
+	}
+
+	/** @internal A new leaf for a pane of the main area (the shell gives it a note view with `addRootLeaf`). */
+	createRootLeaf(): WorkspaceLeaf {
+		return new WorkspaceLeaf(this.app, this.rootSplit);
+	}
+
+	/** @internal Registers a pane's leaf and its note view, at `index` in layout order. */
+	addRootLeaf(leaf: WorkspaceLeaf, view: MarkdownView, index = this.rootLeaves.length): void {
+		this.noteViews.set(leaf, view);
+		leaf.persistentViews.add(view);
+		if (!this.rootLeaves.includes(leaf)) this.rootLeaves.splice(index, 0, leaf);
+		void leaf.open(view);
+	}
+
+	/** @internal A pane was closed: its views close too. */
+	removeRootLeaf(leaf: WorkspaceLeaf): void {
+		const view = leaf.view;
+		const noteView = this.noteViews.get(leaf);
+		if (view !== noteView) void closeView(view);
+		if (noteView) void closeView(noteView);
+		this.noteViews.delete(leaf);
+		this.rootLeaves = this.rootLeaves.filter((l) => l !== leaf);
+		if (this.rootLeaf === leaf && this.rootLeaves[0]) this.rootLeaf = this.rootLeaves[0];
+		if (this.activeLeaf === leaf) this.setActiveLeaf(this.rootLeaf);
+		leaf.containerEl.detach();
+		this.requestLayoutChange();
 	}
 
 	get activeEditor(): MarkdownFileInfo | null {
@@ -546,12 +589,13 @@ export class Workspace extends Events {
 		return this.getLeaf();
 	}
 
-	createLeafBySplit(_leaf: WorkspaceLeaf, _direction?: SplitDirection, _before?: boolean): WorkspaceLeaf {
-		return this.getLeaf();
+	createLeafBySplit(leaf: WorkspaceLeaf, direction: SplitDirection = 'vertical', before?: boolean): WorkspaceLeaf {
+		const pane = this.rootLeaves.includes(leaf) ? leaf : this.rootLeaf;
+		return this.host.split?.(pane, direction, before) ?? this.getLeaf(true);
 	}
 
-	splitActiveLeaf(_direction?: SplitDirection): WorkspaceLeaf {
-		return this.getLeaf();
+	splitActiveLeaf(direction: SplitDirection = 'vertical'): WorkspaceLeaf {
+		return this.createLeafBySplit(this.rootLeaf, direction);
 	}
 
 	async duplicateLeaf(leaf: WorkspaceLeaf): Promise<WorkspaceLeaf> {
@@ -563,12 +607,13 @@ export class Workspace extends Events {
 	}
 
 	/**
-	 * The root leaf. Asked for a new leaf (`true`, `'tab'`, `'split'`,
-	 * `'window'`), the app first opens a new tab, so the file opened next goes
-	 * there; there are no splits or popout windows yet.
+	 * The current pane's leaf. Asked for a new leaf, the app first opens a new
+	 * tab there (`true`, `'tab'`, `'window'`: there are no popout windows), or
+	 * a new pane next to it (`'split'`), so the file opened next goes there.
 	 */
-	getLeaf(newLeaf?: PaneType | boolean | 'split', _direction?: SplitDirection): WorkspaceLeaf {
-		if (newLeaf) this.host.newTab?.();
+	getLeaf(newLeaf?: PaneType | boolean | 'split', direction: SplitDirection = 'vertical'): WorkspaceLeaf {
+		if (newLeaf === 'split') return this.createLeafBySplit(this.rootLeaf, direction);
+		if (newLeaf) this.host.newTab?.(this.rootLeaf);
 		return this.rootLeaf;
 	}
 
@@ -594,6 +639,10 @@ export class Workspace extends Events {
 	setActiveLeaf(leaf: WorkspaceLeaf, params?: { focus?: boolean } | boolean, _focus?: boolean): void {
 		if (this.activeLeaf === leaf) return;
 		this.activeLeaf = leaf;
+		if (this.rootLeaves.includes(leaf) && this.rootLeaf !== leaf) {
+			this.rootLeaf = leaf;
+			this.host.activatePane?.(leaf);
+		}
 		this.trigger('active-leaf-change', leaf);
 		const focus = typeof params === 'object' ? params.focus : _focus;
 		if (focus && leaf.view instanceof MarkdownView) leaf.view.editor?.focus();
@@ -648,7 +697,7 @@ export class Workspace extends Events {
 	}
 
 	iterateRootLeaves(callback: (leaf: WorkspaceLeaf) => unknown): void {
-		callback(this.rootLeaf);
+		for (const leaf of [...this.rootLeaves]) callback(leaf);
 	}
 
 	/** CodeMirror 5 editors (legacy). EmeraldMD has none. */
@@ -709,11 +758,12 @@ export class Workspace extends Events {
 	/** @internal */
 	async openFileInLeaf(leaf: WorkspaceLeaf, file: TFile, openState?: OpenViewState): Promise<void> {
 		const type = file.extension === 'md' ? 'markdown' : this.app.viewRegistry.getTypeByExtension(file.extension);
-		if (type && leaf === this.rootLeaf && this.host.openInTab) {
-			await this.host.openInTab(file);
-		} else if (type === 'markdown' && leaf === this.rootLeaf && this.markdownView) {
-			await this.rootLeaf.open(this.markdownView);
-			await this.host.openFile(file);
+		const noteView = this.noteViews.get(leaf);
+		if (type && noteView && this.host.openInTab) {
+			await this.host.openInTab(file, leaf);
+		} else if (type === 'markdown' && noteView) {
+			await leaf.open(noteView);
+			await this.host.openFile(file, leaf);
 		} else if (type) {
 			await leaf.setViewState({ type, state: { ...(openState?.state ?? {}), file: file.path }, active: openState?.active });
 		} else {
@@ -756,7 +806,7 @@ export class Workspace extends Events {
 	}
 
 	private allLeaves(): WorkspaceLeaf[] {
-		return [this.rootLeaf, ...this.leftSplit.leaves, ...this.rightSplit.leaves];
+		return [...this.rootLeaves, ...this.leftSplit.leaves, ...this.rightSplit.leaves];
 	}
 }
 
