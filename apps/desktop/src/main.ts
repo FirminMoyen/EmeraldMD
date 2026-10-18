@@ -46,13 +46,17 @@ import { registerCoreViews, revealSearch } from './core-views';
 import { RemoteVaults } from './remote';
 import { hostOf } from './remote/connect-modal';
 import { setupSyncStatus } from './synced';
-import { NotePane, type PaneHost } from './pane';
+import { NotePane, reasonOf, type PaneHost } from './pane';
 import { SplitLayout, type SavedLayout, type SplitDirection } from './splits';
 import { isEmptyTab, type Tab, type TabBar } from './tabs';
 import { TauriBackend, TauriConfigStore, tauriRequestBackend, tauriTrustStore } from './tauri-backend';
 
 /** A note to reopen after the page reloads to switch vaults (see `attach`). */
 const REOPEN_FILE_KEY = 'emeraldmd:reopen-file';
+/** Edits not saved yet when the page reloads (the server was unreachable): saved after the reload. */
+const UNSAVED_KEY = 'emeraldmd:unsaved';
+/** How often failed saves are tried again. */
+const SAVE_RETRY_MS = 15_000;
 
 /** Local storage keys (per vault, through `app.saveLocalStorage`). */
 const LAST_FILE_KEY = 'emerald-last-file';
@@ -128,6 +132,15 @@ class EmeraldApp {
 	private tabClock = 0;
 	/** Saves of every pane, one after another: a note is read again only after them. */
 	private pendingSave: Promise<void> = Promise.resolve();
+	/**
+	 * Notes whose last save failed (a server vault while the server is
+	 * unreachable, a disk error), with the text to save: shown instead of the
+	 * file, and saved again every few seconds and when the server is back.
+	 */
+	private readonly unsaved = new Map<TFile, string>();
+	private retryTimer: ReturnType<typeof setTimeout> | undefined;
+	/** A failed save was announced; the next time everything is saved, that is announced too. */
+	private savesFailing = false;
 	/** Editor extensions registered by plugins, for every pane's editor. */
 	private editorExtensions: Extension[] = [];
 	private lastHandledShortcut = -Infinity;
@@ -179,17 +192,22 @@ class EmeraldApp {
 			showEmptyState: () => this.showEmptyState(),
 			notice: (message) => this.notice(message),
 			openLocal: (path) => this.open(path),
+			connected: () => {
+				void this.retryUnsaved();
+				for (const pane of this.panes()) pane.retryUnreadable();
+			},
 		});
 		// The local vault's watcher; a remote vault's changes come through RemoteVaults.
 		void listen<VaultUpdate>('vault-changed', (event) => {
 			if (this.backend instanceof TauriBackend) this.vault?.applyUpdate(event.payload);
 		});
-		void getCurrentWindow().onCloseRequested(() => this.flush());
+		void getCurrentWindow().onCloseRequested(async (event) => {
+			if (!(await this.saveAllOrAsk())) event.preventDefault();
+		});
 		// The native menu (src-tauri/src/menu.rs) and quitting.
 		void listen<string>('menu-command', (event) => this.runMenuCommand(event.payload));
 		void listen('quit-requested', async () => {
-			await this.flush().catch((err: unknown) => console.error(err));
-			await invoke('quit_app');
+			if (await this.saveAllOrAsk()) await invoke('quit_app');
 		});
 		window.addEventListener('keydown', (e) => {
 			// A shortcut the page handled; its menu item must not run the command again.
@@ -284,6 +302,11 @@ class EmeraldApp {
 		this.remote.vaultOpened(backend);
 		if (this.app) {
 			await this.flush();
+			await this.retryUnsaved();
+			// Still not saved: kept for after the reload, when the same vault opens again.
+			if (this.unsaved.size && options.keepActiveFile) {
+				sessionStorage.setItem(UNSAVED_KEY, JSON.stringify([...this.unsaved].map(([file, text]) => ({ path: file.path, text }))));
+			}
 			if (options.keepActiveFile && this.activeFile) sessionStorage.setItem(REOPEN_FILE_KEY, this.activeFile.path);
 			this.host?.unloadAll();
 			window.location.reload();
@@ -374,6 +397,11 @@ class EmeraldApp {
 		});
 		vault.on('delete', (file: TAbstractFile) => {
 			for (const pane of this.panes()) pane.onDeleted(file);
+			// Deleted elsewhere while its edits waited to be saved: they cannot be saved any more.
+			for (const lost of [...this.unsaved.keys()].filter((f) => isInside(f, file))) {
+				this.unsaved.delete(lost);
+				this.notice(`${lost.path} was deleted, so the changes not saved yet were dropped.`, 10000);
+			}
 		});
 		vault.on('modify', (file: TFile) => {
 			for (const pane of this.panes()) pane.onModified(file);
@@ -385,6 +413,7 @@ class EmeraldApp {
 		this.el.workspace.hidden = false;
 		this.renderTree();
 		this.restoreSidebars(app);
+		this.restoreUnsaved(vault);
 		this.restoreLayout(app, keep);
 		// Every pane shows its current tab; the current pane last, so it keeps the focus.
 		for (const pane of this.panes()) if (pane !== this.pane) await pane.showTab(pane.tab!);
@@ -431,8 +460,9 @@ class EmeraldApp {
 		this.paneHost = {
 			app,
 			notice: (message, duration) => this.notice(message, duration),
-			queueSave: (save) => (this.pendingSave = this.pendingSave.then(save)),
+			saveText: (file, text) => this.saveText(file, text),
 			saved: () => this.pendingSave,
+			unsavedText: (file) => this.unsaved.get(file),
 			activate: (pane) => this.activatePane(pane),
 			isCurrent: (pane) => pane === this.pane,
 			saveLayout: () => this.saveLayout(),
@@ -696,7 +726,7 @@ class EmeraldApp {
 			hotkeys: [{ modifiers: ['Mod'], key: 'S' }],
 			checkCallback: (checking) => {
 				if (!this.activeFile) return false;
-				if (!checking) void this.pane!.flush();
+				if (!checking) void this.flush();
 				return true;
 			},
 		});
@@ -896,10 +926,83 @@ class EmeraldApp {
 		}
 	}
 
-	/** Saves pending edits in every pane now. */
+	/** Saves pending edits in every pane now, and tries again the saves that failed. */
 	private flush(): Promise<void> {
 		for (const pane of this.panes()) void pane.flush();
+		if (this.unsaved.size) void this.retryUnsaved();
 		return this.pendingSave;
+	}
+
+	/**
+	 * Saves `text` (or, with `null`, the text still waiting to be saved for
+	 * `file`, read when the save runs) after the saves already queued. Saves
+	 * run in order, so the last one for a file decides whether it is saved.
+	 */
+	private saveText(file: TFile, text: string | null): Promise<boolean> {
+		const vault = this.vault;
+		const save = this.pendingSave.then(async () => {
+			const data = text ?? this.unsaved.get(file);
+			if (!vault || data === undefined) return true;
+			try {
+				await vault.modify(file, data);
+				this.unsaved.delete(file);
+				if (!this.unsaved.size && this.savesFailing) {
+					this.savesFailing = false;
+					this.notice('All changes are saved.');
+				}
+				return true;
+			} catch (err) {
+				this.unsaved.set(file, data);
+				if (!this.savesFailing) {
+					this.savesFailing = true;
+					this.notice(`Could not save ${file.path}: ${reasonOf(err)}. Your changes are kept and saved as soon as possible.`, 10000);
+				}
+				this.scheduleRetry();
+				return false;
+			} finally {
+				this.renderStatus();
+			}
+		});
+		this.pendingSave = save.then(() => undefined);
+		return save;
+	}
+
+	private scheduleRetry(): void {
+		clearTimeout(this.retryTimer);
+		this.retryTimer = setTimeout(() => void this.retryUnsaved(), SAVE_RETRY_MS);
+	}
+
+	/** Saves again the notes whose last save failed. */
+	private async retryUnsaved(): Promise<void> {
+		clearTimeout(this.retryTimer);
+		const files = [...this.unsaved.keys()];
+		await Promise.all(files.map((file) => this.saveText(file, null)));
+	}
+
+	/** Edits kept across a reload (see `attach`), for the notes that still exist. */
+	private restoreUnsaved(vault: Vault): void {
+		const saved = sessionStorage.getItem(UNSAVED_KEY);
+		sessionStorage.removeItem(UNSAVED_KEY);
+		if (!saved) return;
+		try {
+			for (const { path, text } of JSON.parse(saved) as { path: string; text: string }[]) {
+				const file = vault.getFileByPath(path);
+				if (file && typeof text === 'string') this.unsaved.set(file, text);
+			}
+		} catch {
+			return;
+		}
+		if (this.unsaved.size) this.scheduleRetry();
+	}
+
+	/** Before the window closes or the app quits: saves everything; if some notes still cannot be saved, asks. */
+	private async saveAllOrAsk(): Promise<boolean> {
+		await this.flush().catch((err: unknown) => console.error(err));
+		if (!this.unsaved.size) return true;
+		await this.retryUnsaved();
+		if (!this.unsaved.size) return true;
+		const names = [...this.unsaved.keys()].map((file) => file.basename).join(', ');
+		return ask(`These notes could not be saved: ${names}. Quit anyway and lose those changes?`, { title: 'Unsaved changes', kind: 'warning' });
 	}
 
 	/** A new note in `folder`, or where the vault's "Default location for new notes" says. */
@@ -979,7 +1082,7 @@ class EmeraldApp {
 		}
 		const backlinks = this.metadataCache.getBacklinks(file).length;
 		const words = countWords(pane.editor.getValue());
-		const state = pane.saving ? 'Saving…' : pane.hasUnsavedEdits ? 'Unsaved changes' : 'Saved';
+		const state = pane.saving ? 'Saving…' : this.unsaved.has(file) ? 'Not saved yet, retrying' : pane.hasUnsavedEdits ? 'Unsaved changes' : 'Saved';
 		this.el.status.textContent = `${state} · ${words} words · ${backlinks} backlink${backlinks === 1 ? '' : 's'}`;
 	}
 

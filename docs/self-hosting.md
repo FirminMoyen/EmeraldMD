@@ -307,6 +307,20 @@ server and vault; the token goes to the operating system's keychain (macOS
 Keychain, Windows Credential Manager, the Secret Service on Linux), not to the
 app's settings file.
 
+An online vault shows changes made elsewhere as they happen (the dot next to
+the vault's name is green). If the server becomes unreachable (orange dot):
+
+- edits keep going: notes that cannot be saved say *Not saved yet, retrying*
+  in the status bar and are saved again every 15 seconds, and as soon as the
+  connection is back (a notice says when everything is saved);
+- notes already open stay open; a note not loaded yet says it cannot be
+  opened, and opens by itself when the server is back;
+- closing the window or quitting asks before dropping changes that could not
+  be saved.
+
+To work offline for longer, keep a synced copy instead (see
+[sync.md](sync.md)).
+
 ## API
 
 For other clients and scripts. Every request but `/healthz` carries

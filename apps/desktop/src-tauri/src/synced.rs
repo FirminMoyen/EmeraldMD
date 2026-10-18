@@ -174,10 +174,8 @@ impl Syncer {
 
 /// The server token from the Keychain.
 fn token(config: &SyncedVault) -> Result<String, keyring::Error> {
-    // Debug builds only: lets developers sync against a local test server
-    // without touching the Keychain. Release builds always use the Keychain.
-    #[cfg(debug_assertions)]
-    if let Ok(token) = std::env::var("EMERALDMD_DEV_SYNC_TOKEN") {
+    // Debug builds can take a test server's token from the environment (see remote::dev_token).
+    if let Some(token) = crate::remote::dev_token() {
         return Ok(token);
     }
     keyring::Entry::new(KEYCHAIN_SERVICE, &config.server_url)?.get_password()
