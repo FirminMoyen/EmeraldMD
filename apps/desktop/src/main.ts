@@ -48,7 +48,7 @@ import { hostOf } from './remote/connect-modal';
 import { setupSyncStatus } from './synced';
 import { NotePane, type PaneHost } from './pane';
 import { SplitLayout, type SavedLayout, type SplitDirection } from './splits';
-import { isEmptyTab, type Tab } from './tabs';
+import { isEmptyTab, type Tab, type TabBar } from './tabs';
 import { TauriBackend, TauriConfigStore, tauriRequestBackend, tauriTrustStore } from './tauri-backend';
 
 /** A note to reopen after the page reloads to switch vaults (see `attach`). */
@@ -453,6 +453,8 @@ class EmeraldApp {
 			propertiesInDocument: () => this.propertiesInDocument(),
 			editorExtensions: () => this.editorExtensions,
 			tabMenu: (pane, tab, event) => this.showTabMenu(pane, tab, event),
+			moveTab: (tab, from, to, index) => this.moveTab(tab, from, to, index),
+			splitWithTab: (tab, from, target, direction, before) => this.splitWithTab(tab, from, target, direction, before),
 		};
 		// The first pane uses the note view's parts in index.html.
 		const first = new NotePane(this.paneHost, ws.rootLeaf, {
@@ -611,6 +613,29 @@ class EmeraldApp {
 			this.activatePane(pane);
 			pane.selectFile(kept);
 		}
+		this.saveLayout();
+	}
+
+	/** A dragged tab dropped in a tab bar or on a pane: reordered, or moved to that pane. */
+	private moveTab(tab: Tab, fromBar: TabBar, to: NotePane, index: number): void {
+		const from = this.panes().find((pane) => pane.tabBar === fromBar);
+		if (!from || !fromBar.tabs.includes(tab)) return;
+		if (from === to) return to.reorder(tab, index);
+		from.release(tab);
+		to.takeTab(tab, index);
+	}
+
+	/** A dragged tab dropped on an edge of `target`: a new pane on that side shows it. */
+	private splitWithTab(tab: Tab, fromBar: TabBar, target: NotePane, direction: SplitDirection, before: boolean): void {
+		const from = this.panes().find((pane) => pane.tabBar === fromBar);
+		if (!from || !fromBar.tabs.includes(tab)) return;
+		// The only tab of a pane dropped on its own edge: nothing would change.
+		if (from === target && fromBar.tabs.length === 1) return;
+		const added = this.createPane();
+		this.layout!.split(target, added, direction, before);
+		this.syncRootLeaves();
+		from.release(tab);
+		added.takeTab(tab, 0);
 		this.saveLayout();
 	}
 

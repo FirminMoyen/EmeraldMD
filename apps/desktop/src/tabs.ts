@@ -36,7 +36,20 @@ export interface TabBarHost {
 	newTab(): void;
 	/** The header's context menu. */
 	menu?(tab: Tab, event: MouseEvent): void;
+	/** A tab dragged from `from` (this bar or another pane's) was dropped at `index` among this bar's tabs. */
+	drop?(tab: Tab, from: TabBar, index: number): void;
 }
+
+/** The tab being dragged, and the bar it comes from. */
+let dragged: { bar: TabBar; tab: Tab } | null = null;
+
+/** The tab being dragged, if any (for drop targets outside tab bars). */
+export function draggedTab(): { bar: TabBar; tab: Tab } | null {
+	return dragged;
+}
+
+/** Data type of a dragged tab, so other drop targets (the editor, the file tree) ignore it. */
+export const TAB_DRAG_TYPE = 'application/x-emeraldmd-tab';
 
 export function emptyTab(mode: Tab['mode'] = 'source'): Tab {
 	return { file: null, state: null, scroll: 0, mode, history: { back: [], forward: [] }, viewState: null, lastActive: 0 };
@@ -60,6 +73,42 @@ export class TabBar {
 		setIcon(add, 'plus');
 		setTooltip(add, 'New tab (⌘T)');
 		add.addEventListener('click', () => host.newTab());
+		// Dropping a dragged tab here moves it, before the header under the pointer.
+		this.containerEl.addEventListener('dragover', (event) => {
+			if (!dragged || !this.host.drop) return;
+			event.preventDefault();
+			if (event.dataTransfer) event.dataTransfer.dropEffect = 'move';
+			this.markDrop(this.dropIndex(event.clientX));
+		});
+		this.containerEl.addEventListener('dragleave', (event) => {
+			if (!(event.relatedTarget instanceof Node) || !this.containerEl.contains(event.relatedTarget)) this.markDrop(null);
+		});
+		this.containerEl.addEventListener('drop', (event) => {
+			const drag = dragged;
+			this.markDrop(null);
+			if (!drag || !this.host.drop) return;
+			event.preventDefault();
+			this.host.drop(drag.tab, drag.bar, this.dropIndex(event.clientX));
+		});
+	}
+
+	/** Where a tab dropped at `x` goes: before the first header whose middle is right of `x`. */
+	private dropIndex(x: number): number {
+		const headers = [...this.innerEl.children];
+		const i = headers.findIndex((header) => {
+			const rect = header.getBoundingClientRect();
+			return x < rect.left + rect.width / 2;
+		});
+		return i === -1 ? headers.length : i;
+	}
+
+	/** Shows where a dragged tab would go (`null`: nowhere). */
+	private markDrop(index: number | null): void {
+		const headers = [...this.innerEl.children];
+		headers.forEach((header, i) => {
+			header.toggleClass('is-drop-before', index === i);
+			header.toggleClass('is-drop-after', index === headers.length && i === headers.length - 1);
+		});
 	}
 
 	render(): void {
@@ -89,6 +138,18 @@ export class TabBar {
 			header.addEventListener('contextmenu', (event) => {
 				event.preventDefault();
 				this.host.menu?.(tab, event);
+			});
+			header.draggable = true;
+			header.addEventListener('dragstart', (event) => {
+				dragged = { bar: this, tab };
+				event.dataTransfer?.setData(TAB_DRAG_TYPE, tab.file?.path ?? '');
+				if (event.dataTransfer) event.dataTransfer.effectAllowed = 'move';
+				header.addClass('is-being-dragged');
+			});
+			header.addEventListener('dragend', () => {
+				dragged = null;
+				header.removeClass('is-being-dragged');
+				this.markDrop(null);
 			});
 		}
 		this.innerEl.querySelector('.workspace-tab-header.is-active')?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
