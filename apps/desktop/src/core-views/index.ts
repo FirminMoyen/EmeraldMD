@@ -1,6 +1,7 @@
 /**
  * Built-in views, registered like Obsidian's core plugins: search, graph,
- * local graph, outline, tags, bookmarks, canvas files, and the quick switcher.
+ * local graph, outline, outgoing links, tags, bookmarks, canvas files, and
+ * the quick switcher.
  */
 
 import type { App } from '@emeraldmd/api';
@@ -8,6 +9,7 @@ import { BOOKMARKS_VIEW, BookmarksView } from './bookmarks';
 import { CANVAS_VIEW, CanvasFileView } from './canvas';
 import { GlobalGraphView, GRAPH_VIEW, LOCAL_GRAPH_VIEW, LocalGraphView } from './graph';
 import type { CoreViewHost } from './host';
+import { OUTGOING_VIEW, OutgoingLinksView } from './outgoing';
 import { OUTLINE_VIEW, OutlineView } from './outline';
 import { QuickSwitcher } from './quick-switcher';
 import { SEARCH_VIEW, SearchView } from './search';
@@ -24,6 +26,7 @@ export function registerCoreViews(app: App, host: CoreViewHost): void {
 	views.registerView(GRAPH_VIEW, (leaf) => new GlobalGraphView(leaf, host));
 	views.registerView(LOCAL_GRAPH_VIEW, (leaf) => new LocalGraphView(leaf, host));
 	views.registerView(OUTLINE_VIEW, (leaf) => new OutlineView(leaf, host));
+	views.registerView(OUTGOING_VIEW, (leaf) => new OutgoingLinksView(leaf, host));
 	views.registerView(TAGS_VIEW, (leaf) => new TagsView(leaf, host));
 	views.registerView(CANVAS_VIEW, (leaf) => new CanvasFileView(leaf, host));
 	views.registerView(BOOKMARKS_VIEW, (leaf) => new BookmarksView(leaf, host));
@@ -42,6 +45,7 @@ export function registerCoreViews(app: App, host: CoreViewHost): void {
 	add({ id: 'graph:open', name: 'Graph view: Open graph view', hotkeys: [{ modifiers: ['Mod'], key: 'G' }], callback: openGraph });
 	add({ id: 'graph:open-local', name: 'Graph view: Open local graph', callback: () => ws.ensureSideLeaf(LOCAL_GRAPH_VIEW, 'right') });
 	add({ id: 'outline:open', name: 'Outline: Show outline', callback: () => ws.ensureSideLeaf(OUTLINE_VIEW, 'right') });
+	add({ id: 'outgoing-links:open', name: 'Outgoing links: Show outgoing links', callback: () => ws.ensureSideLeaf(OUTGOING_VIEW, 'right') });
 	add({ id: 'tag-pane:open', name: 'Tags view: Show tags', callback: () => ws.ensureSideLeaf(TAGS_VIEW, 'right') });
 	add({ id: 'canvas:new-file', name: 'Canvas: Create new canvas', callback: newCanvas });
 	add({
@@ -70,6 +74,7 @@ export function registerCoreViews(app: App, host: CoreViewHost): void {
 		// Side panes, behind the file explorer and backlinks tabs.
 		await ws.ensureSideLeaf(SEARCH_VIEW, 'left', { reveal: false });
 		if (app.internalPlugins.getEnabledPluginById('bookmarks')) await ws.ensureSideLeaf(BOOKMARKS_VIEW, 'left', { reveal: false });
+		await ws.ensureSideLeaf(OUTGOING_VIEW, 'right', { reveal: false });
 		await ws.ensureSideLeaf(OUTLINE_VIEW, 'right', { reveal: false });
 		await ws.ensureSideLeaf(TAGS_VIEW, 'right', { reveal: false });
 		await ws.ensureSideLeaf(LOCAL_GRAPH_VIEW, 'right', { reveal: false });
