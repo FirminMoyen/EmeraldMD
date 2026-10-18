@@ -3623,3 +3623,39 @@ body.mod-macos.is-hidden-frameless:not(.is-fullscreen) {
 .markdown-source-view .cm-searchMatch-selected {
 	background: rgba(var(--color-orange-rgb), 0.5);
 }
+
+/* Workspaces (core plugin): save the current layout, load or delete saved ones. */
+.workspaces-save {
+	display: flex;
+	gap: var(--size-4-2);
+	margin-bottom: var(--size-4-3);
+}
+
+.workspaces-save .workspaces-name {
+	flex: 1;
+}
+
+.workspaces-item {
+	display: flex;
+	align-items: center;
+	gap: var(--size-4-2);
+	padding: var(--size-4-1) var(--size-4-2);
+	border-radius: var(--radius-s);
+}
+
+.workspaces-item:hover {
+	background: var(--background-modifier-hover);
+}
+
+.workspaces-item-name {
+	flex: 1;
+}
+
+.workspaces-item.is-active .workspaces-item-name {
+	color: var(--text-accent);
+	font-weight: var(--font-semibold);
+}
+
+.workspaces-empty {
+	color: var(--text-muted);
+}
