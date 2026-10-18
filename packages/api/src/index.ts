@@ -24,6 +24,6 @@ export { eventKey, eventModifiers, formatHotkey, isMacOS } from './keymap';
 export { renderMarkdownToDom } from './markdown';
 export { setRequestBackend, type RawResponse, type RequestBackend } from './request';
 export { AppSetting } from './setting-tab';
-export { compareVersions } from './util';
+export { compareVersions, isDangerousUrl, sanitizeSvg } from './util';
 export { EmptyView } from './views';
 export { ViewRegistry, type WorkspaceHost } from './workspace';

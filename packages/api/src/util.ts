@@ -223,7 +223,7 @@ export function sanitizeHTMLToDom(html: string): DocumentFragment {
 					return;
 				}
 				for (const attr of [...el.attributes]) {
-					const unsafeUrl = (attr.name === 'href' || attr.name === 'src') && /^\s*javascript:/i.test(attr.value);
+					const unsafeUrl = (attr.name === 'href' || attr.name === 'src') && isDangerousUrl(attr.value) && !/^\s*data:image\//i.test(attr.value);
 					if (!ALLOWED_ATTRS.has(attr.name) || unsafeUrl) el.removeAttribute(attr.name);
 				}
 				clean(el);
@@ -234,6 +234,33 @@ export function sanitizeHTMLToDom(html: string): DocumentFragment {
 	};
 	clean(template.content);
 	return template.content;
+}
+
+/** URL schemes that run code or replace the page when followed. */
+const DANGEROUS_URL = /^\s*(javascript|vbscript|data|file):/i;
+
+/** Whether following `href` could run code or leave the app (javascript:, data:, vbscript:, file:). */
+export function isDangerousUrl(href: string | null | undefined): boolean {
+	return Boolean(href && DANGEROUS_URL.test(href.replace(/[\u0000-\u001f]/g, '')));
+}
+
+/**
+ * Makes generated SVG (MathJax, Mermaid) inert: removes scripts and event
+ * handler attributes, and links whose URL could run code. Notes come from
+ * anywhere, and `\href{javascript:…}` in a formula is valid TeX.
+ */
+export function sanitizeSvg(root: Element): void {
+	for (const el of [root, ...root.querySelectorAll('*')]) {
+		if (el.localName === 'script') {
+			el.remove();
+			continue;
+		}
+		for (const attr of [...el.attributes]) {
+			const name = attr.name.toLowerCase();
+			if (name.startsWith('on')) el.removeAttribute(attr.name);
+			else if ((name === 'href' || name === 'xlink:href' || name === 'src' || name === 'action' || name === 'formaction') && isDangerousUrl(attr.value)) el.removeAttribute(attr.name);
+		}
+	}
 }
 
 /** Converts simple HTML to Markdown: headings, emphasis, code, links, images, lists and paragraphs. */

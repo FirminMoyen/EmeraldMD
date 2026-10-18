@@ -4,6 +4,8 @@
  * returns the mermaid object.
  */
 
+import { sanitizeSvg } from './util';
+
 type Mermaid = typeof import('./lazy/mermaid').default;
 
 let loading: Promise<Mermaid> | null = null;
@@ -23,7 +25,9 @@ export async function renderMermaid(source: string, el: HTMLElement): Promise<vo
 		const { svg } = await mermaid.render(`emerald-mermaid-${++counter}`, source);
 		// Parsed as SVG, not HTML, so nothing in it runs.
 		const parsed = new DOMParser().parseFromString(svg, 'image/svg+xml').documentElement;
-		el.replaceChildren(document.importNode(parsed, true));
+		const diagram = document.importNode(parsed, true);
+		sanitizeSvg(diagram);
+		el.replaceChildren(diagram);
 		el.removeClass('mermaid-error');
 	} catch (err) {
 		el.addClass('mermaid-error');
