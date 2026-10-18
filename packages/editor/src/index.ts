@@ -9,7 +9,7 @@ import { closeBrackets, closeBracketsKeymap } from '@codemirror/autocomplete';
 import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirror/commands';
 import { markdown, markdownLanguage } from '@codemirror/lang-markdown';
 import { yamlFrontmatter } from '@codemirror/lang-yaml';
-import { HighlightStyle, indentOnInput, indentUnit, syntaxHighlighting, syntaxTree } from '@codemirror/language';
+import { codeFolding, foldGutter, foldKeymap, HighlightStyle, indentOnInput, indentUnit, syntaxHighlighting, syntaxTree } from '@codemirror/language';
 import { highlightSelectionMatches, searchKeymap } from '@codemirror/search';
 import { Compartment, EditorState, Prec, type Extension, type StateEffect } from '@codemirror/state';
 import {
@@ -96,6 +96,9 @@ const WIKILINK = /!?\[\[[^[\]\n]+?\]\]/g;
 const TAG = /(?<lead>^|\s)#[\p{L}\p{N}_/-]*[\p{L}_/-][\p{L}\p{N}_/-]*/gu;
 
 /** The link text (without alias) of the wikilink under `col`, if any. */
+/** Keys CodeMirror binds by default that Obsidian gives to its own commands (italics ⌘I, comment ⌘/). */
+const OBSIDIAN_KEYS = new Set(['Mod-i', 'Mod-/']);
+
 export function wikilinkAt(lineText: string, col: number): string | null {
 	for (const match of lineText.matchAll(WIKILINK)) {
 		const start = match.index;
@@ -123,6 +126,8 @@ export interface EditorSettings {
 	readableLineLength: boolean;
 	/** `vimMode`: Vim key bindings. */
 	vim: boolean;
+	/** `foldHeading` / `foldIndent`: fold indicators next to headings and lists. */
+	folding: boolean;
 }
 
 export const DEFAULT_EDITOR_SETTINGS: EditorSettings = {
@@ -133,13 +138,24 @@ export const DEFAULT_EDITOR_SETTINGS: EditorSettings = {
 	autoPairBrackets: true,
 	readableLineLength: true,
 	vim: false,
+	folding: true,
 };
+
+/** The fold indicator in the gutter: a chevron, turned when the section is folded (`.is-collapsed`). */
+function foldMarker(open: boolean): HTMLElement {
+	const el = document.createElement('div');
+	el.className = `cm-fold-indicator collapse-indicator${open ? '' : ' is-collapsed'}`;
+	el.innerHTML = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 9 6 6 6-6"/></svg>';
+	el.setAttribute('aria-label', open ? 'Fold' : 'Unfold');
+	return el;
+}
 
 function settingsExtensions(settings: EditorSettings): Extension {
 	return [
 		// Before every other keymap, as the Vim emulation needs.
 		settings.vim ? Prec.highest(vim()) : [],
 		settings.lineNumbers ? lineNumbers() : [],
+		settings.folding ? [codeFolding({ placeholderText: '…' }), foldGutter({ markerDOM: foldMarker }), keymap.of(foldKeymap)] : [],
 		settings.autoPairBrackets ? closeBrackets() : [],
 		EditorState.tabSize.of(settings.tabSize),
 		indentUnit.of(settings.useTab ? '\t' : ' '.repeat(settings.tabSize)),
@@ -192,7 +208,7 @@ export class MarkdownEditor {
 			decorate(TAG, 'cm-hashtag'),
 			lineClasses(),
 			placeholder('Start writing…'),
-			keymap.of([...closeBracketsKeymap, ...defaultKeymap, ...searchKeymap, ...historyKeymap, indentWithTab]),
+			keymap.of([...closeBracketsKeymap, ...defaultKeymap.filter((b) => !OBSIDIAN_KEYS.has(b.key ?? '')), ...searchKeymap, ...historyKeymap, indentWithTab]),
 			EditorView.updateListener.of((update) => {
 				if (update.docChanged) options.onChange?.(update.state.doc.toString());
 			}),

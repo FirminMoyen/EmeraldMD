@@ -84,6 +84,11 @@ end-to-end tests; the rest is in priority order within each section.
       hotkeys (recorded, stored in hotkeys.json, conflicts shown)
 - [x] Vim key bindings (`vimMode`, Settings → Editor; `CodeMirrorAdapter.Vim`
       for plugins)
+- [x] Obsidian's editing commands: bold ⌘B, italics ⌘I, link ⌘K, checkbox
+      ⌘L, comment ⌘/, strikethrough, highlight, code, math, headings,
+      lists, quotes, inserts (callout, code and math blocks, table, rule),
+      move and delete lines, follow link under cursor (⌥↩); folding of
+      headings and lists (arrows on hover, Fold heading / Fold indent)
 
 ### Native macOS
 
