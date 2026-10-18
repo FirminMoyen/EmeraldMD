@@ -74,8 +74,9 @@ dangerous scheme, keeping `data:image/…` for inline images.
   Untrusted content is kept inert by sanitizing instead.
 - **Plugin READMEs and theme screenshots** are loaded from GitHub while the
   browsers are open.
-- **Debug builds** read a sync token from `EMERALDMD_DEV_SYNC_TOKEN` instead
-  of the Keychain; release builds ignore it.
+- **Debug builds** read a server token from `EMERALDMD_DEV_TOKEN` (or
+  `EMERALDMD_DEV_SYNC_TOKEN`) instead of the Keychain, for synced copies and
+  online vaults; release builds do not contain that code.
 
 ## Dependency audit
 

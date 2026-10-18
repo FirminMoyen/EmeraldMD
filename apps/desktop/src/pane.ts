@@ -43,10 +43,16 @@ export interface SavedTabs {
 export interface PaneHost {
 	readonly app: App;
 	notice(message: string, duration?: number): void;
-	/** Runs `save` after the saves already queued (of every pane), so a note is never read back mid-save. */
-	queueSave(save: () => Promise<void>): Promise<void>;
+	/**
+	 * Saves `text` to `file` after the saves already queued (of every pane),
+	 * so a note is never read back mid-save. False if it failed: the app keeps
+	 * the text and saves it again later (see `unsavedText`).
+	 */
+	saveText(file: TFile, text: string): Promise<boolean>;
 	/** Resolves once every queued save has finished. */
 	saved(): Promise<void>;
+	/** Text of `file` whose save failed (the server was unreachable…), still to be saved; it is newer than the file. */
+	unsavedText(file: TFile): string | undefined;
 	/** Makes this pane the current one (a click or the focus inside it). */
 	activate(pane: NotePane): void;
 	/** Whether this pane is the current one. */
@@ -95,6 +101,12 @@ function makeParts(): PaneParts {
 	return { title, trash, editor, noFile };
 }
 
+/** Why reading or saving failed, for a notice: network failures (fetch's TypeError) read as an unreachable server. */
+export function reasonOf(err: unknown): string {
+	if (err instanceof TypeError) return 'the server is unreachable';
+	return err instanceof Error ? err.message : String(err);
+}
+
 function isInside(file: TAbstractFile, folder: TAbstractFile): boolean {
 	for (let f: TAbstractFile | null = file; f; f = f.parent) if (f === folder) return true;
 	return false;
@@ -122,6 +134,10 @@ export class NotePane {
 	private readonly tabContainerEl: HTMLElement;
 	private dropOverlay: HTMLElement | null = null;
 	private readonly noHistory = { back: [] as TFile[], forward: [] as TFile[] };
+	/** What the empty view says when no note is open. */
+	private readonly noFileText: string;
+	/** The current tab's note could not be read (see `showUnreadable`). */
+	private unreadable = false;
 
 	constructor(
 		private readonly host: PaneHost,
@@ -131,6 +147,7 @@ export class NotePane {
 		const app = host.app;
 		this.leaf = leaf;
 		this.el = parts;
+		this.noFileText = parts.noFile.textContent ?? '';
 		this.editor = new MarkdownEditor({
 			parent: parts.editor,
 			onChange: () => this.onEdit(),
@@ -517,6 +534,7 @@ export class NotePane {
 		const app = this.host.app;
 		const view = this.view;
 		if (isEmptyTab(tab)) return this.showEmptyTab();
+		this.unreadable = false;
 		const seq = ++this.showing;
 		const current = () => seq === this.showing && this.tab === tab;
 		// A save of this note may be in flight (the tab was left a moment ago).
@@ -535,7 +553,16 @@ export class NotePane {
 			if (current()) this.afterShow(tab.file);
 			return;
 		}
-		const text = await app.vault.read(file);
+		let text = this.host.unsavedText(file);
+		if (text === undefined) {
+			try {
+				text = await app.vault.read(file);
+			} catch (err) {
+				// A server vault while the server is unreachable: say so, rather than leave the previous note in place.
+				if (current()) this.showUnreadable(file, err);
+				return;
+			}
+		}
 		if (!current()) return;
 		if (this.leaf.view !== view) await this.leaf.open(view);
 		if (!current()) return;
@@ -553,6 +580,7 @@ export class NotePane {
 		}
 		this.el.editor.hidden = false;
 		this.el.noFile.hidden = true;
+		this.el.noFile.textContent = this.noFileText;
 		if (view.getMode() !== tab.mode) await view.setMode(tab.mode);
 		else await view.renderPreview();
 		if (!current()) return;
@@ -569,8 +597,25 @@ export class NotePane {
 		this.clearNote();
 		if (this.leaf.view !== this.view) void this.leaf.open(this.view);
 		this.el.editor.hidden = true;
+		this.el.noFile.textContent = this.noFileText;
 		this.el.noFile.hidden = false;
 		this.afterShow(null);
+	}
+
+	/** A note that could not be read: the tab stays, with the reason; opening it again retries. */
+	private showUnreadable(file: TFile, err: unknown): void {
+		this.clearNote();
+		if (this.leaf.view !== this.view) void this.leaf.open(this.view);
+		this.el.editor.hidden = true;
+		this.el.noFile.textContent = `Could not open ${file.name}: ${reasonOf(err)}. It opens once the vault is reachable again.`;
+		this.el.noFile.hidden = false;
+		this.unreadable = true;
+		this.afterShow(file);
+	}
+
+	/** The vault is reachable again: a note that could not be read is read again. */
+	retryUnreadable(): void {
+		if (this.unreadable && this.tab) void this.showTab(this.tab);
 	}
 
 	/** Empties the note editor (its edits were saved when the tab was left). */
@@ -734,30 +779,23 @@ export class NotePane {
 	 */
 	flush(): Promise<void> {
 		clearTimeout(this.saveTimer);
-		const vault = this.host.app.vault;
 		const file = this.activeFile;
 		if (!this.dirty || !file) return this.host.saved();
 		const text = this.editor.getValue();
 		this.dirty = false;
 		this.saving = true;
 		this.host.statusChanged(this);
-		return this.host.queueSave(async () => {
-			try {
-				await vault.modify(file, text);
-				if (this.view.file === file) this.view.data = text;
-			} catch (err) {
-				if (file === this.activeFile) this.dirty = true;
-				this.host.notice(`Could not save ${file.path}: ${err}`);
-			} finally {
-				this.saving = false;
-				this.host.statusChanged(this);
-			}
+		return this.host.saveText(file, text).then((saved) => {
+			if (saved && this.view.file === file) this.view.data = text;
+			this.saving = false;
+			this.host.statusChanged(this);
 		});
 	}
 
 	/** Shows a change made outside the app (or in another pane), unless there are unsaved edits here. */
 	private async reloadIfChangedOnDisk(file: TFile): Promise<void> {
-		if (this.dirty) return;
+		// Edits still waiting to be saved are newer than the file.
+		if (this.dirty || this.host.unsavedText(file) !== undefined) return;
 		const text = await this.host.app.vault.cachedRead(file);
 		if (file !== this.activeFile || this.dirty || text === this.editor.getValue()) return;
 		this.applyExternalText(text);

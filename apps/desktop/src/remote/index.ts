@@ -31,6 +31,8 @@ export interface RemoteHost {
 	notice(message: string): void;
 	/** Opens a local vault folder (used for synced copies). */
 	openLocal(path: string): Promise<void>;
+	/** The open server vault's connection is (back) up: saves that failed can be tried again. */
+	connected?(): void;
 }
 
 const STATUS_TEXT: Record<RemoteStatus, string> = {
@@ -243,6 +245,7 @@ export class RemoteVaults {
 		if (status === 'unauthorized') {
 			this.showDialog({ serverUrl: vault.serverUrl, message: 'The server no longer accepts this token. Enter a new one.' });
 		}
+		if (status === 'connected') this.host.connected?.();
 	}
 
 	private async refresh(): Promise<void> {

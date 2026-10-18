@@ -105,8 +105,9 @@ The status bar shows *Syncing…*, *Synced* (hover for when), *Offline* (local
 edits are kept and sync later) or *Sign in again* (the server rejected the
 token; click to enter a new one). A notice names any conflict copy.
 
-For development, debug builds read the token from `EMERALDMD_DEV_SYNC_TOKEN`
-instead of the Keychain (`open --env EMERALDMD_DEV_SYNC_TOKEN=… EmeraldMD.app`),
+For development, debug builds read the token from `EMERALDMD_DEV_TOKEN` (or
+the older `EMERALDMD_DEV_SYNC_TOKEN`) instead of the Keychain, for synced
+copies and online vaults alike (`open --env EMERALDMD_DEV_TOKEN=… EmeraldMD.app`),
 so a local test server works without Keychain prompts. Release builds ignore it.
 
 ## Status
