@@ -46,6 +46,9 @@ end-to-end tests; the rest is in priority order within each section.
       with ⌘, sections and blocks, `hover-link` from plugins
 - [x] Daily notes and templates (core plugins, with their settings and
       the `{{date}}`/`{{time}}`/`{{title}}` variables)
+- [x] Note composer (core plugin): merge a note into another (properties
+      merged, links redirected), extract a selection or a heading's section
+      into a new or existing note, leaving a link, an embed or nothing
 - [x] Bookmarks (core plugin, `.obsidian/bookmarks.json`, groups, follow
       renames, left sidebar pane, file menu item)
 - [x] Properties editor: frontmatter as properties in Live Preview and the

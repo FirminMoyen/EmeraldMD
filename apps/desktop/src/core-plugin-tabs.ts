@@ -180,3 +180,42 @@ export class FileRecoveryTab extends CorePluginOptionsTab {
 			);
 	}
 }
+
+export class NoteComposerTab extends CorePluginOptionsTab {
+	constructor(app: App) {
+		super(app, 'note-composer');
+	}
+
+	override display(): void {
+		this.containerEl.empty();
+		const options = this.instance.options;
+		const save = () => void this.instance.saveOptions().catch((err: unknown) => console.error(err));
+		new Setting(this.containerEl)
+			.setName('Text after extraction')
+			.setDesc('What replaces the text moved to another note.')
+			.addDropdown((d) =>
+				d
+					.addOptions({ link: 'Link to the new note', embed: 'Embed of the new note', none: 'Nothing' })
+					.setValue(typeof options.replacementText === 'string' ? options.replacementText : 'link')
+					.onChange((value) => {
+						options.replacementText = value;
+						save();
+					}),
+			);
+		this.text(
+			'Template file location',
+			'A note to start extracted notes from; {{content}} is the extracted text, {{fromTitle}} and {{newTitle}} the notes’ names.',
+			'template',
+			'Example: Templates/Extracted',
+		);
+		new Setting(this.containerEl)
+			.setName('Confirm file merge')
+			.setDesc('Ask before merging a note into another.')
+			.addToggle((t) =>
+				t.setValue(options.askBeforeMerging !== false).onChange((on) => {
+					options.askBeforeMerging = on;
+					save();
+				}),
+			);
+	}
+}

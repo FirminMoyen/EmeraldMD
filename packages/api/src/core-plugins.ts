@@ -475,7 +475,7 @@ export interface InternalPlugin {
 }
 
 /** Core plugins that are on in a new vault. */
-const ENABLED_BY_DEFAULT = new Set(['daily-notes', 'templates', 'page-preview', 'bookmarks', 'file-recovery']);
+const ENABLED_BY_DEFAULT = new Set(['daily-notes', 'templates', 'page-preview', 'bookmarks', 'file-recovery', 'note-composer']);
 
 /** The core plugins defined here (app.ts adds those in their own modules). */
 export function defaultCorePlugins(): InternalPluginInstance[] {

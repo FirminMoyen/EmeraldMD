@@ -10,6 +10,7 @@ import { Appearance, type BaseTheme, type ThemeSetting } from './appearance';
 import { Commands } from './commands';
 import { defaultCorePlugins, InternalPlugins } from './core-plugins';
 import { FileRecovery } from './file-recovery';
+import { NoteComposer } from './note-composer';
 import { CustomCss } from './custom-css';
 import { FileManager } from './file-manager';
 import { HotkeyManager } from './hotkeys';
@@ -132,7 +133,7 @@ export class App {
 	/** @internal */
 	plugins: PluginsApi = noPlugins;
 	/** @internal */
-	internalPlugins = new InternalPlugins([...defaultCorePlugins(), new FileRecovery()]);
+	internalPlugins = new InternalPlugins([...defaultCorePlugins(), new FileRecovery(), new NoteComposer()]);
 	/** @internal */
 	viewRegistry = new ViewRegistry();
 	/** @internal Property types; call `load()` once the vault is open. */
