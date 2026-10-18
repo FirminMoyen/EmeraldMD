@@ -6,13 +6,14 @@
 import { TFile } from '@emeraldmd/core';
 import type { App } from './app';
 import { Component } from './component';
-import { debounce } from './util';
+import { debounce, getFrontMatterInfo } from './util';
 import type { Editor, MarkdownFileInfo } from './editor';
 import { setIcon } from './icons';
 import type { Scope } from './keymap';
 import type { Menu } from './menu';
 import { setTooltip } from './tooltip';
 import { MarkdownRenderChild, MarkdownRenderer } from './markdown';
+import { PropertiesEditor, stringifyFrontmatter } from './properties';
 import type { WorkspaceLeaf } from './workspace';
 
 export interface ViewStateResult {
@@ -236,6 +237,8 @@ export class MarkdownView extends TextFileView implements MarkdownFileInfo {
 	private readonly readingEl: HTMLElement;
 	private renderChild: MarkdownRenderChild | null = null;
 	private renderGeneration = 0;
+	/** The reading view's properties, kept across renders so a field being edited keeps the focus. */
+	private readingProperties: PropertiesEditor | null = null;
 
 	constructor(leaf: WorkspaceLeaf) {
 		super(leaf);
@@ -309,7 +312,52 @@ export class MarkdownView extends TextFileView implements MarkdownFileInfo {
 		}
 		if (this.renderChild) this.removeChild(this.renderChild);
 		this.renderChild = child;
+		const header = this.propertiesHeader();
+		if (header) target.prepend(header);
 		this.previewMode.containerEl.replaceChildren(target);
+	}
+
+	/** The note's properties above the reading view, as "Properties in document" says. */
+	private propertiesHeader(): HTMLElement | null {
+		const info = getFrontMatterInfo(this.getViewData());
+		const mode = this.app.vault.getConfig('propertiesInDocument') ?? 'visible';
+		if (!info.exists || mode === 'hidden') return null;
+		const header = createDiv('mod-header');
+		if (mode !== 'source') {
+			this.readingProperties ??= new PropertiesEditor(this.app, createDiv(), {
+				sourcePath: () => this.file?.path ?? '',
+				save: (data) => this.saveProperties(data),
+			});
+			if (this.readingProperties.setYaml(info.frontmatter)) {
+				header.append(this.readingProperties.containerEl);
+				return header;
+			}
+		}
+		// Shown as YAML (the setting, or YAML that is not valid).
+		header.createEl('pre', { cls: 'frontmatter language-yaml' }).createEl('code', { cls: 'language-yaml', text: info.frontmatter });
+		return header;
+	}
+
+	/**
+	 * @internal Writes the note's properties, from a properties editor, into
+	 * the editor (saved with the note's other edits); all of them, in order.
+	 */
+	saveProperties(data: Record<string, unknown>): void {
+		const yaml = stringifyFrontmatter(data);
+		const editor = this.editor;
+		if (!editor) {
+			if (this.file) {
+				void this.app.fileManager.processFrontMatter(this.file, (frontmatter) => {
+					for (const key of Object.keys(frontmatter)) delete frontmatter[key];
+					Object.assign(frontmatter, data);
+				});
+			}
+			return;
+		}
+		const info = getFrontMatterInfo(editor.getValue());
+		const block = yaml ? `---\n${yaml}---\n` : '';
+		const end = info.exists ? info.contentStart : 0;
+		editor.replaceRange(block, editor.offsetToPos(0), editor.offsetToPos(end));
 	}
 
 	getViewType(): string {

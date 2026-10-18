@@ -26,4 +26,5 @@ export { setRequestBackend, type RawResponse, type RequestBackend } from './requ
 export { AppSetting } from './setting-tab';
 export { compareVersions, isDangerousUrl, sanitizeSvg } from './util';
 export { EmptyView } from './views';
+export { isPropertiesYaml, PropertiesEditor, stringifyFrontmatter, type PropertiesEditorOptions } from './properties';
 export { ViewRegistry, type WorkspaceHost } from './workspace';

@@ -3,12 +3,14 @@ import {
 	CodeMirrorEditor,
 	Component,
 	DailyNotes,
+	isPropertiesYaml,
 	moment,
 	editorInfoExtensions,
 	MarkdownRenderer,
 	MarkdownView,
 	isDangerousUrl,
 	Notice,
+	PropertiesEditor,
 	setIcon,
 	setLivePreviewEffect,
 	setRequestBackend,
@@ -31,7 +33,7 @@ import {
 	type VaultUpdate,
 } from '@emeraldmd/core';
 import { MemoryConfigStore } from '@emeraldmd/api/testing';
-import { MarkdownEditor, Vim } from '@emeraldmd/editor';
+import { frontmatterAt, MarkdownEditor, Vim } from '@emeraldmd/editor';
 
 // Plugins that add Vim commands or mappings reach the emulation as `CodeMirrorAdapter.Vim`.
 const vimAdapter = ((globalThis as { CodeMirrorAdapter?: Record<string, unknown> }).CodeMirrorAdapter ??= { commands: {} });
@@ -171,6 +173,9 @@ class EmeraldApp {
 			livePreview: {
 				renderMarkdown: (markdown, el) => this.renderInEditor(markdown, el),
 				isResolved: (link) => !this.metadataCache || Boolean(this.metadataCache.getFirstLinkpathDest(getLinkpath(link), this.activeFile?.path ?? '')),
+				renderProperties: (yaml, el) => this.renderProperties(yaml, el),
+				validProperties: isPropertiesYaml,
+				propertiesInDocument: () => this.propertiesInDocument(),
 			},
 		});
 		// Links that would run code or replace the page (javascript:, data:…) are never followed,
@@ -623,6 +628,16 @@ class EmeraldApp {
 			},
 		});
 		add({
+			id: 'markdown:add-metadata-property',
+			name: 'Add file property',
+			hotkeys: [{ modifiers: ['Mod'], key: ';' }],
+			checkCallback: (checking) => {
+				if (!this.activeFile || !this.markdownView) return false;
+				if (!checking) void this.addProperty();
+				return true;
+			},
+		});
+		add({
 			id: 'editor:toggle-source',
 			name: 'Toggle Live Preview/Source mode',
 			checkCallback: (checking) => {
@@ -712,6 +727,50 @@ class EmeraldApp {
 		if (['showLineNumber', 'spellcheck', 'tabSize', 'useTab', 'autoPairBrackets', 'readableLineLength', 'vimMode'].includes(key)) this.applyEditorSettings();
 		else if (key === 'strictLineBreaks') void this.markdownView?.renderPreview();
 		else if (key === 'livePreview') this.markdownView?.setLivePreview(this.vault?.getConfig('livePreview') !== false);
+		else if (key === 'propertiesInDocument') {
+			this.editor.refreshLivePreview();
+			void this.markdownView?.renderPreview();
+		}
+	}
+
+	/** The note's properties at the top of Live Preview; edits go into the note's text. */
+	private renderProperties(yaml: string, el: HTMLElement) {
+		const app = this.app;
+		const view = this.markdownView;
+		if (!app || !view) return null;
+		const properties = new PropertiesEditor(app, el, { sourcePath: () => this.activeFile?.path ?? '', save: (data) => view.saveProperties(data) });
+		properties.setYaml(yaml);
+		return { update: (next: string) => properties.setYaml(next), destroy: () => properties.destroy() };
+	}
+
+	/** "Add file property": a new row in the properties editor, or a new line in the YAML (source mode, hidden properties). */
+	private async addProperty(): Promise<void> {
+		const view = this.markdownView!;
+		const cm = this.editor.view;
+		let frontmatter = frontmatterAt(cm.state.doc);
+		if (!frontmatter) {
+			cm.dispatch({ changes: { from: 0, insert: '---\n---\n' } });
+			frontmatter = frontmatterAt(cm.state.doc)!;
+		}
+		const reading = view.getMode() === 'preview';
+		if (this.propertiesInDocument() === 'visible' && (reading || this.editor.isLivePreview())) {
+			if (reading) await view.renderPreview();
+			const root = reading ? view.previewMode.containerEl : cm.dom;
+			root.querySelector<HTMLElement>('.metadata-add-button')?.click();
+			return;
+		}
+		if (reading) await view.setMode('source');
+		// A new line at the end of the YAML.
+		const closing = cm.state.doc.lineAt(frontmatter.to);
+		const empty = closing.number === 2;
+		const at = empty ? closing.from : cm.state.doc.line(closing.number - 1).to;
+		cm.dispatch({ changes: { from: at, insert: '\n' }, selection: { anchor: empty ? at : at + 1 } });
+		cm.focus();
+	}
+
+	private propertiesInDocument(): 'visible' | 'hidden' | 'source' {
+		const mode = this.vault?.getConfig('propertiesInDocument');
+		return mode === 'hidden' || mode === 'source' ? mode : 'visible';
 	}
 
 	/** Renders Markdown into a Live Preview widget (embeds, callouts, tables), like the reading view. */

@@ -18,7 +18,7 @@
  */
 
 import { syntaxTree } from '@codemirror/language';
-import { type EditorState, type Range, StateField } from '@codemirror/state';
+import { EditorSelection, EditorState, type Range, StateEffect, StateField, type Text } from '@codemirror/state';
 import { Decoration, type DecorationSet, EditorView, ViewPlugin, type ViewUpdate, WidgetType } from '@codemirror/view';
 import type { SyntaxNode, SyntaxNodeRef } from '@lezer/common';
 
@@ -31,6 +31,36 @@ export interface LivePreviewOptions {
 	renderMarkdown?: (markdown: string, el: HTMLElement) => void | (() => void);
 	/** Whether a wikilink target exists; unresolved links get `is-unresolved`. */
 	isResolved?: (linktext: string) => boolean;
+	/**
+	 * Draws the frontmatter (its YAML) as a properties editor in `el`.
+	 * `update` shows changed YAML in the same element (false: draw it anew).
+	 * Without it, the frontmatter is text.
+	 */
+	renderProperties?: (yaml: string, el: HTMLElement) => PropertiesHandle | null;
+	/** Whether `yaml` can be drawn as properties; invalid YAML stays as text, to be fixed. */
+	validProperties?: (yaml: string) => boolean;
+	/** Obsidian's "Properties in document": `visible` (the default), `hidden` or `source` (YAML as text). */
+	propertiesInDocument?: () => 'visible' | 'hidden' | 'source';
+}
+
+export interface PropertiesHandle {
+	update(yaml: string): boolean;
+	destroy?(): void;
+}
+
+/** Recomputes Live Preview's blocks after a setting they depend on changed. */
+export const refreshLivePreview = StateEffect.define<null>();
+
+/** The frontmatter at the top of `doc`: its YAML, where its closing `---` line ends, and where the note's body starts. */
+export function frontmatterAt(doc: Text): { yaml: string; to: number; body: number } | null {
+	if (doc.lines < 2 || !/^---\s*$/.test(doc.line(1).text)) return null;
+	for (let n = 2; n <= Math.min(doc.lines, 2000); n++) {
+		const line = doc.line(n);
+		if (!/^---\s*$/.test(line.text)) continue;
+		const yaml = n === 2 ? '' : doc.sliceString(doc.line(2).from, doc.line(n - 1).to);
+		return { yaml, to: line.to, body: n < doc.lines ? doc.line(n + 1).from : line.to };
+	}
+	return null;
 }
 
 const WIKILINK = /(!?)\[\[([^[\]\n]+?)\]\]/g;
@@ -155,6 +185,57 @@ class MarkdownWidget extends WidgetType {
 	override get estimatedHeight(): number {
 		return this.block ? 60 : -1;
 	}
+}
+
+/** The frontmatter as a properties editor. */
+class PropertiesWidget extends WidgetType {
+	private static handles = new WeakMap<HTMLElement, PropertiesHandle>();
+
+	constructor(
+		readonly yaml: string,
+		readonly render: NonNullable<LivePreviewOptions['renderProperties']>,
+	) {
+		super();
+	}
+
+	override eq(other: PropertiesWidget): boolean {
+		return other.yaml === this.yaml;
+	}
+
+	toDOM(): HTMLElement {
+		const el = document.createElement('div');
+		el.className = 'cm-properties-widget';
+		const handle = this.render(this.yaml, el);
+		if (handle) PropertiesWidget.handles.set(el, handle);
+		return el;
+	}
+
+	/** The same editor shows the new YAML, so a field being edited keeps the focus. */
+	override updateDOM(dom: HTMLElement): boolean {
+		return PropertiesWidget.handles.get(dom)?.update(this.yaml) ?? false;
+	}
+
+	override destroy(dom: HTMLElement): void {
+		PropertiesWidget.handles.get(dom)?.destroy?.();
+		PropertiesWidget.handles.delete(dom);
+	}
+
+	/** The properties editor handles its own clicks and keys. */
+	override ignoreEvent(): boolean {
+		return true;
+	}
+
+	override get estimatedHeight(): number {
+		return 120;
+	}
+}
+
+/** Whether the frontmatter is drawn as properties (or hidden) rather than shown as YAML. */
+function propertiesShown(options: LivePreviewOptions, yaml: string): 'visible' | 'hidden' | null {
+	const mode = options.propertiesInDocument?.() ?? 'visible';
+	if (mode === 'source' || !options.renderProperties) return null;
+	if (mode === 'hidden') return 'hidden';
+	return options.validProperties?.(yaml) === false ? null : 'visible';
 }
 
 /** Inline decorations for the visible part of the document. */
@@ -309,8 +390,15 @@ function blockWidgetClass(state: EditorState, node: SyntaxNode): string | null {
 /** Callouts, tables, `$$` math and Mermaid diagrams, drawn as rendered blocks while the selection is outside them. */
 function blockDecorations(state: EditorState, options: LivePreviewOptions): DecorationSet {
 	const render = options.renderMarkdown;
-	if (!render) return Decoration.none;
 	const ranges: Range<Decoration>[] = [];
+	const frontmatter = frontmatterAt(state.doc);
+	const shown = frontmatter && propertiesShown(options, frontmatter.yaml);
+	if (frontmatter && shown === 'visible') {
+		ranges.push(Decoration.replace({ widget: new PropertiesWidget(frontmatter.yaml, options.renderProperties!), block: true }).range(0, frontmatter.to));
+	} else if (frontmatter && shown === 'hidden') {
+		ranges.push(Decoration.replace({ block: true }).range(0, frontmatter.to));
+	}
+	if (!render) return Decoration.set(ranges);
 	// The Markdown `Document` is mounted under the frontmatter grammar's; only its top-level blocks are visited.
 	syntaxTree(state).iterate({
 		enter: (node) => {
@@ -351,12 +439,27 @@ export function livePreview(options: LivePreviewOptions = {}) {
 	const blocks = StateField.define<DecorationSet>({
 		create: (state) => blockDecorations(state, options),
 		update(decorations, tr) {
-			if (tr.docChanged || tr.selection || syntaxTree(tr.startState) !== syntaxTree(tr.state)) return blockDecorations(tr.state, options);
+			const refresh = tr.effects.some((e) => e.is(refreshLivePreview));
+			if (refresh || tr.docChanged || tr.selection || syntaxTree(tr.startState) !== syntaxTree(tr.state)) return blockDecorations(tr.state, options);
 			return decorations;
 		},
 		provide: (field) => EditorView.decorations.from(field),
 	});
-	return [inline, blocks, EditorView.editorAttributes.of({ class: 'is-live-preview' })];
+	// The cursor stays out of frontmatter drawn as properties (typing there would break it).
+	const outOfProperties = EditorState.transactionFilter.of((tr) => {
+		if (!tr.selection && !tr.docChanged) return tr;
+		const frontmatter = frontmatterAt(tr.newDoc);
+		if (!frontmatter || !propertiesShown(options, frontmatter.yaml)) return tr;
+		const selection = tr.newSelection;
+		if (selection.ranges.every((r) => r.from >= frontmatter.body)) return tr;
+		const clamp = (pos: number) => Math.max(pos, frontmatter.body);
+		const moved = EditorSelection.create(
+			selection.ranges.map((r) => EditorSelection.range(clamp(r.anchor), clamp(r.head))),
+			selection.mainIndex,
+		);
+		return [tr, { selection: moved, sequential: true }];
+	});
+	return [inline, blocks, outOfProperties, EditorView.editorAttributes.of({ class: 'is-live-preview' })];
 }
 
 /**
