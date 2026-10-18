@@ -57,6 +57,10 @@ export interface WorkspaceHost {
 	split?(leaf: WorkspaceLeaf, direction: SplitDirection, before?: boolean): WorkspaceLeaf;
 	/** A pane's leaf became the active leaf (`setActiveLeaf`). */
 	activatePane?(leaf: WorkspaceLeaf): void;
+	/** The layout in Obsidian's format (`main`, `left`, `right`, `active`), for `getLayout`. */
+	getLayout?(): Record<string, unknown>;
+	/** Shows a layout in Obsidian's format, for `changeLayout`. */
+	changeLayout?(layout: unknown): Promise<void>;
 }
 
 const headlessHost = (workspace: Workspace): WorkspaceHost => ({
@@ -579,9 +583,14 @@ export class Workspace extends Events {
 		this.trigger('layout-change');
 	}
 
-	async changeLayout(_workspace: unknown): Promise<void> {}
+	/** Shows a layout as `getLayout` returns it (Obsidian's `workspace.json` format). */
+	async changeLayout(workspace: unknown): Promise<void> {
+		await this.host.changeLayout?.(workspace);
+	}
 
+	/** The layout in Obsidian's `workspace.json` format: `main` (splits, tab groups, leaves), `left`, `right`, `active`. */
 	getLayout(): Record<string, unknown> {
+		if (this.host.getLayout) return this.host.getLayout();
 		return {};
 	}
 

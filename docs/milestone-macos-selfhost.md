@@ -51,6 +51,10 @@ end-to-end tests; the rest is in priority order within each section.
       into a new or existing note, leaving a link, an embed or nothing
 - [x] Slash commands, Random note and Unique note creator (core plugins,
       off by default as in Obsidian)
+- [x] Obsidian's layouts: a vault opened here for the first time gets the
+      tabs and splits Obsidian left in `workspace.json`; `getLayout` and
+      `changeLayout` use that format; Workspaces (core plugin) saves and
+      loads named layouts in `workspaces.json`, readable by Obsidian
 - [x] Bookmarks (core plugin, `.obsidian/bookmarks.json`, groups, follow
       renames, left sidebar pane, file menu item)
 - [x] Properties editor: frontmatter as properties in Live Preview and the

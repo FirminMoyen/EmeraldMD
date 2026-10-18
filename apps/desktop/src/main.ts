@@ -50,6 +50,7 @@ import { RemoteVaults } from './remote';
 import { hostOf } from './remote/connect-modal';
 import { setupSyncStatus } from './synced';
 import { NotePane, reasonOf, type PaneHost } from './pane';
+import { fromObsidianLayout, toObsidianLayout, type ObsidianLayout } from './obsidian-layout';
 import { SplitLayout, type SavedLayout, type SplitDirection } from './splits';
 import { isEmptyTab, type Tab, type TabBar } from './tabs';
 import { TauriBackend, TauriConfigStore, tauriRequestBackend, tauriTrustStore } from './tauri-backend';
@@ -436,7 +437,7 @@ class EmeraldApp {
 		this.renderTree();
 		this.restoreSidebars(app);
 		this.restoreUnsaved(vault);
-		this.restoreLayout(app, keep);
+		await this.restoreLayout(app, keep);
 		// Every pane shows its current tab; the current pane last, so it keeps the focus.
 		for (const pane of this.panes()) if (pane !== this.pane) await pane.showTab(pane.tab!);
 		const daily = app.internalPlugins.getEnabledPluginById('daily-notes');
@@ -538,6 +539,8 @@ class EmeraldApp {
 				if (pane) this.activatePane(pane);
 			},
 			save: () => this.flush(),
+			getLayout: () => this.obsidianLayout(),
+			changeLayout: (layout) => this.changeLayout(layout),
 			setEditorExtensions: (extensions: Extension[]) => {
 				this.editorExtensions = extensions;
 				for (const pane of this.panes()) pane.setExtensions(extensions);
@@ -641,23 +644,24 @@ class EmeraldApp {
 	 * of each pane loads its note); else one tab with the last note, or the
 	 * most recently edited one. `keep` is a note to show after a reload.
 	 */
-	private restoreLayout(app: App, keep: string | null): void {
+	private async restoreLayout(app: App, keep: string | null): Promise<void> {
 		const vault = app.vault;
 		const first = this.pane!;
 		const last = app.loadLocalStorage(LAST_FILE_KEY);
 		const fallback =
 			(typeof last === 'string' && vault.getFileByPath(last)) || vault.getMarkdownFiles().sort((a, b) => b.stat.mtime - a.stat.mtime)[0] || null;
-		const saved = app.loadLocalStorage(LAYOUT_KEY) as SavedLayout | null;
+		let saved = app.loadLocalStorage(LAYOUT_KEY) as SavedLayout | null;
+		if (!saved && app.loadLocalStorage(TABS_KEY) === null) {
+			// A vault opened here for the first time: the layout Obsidian left in workspace.json, if any.
+			const fromObsidian = await this.readObsidianLayout(app);
+			if (fromObsidian) {
+				saved = fromObsidian.saved;
+				if (fromObsidian.sidebars.left !== undefined) $('left-split').toggleClass('is-collapsed', !fromObsidian.sidebars.left);
+				if (fromObsidian.sidebars.right !== undefined) $('right-split').toggleClass('is-collapsed', !fromObsidian.sidebars.right);
+			}
+		}
 		if (saved && typeof saved === 'object' && (saved.type === 'split' || saved.type === 'tabs')) {
-			const current = this.layout!.restore(saved, first, (tabs, isFirst) => {
-				const pane = isFirst ? first : this.createPane();
-				pane.restore(tabs, isFirst ? fallback : null);
-				return pane;
-			});
-			this.syncRootLeaves();
-			// Nothing saved for the first pane (an older layout): it still needs a tab.
-			if (!first.tab) first.restore(null, fallback);
-			this.activatePane(current);
+			this.buildLayout(saved, fallback);
 		} else {
 			first.restore(app.loadLocalStorage(TABS_KEY), fallback);
 		}
@@ -668,6 +672,61 @@ class EmeraldApp {
 			pane.selectFile(kept);
 		}
 		this.saveLayout();
+	}
+
+	/** Panes and tabs from a saved layout, on a layout with only the first pane (shown later). */
+	private buildLayout(saved: SavedLayout, fallback: TFile | null): void {
+		const first = this.pane!;
+		const current = this.layout!.restore(saved, first, (tabs, isFirst) => {
+			const pane = isFirst ? first : this.createPane();
+			pane.restore(tabs, isFirst ? fallback : null);
+			return pane;
+		});
+		this.syncRootLeaves();
+		// Nothing saved for the first pane (an older layout): it still needs a tab.
+		if (!first.tab) first.restore(null, fallback);
+		this.activatePane(current);
+	}
+
+	private async readObsidianLayout(app: App): Promise<ReturnType<typeof fromObsidianLayout>> {
+		const path = `${app.vault.configDir}/workspace.json`;
+		try {
+			if (!(await app.vault.adapter.exists(path))) return null;
+			return fromObsidianLayout(JSON.parse(await app.vault.adapter.read(path)));
+		} catch {
+			return null;
+		}
+	}
+
+	/** The layout in Obsidian's format (`workspace.getLayout()`). */
+	private obsidianLayout(): ObsidianLayout {
+		const sidebars = { left: !$('left-split').hasClass('is-collapsed'), right: !$('right-split').hasClass('is-collapsed') };
+		return toObsidianLayout(this.layout!.serialize(this.pane), sidebars, this.app?.workspace.getLastOpenFiles() ?? []);
+	}
+
+	/** Replaces the main area's panes and tabs with a layout in Obsidian's format (`workspace.changeLayout()`, Workspaces). */
+	private async changeLayout(layout: unknown): Promise<void> {
+		const converted = fromObsidianLayout(layout);
+		if (!converted || !this.layout) return;
+		await this.flush();
+		const first = this.panes()[0]!;
+		for (const pane of this.panes()) {
+			if (pane === first) continue;
+			this.layout.remove(pane);
+			this.app!.workspace.removeRootLeaf(pane.leaf);
+			pane.destroy();
+		}
+		this.pane = first;
+		first.leaveTab();
+		first.tabBar.tabs = [];
+		first.tabBar.active = null;
+		this.buildLayout(converted.saved, null);
+		if (converted.sidebars.left !== undefined) $('left-split').toggleClass('is-collapsed', !converted.sidebars.left);
+		if (converted.sidebars.right !== undefined) $('right-split').toggleClass('is-collapsed', !converted.sidebars.right);
+		for (const pane of this.panes()) if (pane !== this.pane) await pane.showTab(pane.tab!);
+		await this.pane!.showTab(this.pane!.tab!);
+		this.saveLayout();
+		this.app!.workspace.trigger('layout-change');
 	}
 
 	/** A dragged tab dropped in a tab bar or on a pane: reordered, or moved to that pane. */

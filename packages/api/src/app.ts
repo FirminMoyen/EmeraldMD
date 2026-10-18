@@ -12,6 +12,7 @@ import { defaultCorePlugins, InternalPlugins } from './core-plugins';
 import { FileRecovery } from './file-recovery';
 import { NoteComposer } from './note-composer';
 import { RandomNote, SlashCommands, UniqueNoteCreator } from './small-core-plugins';
+import { Workspaces } from './workspaces';
 import { CustomCss } from './custom-css';
 import { FileManager } from './file-manager';
 import { HotkeyManager } from './hotkeys';
@@ -134,7 +135,7 @@ export class App {
 	/** @internal */
 	plugins: PluginsApi = noPlugins;
 	/** @internal */
-	internalPlugins = new InternalPlugins([...defaultCorePlugins(), new FileRecovery(), new NoteComposer(), new SlashCommands(), new RandomNote(), new UniqueNoteCreator()]);
+	internalPlugins = new InternalPlugins([...defaultCorePlugins(), new FileRecovery(), new NoteComposer(), new SlashCommands(), new RandomNote(), new UniqueNoteCreator(), new Workspaces()]);
 	/** @internal */
 	viewRegistry = new ViewRegistry();
 	/** @internal Property types; call `load()` once the vault is open. */
