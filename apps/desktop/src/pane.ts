@@ -49,6 +49,8 @@ export interface PaneHost {
 	saved(): Promise<void>;
 	/** Makes this pane the current one (a click or the focus inside it). */
 	activate(pane: NotePane): void;
+	/** Whether this pane is the current one. */
+	isCurrent(pane: NotePane): boolean;
 	/** Tabs, notes or modes changed: the layout is saved for next time. */
 	saveLayout(): void;
 	/** The pane shows another note (or none): file tree, side panels, window title. */
@@ -456,7 +458,8 @@ export class NotePane {
 		if (!current()) return;
 		const scroll = tab.scroll;
 		if (scroll) requestAnimationFrame(() => current() && view.currentMode.applyScroll(scroll));
-		if (tab.mode === 'source') this.editor.focus();
+		// Only the current pane takes the focus (focusing another would make it current).
+		if (tab.mode === 'source' && this.host.isCurrent(this)) this.editor.focus();
 		this.afterShow(file);
 	}
 

@@ -434,6 +434,7 @@ class EmeraldApp {
 			queueSave: (save) => (this.pendingSave = this.pendingSave.then(save)),
 			saved: () => this.pendingSave,
 			activate: (pane) => this.activatePane(pane),
+			isCurrent: (pane) => pane === this.pane,
 			saveLayout: () => this.saveLayout(),
 			shown: (pane) => {
 				if (pane === this.pane) this.onCurrentNoteChanged();
@@ -642,6 +643,8 @@ class EmeraldApp {
 		while ((closed = this.closedTabs.pop()) && closed.tab.file && !this.vault?.getFileByPath(closed.tab.file.path)) {}
 		if (!closed) return;
 		const pane = this.panes().includes(closed.pane) ? closed.pane : this.pane!;
+		// Editor state belongs to the editor it came from: in another pane, the note loads afresh.
+		if (pane !== closed.pane) closed.tab.state = null;
 		this.activatePane(pane);
 		pane.reopen(closed.tab, closed.index);
 	}

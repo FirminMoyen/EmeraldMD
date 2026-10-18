@@ -546,10 +546,12 @@ export class Workspace extends Events {
 		void leaf.open(view);
 	}
 
-	/** @internal A pane was closed. */
+	/** @internal A pane was closed: its views close too. */
 	removeRootLeaf(leaf: WorkspaceLeaf): void {
 		const view = leaf.view;
-		if (!leaf.persistentViews.has(view)) void closeView(view);
+		const noteView = this.noteViews.get(leaf);
+		if (view !== noteView) void closeView(view);
+		if (noteView) void closeView(noteView);
 		this.noteViews.delete(leaf);
 		this.rootLeaves = this.rootLeaves.filter((l) => l !== leaf);
 		if (this.rootLeaf === leaf && this.rootLeaves[0]) this.rootLeaf = this.rootLeaves[0];
