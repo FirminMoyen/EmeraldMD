@@ -16,6 +16,7 @@ import {
 	MarkdownView,
 	PropertiesEditor,
 	isPropertiesYaml,
+	Menu,
 	setIcon,
 	setLivePreviewEffect,
 	setTooltip,
@@ -166,6 +167,7 @@ export class NotePane {
 			},
 		});
 		parts.trash.addEventListener('click', () => void (this.activeFile && host.trash(this.activeFile)));
+		this.editor.view.contentDOM.addEventListener('contextmenu', (event) => this.showEditorMenu(event));
 		parts.title.addEventListener('keydown', (e) => {
 			if (e.key === 'Enter') parts.title.blur();
 			if (e.key === 'Escape') {
@@ -889,6 +891,90 @@ export class NotePane {
 		const properties = new PropertiesEditor(this.host.app, el, { sourcePath: () => this.activeFile?.path ?? '', save: (data) => this.view.saveProperties(data) });
 		properties.setYaml(yaml);
 		return { update: (next: string) => properties.setYaml(next), destroy: () => properties.destroy() };
+	}
+
+	/**
+	 * The editor's context menu, as Obsidian's: clipboard, Format, Paragraph
+	 * and Insert submenus, and plugins' items (`editor-menu`). With
+	 * spellcheck on, the system menu stays: only it offers spelling
+	 * suggestions.
+	 */
+	private showEditorMenu(event: MouseEvent): void {
+		const app = this.host.app;
+		if (!this.activeFile || app.vault.getConfig('spellcheck') === true) return;
+		event.preventDefault();
+		const cm = this.editor.view;
+		// A click outside the selection moves the cursor there first.
+		const pos = cm.posAtCoords({ x: event.clientX, y: event.clientY });
+		const sel = cm.state.selection.main;
+		if (pos !== null && (pos < sel.from || pos > sel.to)) cm.dispatch({ selection: { anchor: pos } });
+		const editor = this.view.editor;
+		const selected = editor.getSelection();
+		const run = (id: string) => () => app.commands.executeCommandById(id);
+		const menu = new Menu();
+		const clipboard = typeof navigator !== 'undefined' ? navigator.clipboard : undefined;
+		if (selected) {
+			menu.addItem((item) =>
+				item
+					.setTitle('Cut')
+					.setIcon('scissors')
+					.setSection('clipboard')
+					.onClick(async () => {
+						await clipboard?.writeText(selected);
+						editor.replaceSelection('');
+					}),
+			);
+			menu.addItem((item) => item.setTitle('Copy').setIcon('copy').setSection('clipboard').onClick(() => clipboard?.writeText(selected)));
+		}
+		menu.addItem((item) =>
+			item
+				.setTitle('Paste')
+				.setIcon('clipboard-paste')
+				.setSection('clipboard')
+				.onClick(async () => {
+					const text = await clipboard?.readText();
+					if (text) editor.replaceSelection(text);
+				}),
+		);
+		menu.addItem((item) =>
+			item
+				.setTitle('Select all')
+				.setIcon('text-select')
+				.setSection('clipboard')
+				.onClick(() => cm.dispatch({ selection: { anchor: 0, head: cm.state.doc.length } })),
+		);
+		const submenu = (title: string, icon: string, items: [string, string, string][]) =>
+			menu.addItem((item) => {
+				item.setTitle(title).setIcon(icon).setSection('selection');
+				const sub = item.setSubmenu();
+				for (const [name, subIcon, id] of items) sub.addItem((i) => i.setTitle(name).setIcon(subIcon).onClick(run(id)));
+			});
+		submenu('Format', 'type', [
+			['Bold', 'bold', 'editor:toggle-bold'],
+			['Italic', 'italic', 'editor:toggle-italics'],
+			['Strikethrough', 'strikethrough', 'editor:toggle-strikethrough'],
+			['Highlight', 'highlighter', 'editor:toggle-highlight'],
+			['Code', 'code', 'editor:toggle-code'],
+			['Math', 'sigma', 'editor:toggle-inline-math'],
+			['Comment', 'percent', 'editor:toggle-comments'],
+		]);
+		submenu('Paragraph', 'pilcrow', [
+			['Bullet list', 'list', 'editor:toggle-bullet-list'],
+			['Numbered list', 'list-ordered', 'editor:toggle-numbered-list'],
+			['Task list', 'list-checks', 'editor:toggle-checklist-status'],
+			...[1, 2, 3, 4, 5, 6].map((n): [string, string, string] => [`Heading ${n}`, `heading-${n}`, `editor:set-heading-${n}`]),
+			['Body', 'text', 'editor:set-heading-0'],
+			['Quote', 'quote', 'editor:toggle-blockquote'],
+		]);
+		submenu('Insert', 'plus', [
+			['Table', 'table', 'editor:insert-table'],
+			['Callout', 'quote', 'editor:insert-callout'],
+			['Horizontal rule', 'minus', 'editor:insert-horizontal-rule'],
+			['Code block', 'square-code', 'editor:insert-codeblock'],
+			['Math block', 'sigma-square', 'editor:insert-mathblock'],
+		]);
+		app.workspace.trigger('editor-menu', menu, editor, this.view);
+		menu.showAtMouseEvent(event);
 	}
 
 	/** "Add file property": a new row in the properties editor, or a new line in the YAML (source mode, hidden properties). */

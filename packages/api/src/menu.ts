@@ -21,6 +21,8 @@ export class MenuItem {
 	private callback: ((evt: MouseEvent | KeyboardEvent) => unknown) | null = null;
 	private disabled = false;
 	private readonly menu: Menu;
+	/** @internal The menu shown next to this item (`setSubmenu`). */
+	submenu: Menu | null = null;
 
 	/** @internal Created by `Menu.addItem`. */
 	constructor(menu: Menu) {
@@ -29,13 +31,32 @@ export class MenuItem {
 		this.iconEl = this.dom.createDiv('menu-item-icon');
 		this.titleEl = this.dom.createDiv('menu-item-title');
 		this.dom.addEventListener('click', (evt) => this.handleEvent(evt));
-		this.dom.addEventListener('mouseenter', () => this.menu.select(this));
+		this.dom.addEventListener('mouseenter', () => {
+			this.menu.select(this);
+			if (this.submenu) this.menu.openSubmenu(this);
+			else this.menu.closeSubmenu();
+		});
+	}
+
+	/** A menu shown next to this item, to add items to. */
+	setSubmenu(): Menu {
+		if (!this.submenu) {
+			this.submenu = new Menu();
+			this.submenu.parentMenu = this.menu;
+			this.dom.addClass('has-submenu');
+			setIcon(this.dom.createDiv('menu-item-icon mod-submenu'), 'chevron-right');
+		}
+		return this.submenu;
 	}
 
 	/** @internal */
 	handleEvent(evt: MouseEvent | KeyboardEvent): void {
 		if (this.disabled) return;
-		this.menu.hide();
+		if (this.submenu) {
+			this.menu.openSubmenu(this);
+			return;
+		}
+		this.menu.root().hide();
 		try {
 			const result = this.callback?.(evt);
 			if (result instanceof Promise) result.catch((err: unknown) => console.error(err));
@@ -100,6 +121,9 @@ export class Menu extends Component {
 	private selected: MenuItem | null = null;
 	private hideCallbacks: (() => unknown)[] = [];
 	private parentEl: HTMLElement | null = null;
+	/** @internal The menu this one is a submenu of. */
+	parentMenu: Menu | null = null;
+	private openedSubmenu: Menu | null = null;
 
 	constructor() {
 		super();
@@ -151,10 +175,12 @@ export class Menu extends Component {
 		this.dom.style.left = `${Math.max(0, x)}px`;
 		this.dom.style.top = `${y}px`;
 		this.load();
+		// A submenu closes with its menu.
+		if (this.parentMenu) return this;
 		// Close on the next outside click or Escape.
 		setTimeout(() => {
 			this.registerDomEvent(doc, 'mousedown', (e: Event) => {
-				if (!this.dom.contains(e.target as Node)) this.hide();
+				if (!this.contains(e.target as Node)) this.hide();
 			});
 		});
 		this.registerDomEvent(doc, 'keydown', (e: Event) => {
@@ -168,7 +194,33 @@ export class Menu extends Component {
 		this.hide();
 	}
 
+	/** @internal The outermost menu. */
+	root(): Menu {
+		return this.parentMenu ? this.parentMenu.root() : this;
+	}
+
+	/** @internal Whether `node` is in this menu or one of its open submenus. */
+	contains(node: Node): boolean {
+		return this.dom.contains(node) || Boolean(this.openedSubmenu?.contains(node));
+	}
+
+	/** @internal Shows an item's submenu next to it. */
+	openSubmenu(item: MenuItem): void {
+		if (!item.submenu || this.openedSubmenu === item.submenu) return;
+		this.closeSubmenu();
+		const rect = item.dom.getBoundingClientRect();
+		this.openedSubmenu = item.submenu;
+		item.submenu.showAtPosition({ x: rect.right, y: rect.top });
+	}
+
+	/** @internal */
+	closeSubmenu(): void {
+		this.openedSubmenu?.hide();
+		this.openedSubmenu = null;
+	}
+
 	hide(): this {
+		this.closeSubmenu();
 		if (!this.dom.isConnected) return this;
 		this.dom.detach();
 		this.unload();
@@ -197,7 +249,7 @@ export class Menu extends Component {
 
 	private render(): void {
 		this.dom.empty();
-		if (this.parentEl) this.dom.addClass('mod-submenu');
+		if (this.parentEl || this.parentMenu) this.dom.addClass('mod-submenu');
 		// Items with a section are grouped by section, in first-seen order.
 		const sections: string[] = [];
 		for (const item of this.items) {
