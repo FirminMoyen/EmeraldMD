@@ -3407,3 +3407,23 @@ a.tag {
 	background: rgba(var(--color-green-rgb), 0.15);
 	color: var(--text-success);
 }
+
+/* Outgoing links (core-views/outgoing.ts). */
+.outgoing-link-pane {
+	padding: var(--size-4-1) var(--size-4-2);
+}
+
+.outgoing-link-header {
+	color: var(--text-muted);
+	font-size: var(--font-ui-small);
+	font-weight: var(--font-semibold);
+}
+
+.outgoing-link-section {
+	margin-bottom: var(--size-4-2);
+}
+
+.outgoing-link-item.is-unresolved .tree-item-inner {
+	color: var(--text-faint);
+	font-style: italic;
+}

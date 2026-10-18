@@ -62,6 +62,8 @@ end-to-end tests; the rest is in priority order within each section.
 - [x] Canvas files (`.canvas`): view and edit
 - [x] Backlinks with the line of each link; unlinked mentions (name and
       aliases, whole words, outside links) turned into links in one click
+- [x] Outgoing links pane: the note's links, those not created yet, and
+      unlinked mentions of other notes in its text
 
 ### Plugins and appearance
 
