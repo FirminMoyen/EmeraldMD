@@ -53,7 +53,7 @@ describe('Live Preview', () => {
 		expect(link.classList.contains('is-unresolved')).toBe(false);
 		expect(editor.view.contentDOM.querySelector('[data-lp-link="Ideas"]')!.classList.contains('is-unresolved')).toBe(true);
 		link.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, button: 0 }));
-		expect(onOpenLink).toHaveBeenCalledWith('Projects/Plan');
+		expect(onOpenLink).toHaveBeenCalledWith('Projects/Plan', false);
 
 		moveTo(editor, 6);
 		expect(lines(editor)[0]).toBe('See [[Projects/Plan|the plan]] and Ideas.');

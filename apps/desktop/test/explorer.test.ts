@@ -45,7 +45,7 @@ describe('file explorer', () => {
 			menu.addItem((item) => item.setTitle('From a plugin'));
 		});
 		title('Welcome.md').dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 10, clientY: 10 }));
-		expect(menuItems()).toEqual(['Rename…', 'Move to…', 'Copy path', 'Reveal in Finder', 'Delete', 'From a plugin']);
+		expect(menuItems()).toEqual(['Open in new tab', 'Rename…', 'Move to…', 'Copy path', 'Reveal in Finder', 'Delete', 'From a plugin']);
 		expect(seen).toEqual(['Welcome.md file-explorer-context-menu']);
 		shell.press('Escape');
 		shell.app.workspace.offref(ref);

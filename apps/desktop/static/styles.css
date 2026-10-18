@@ -336,6 +336,26 @@ body {
 	--table-header-color: inherit;
 	--table-header-weight: var(--font-semibold);
 
+	/* Tabs of the main area. */
+	--header-height: 40px;
+	--tab-container-background: var(--background-secondary);
+	--tab-background-active: var(--background-primary);
+	--tab-text-color: var(--text-faint);
+	--tab-text-color-active: var(--text-muted);
+	--tab-text-color-focused: var(--text-muted);
+	--tab-text-color-focused-active: var(--text-muted);
+	--tab-text-color-focused-active-current: var(--text-normal);
+	--tab-text-color-focused-highlighted: var(--text-accent);
+	--tab-font-size: var(--font-ui-small);
+	--tab-font-weight: inherit;
+	--tab-divider-color: var(--background-modifier-border-hover);
+	--tab-outline-color: var(--divider-color);
+	--tab-outline-width: 1px;
+	--tab-radius: var(--radius-s);
+	--tab-radius-active: 6px 6px 0 0;
+	--tab-width: 200px;
+	--tab-max-width: 320px;
+
 	/* Callouts: colours. Themes may also give "r, g, b" triplets (see .callout). */
 	--callout-default: var(--color-blue);
 	--callout-info: var(--color-blue);
@@ -953,6 +973,132 @@ body.hide-ribbon .workspace-ribbon-container {
 .workspace-tab-header.is-active {
 	background: var(--background-modifier-hover);
 	color: var(--text-normal);
+}
+
+/* The main area's tabs (tabs.ts). */
+.workspace-tabs {
+	flex: 1;
+	min-height: 0;
+	display: flex;
+	flex-direction: column;
+}
+
+.mod-root .workspace-tab-header-container {
+	flex-shrink: 0;
+	display: flex;
+	align-items: stretch;
+	gap: 0;
+	height: var(--header-height);
+	padding: 6px var(--size-4-2) 0;
+	background: var(--tab-container-background);
+	border-bottom: var(--tab-outline-width) solid var(--tab-outline-color);
+}
+
+.mod-root .workspace-tab-header-container-inner {
+	display: flex;
+	min-width: 0;
+	overflow-x: auto;
+	scrollbar-width: none;
+}
+
+.mod-root .workspace-tab-header-container-inner::-webkit-scrollbar {
+	display: none;
+}
+
+.mod-root .workspace-tab-header {
+	position: relative;
+	flex: 0 1 var(--tab-width);
+	min-width: 72px;
+	max-width: var(--tab-max-width);
+	display: flex;
+	color: var(--tab-text-color);
+	font-size: var(--tab-font-size);
+	font-weight: var(--tab-font-weight);
+	border-radius: var(--tab-radius-active);
+	cursor: default;
+}
+
+.mod-root .workspace-tab-header:not(.is-active):hover {
+	color: var(--tab-text-color-focused);
+}
+
+.mod-root .workspace-tab-header.is-active {
+	background: var(--tab-background-active);
+	color: var(--tab-text-color-focused-active-current);
+	box-shadow: 0 0 0 var(--tab-outline-width) var(--tab-outline-color);
+	/* Over the container's bottom border, so the tab joins the note below. */
+	margin-bottom: calc(0px - var(--tab-outline-width));
+	clip-path: inset(-2px -2px 0 -2px);
+}
+
+/* A divider between inactive tabs. */
+.mod-root .workspace-tab-header:not(.is-active) + .workspace-tab-header:not(.is-active)::before {
+	content: '';
+	position: absolute;
+	left: 0;
+	top: 8px;
+	bottom: 8px;
+	border-left: 1px solid var(--tab-divider-color);
+}
+
+.mod-root .workspace-tab-header-inner {
+	flex: 1;
+	min-width: 0;
+	display: flex;
+	align-items: center;
+	gap: var(--size-2-2);
+	margin: 0 0 4px;
+	padding: 0 6px 0 10px;
+	border-radius: var(--tab-radius);
+}
+
+.mod-root .workspace-tab-header.is-active .workspace-tab-header-inner {
+	margin-bottom: 0;
+}
+
+.mod-root .workspace-tab-header:not(.is-active):hover .workspace-tab-header-inner {
+	background: var(--background-modifier-hover);
+}
+
+.mod-root .workspace-tab-header-inner-icon {
+	display: none;
+}
+
+.workspace-tab-header-inner-title {
+	flex: 1;
+	min-width: 0;
+	overflow: hidden;
+	white-space: nowrap;
+	text-overflow: ellipsis;
+}
+
+.workspace-tab-header-inner-close-button {
+	display: flex;
+	padding: 2px;
+	border-radius: var(--radius-s);
+	color: var(--icon-color);
+	opacity: 0;
+}
+
+.workspace-tab-header-inner-close-button svg {
+	width: 14px;
+	height: 14px;
+}
+
+.workspace-tab-header.is-active .workspace-tab-header-inner-close-button,
+.workspace-tab-header:hover .workspace-tab-header-inner-close-button {
+	opacity: 1;
+}
+
+.workspace-tab-header-inner-close-button:hover {
+	background: var(--background-modifier-hover);
+	color: var(--icon-color-hover);
+}
+
+.workspace-tab-header-new-tab {
+	display: flex;
+	align-items: center;
+	padding: 0 0 4px var(--size-2-2);
 }
 
 .workspace-tab-container {

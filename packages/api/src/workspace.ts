@@ -43,6 +43,12 @@ export interface WorkspaceHost {
 	save(): Promise<void>;
 	/** Applies plugin editor extensions to the editor. */
 	setEditorExtensions(extensions: Extension[]): void;
+	/** Opens an empty tab in the main area and makes it current (for `getLeaf(true)`). */
+	newTab?(): void;
+	/** Opens any file a view can show (notes, canvases…) in the current tab; without it, only notes go through `openFile`. */
+	openInTab?(file: TFile): Promise<void>;
+	/** Closes the current tab (`detach` on the root leaf). */
+	closeTab?(): void;
 }
 
 const headlessHost = (workspace: Workspace): WorkspaceHost => ({
@@ -220,8 +226,9 @@ export class WorkspaceLeaf extends WorkspaceItem {
 	detach(): void {
 		const workspace = this.app.workspace;
 		if (this === workspace.rootLeaf) {
-			// The root leaf stays; closing it shows the note editor again.
-			if (workspace.markdownView && this.view !== workspace.markdownView) void this.open(workspace.markdownView);
+			// The root leaf stays: with tabs, detaching it closes the current tab; else it shows the note editor again.
+			if (workspace.host.closeTab) workspace.host.closeTab();
+			else if (workspace.markdownView && this.view !== workspace.markdownView) void this.open(workspace.markdownView);
 			return;
 		}
 		void closeView(this.view);
@@ -555,8 +562,13 @@ export class Workspace extends Events {
 		return this.rootLeaf;
 	}
 
-	/** Always the root leaf: EmeraldMD does not have tabs or splits in the main area yet. */
-	getLeaf(_newLeaf?: PaneType | boolean | 'split', _direction?: SplitDirection): WorkspaceLeaf {
+	/**
+	 * The root leaf. Asked for a new leaf (`true`, `'tab'`, `'split'`,
+	 * `'window'`), the app first opens a new tab, so the file opened next goes
+	 * there; there are no splits or popout windows yet.
+	 */
+	getLeaf(newLeaf?: PaneType | boolean | 'split', _direction?: SplitDirection): WorkspaceLeaf {
+		if (newLeaf) this.host.newTab?.();
 		return this.rootLeaf;
 	}
 
@@ -697,7 +709,9 @@ export class Workspace extends Events {
 	/** @internal */
 	async openFileInLeaf(leaf: WorkspaceLeaf, file: TFile, openState?: OpenViewState): Promise<void> {
 		const type = file.extension === 'md' ? 'markdown' : this.app.viewRegistry.getTypeByExtension(file.extension);
-		if (type === 'markdown' && leaf === this.rootLeaf && this.markdownView) {
+		if (type && leaf === this.rootLeaf && this.host.openInTab) {
+			await this.host.openInTab(file);
+		} else if (type === 'markdown' && leaf === this.rootLeaf && this.markdownView) {
 			await this.rootLeaf.open(this.markdownView);
 			await this.host.openFile(file);
 		} else if (type) {

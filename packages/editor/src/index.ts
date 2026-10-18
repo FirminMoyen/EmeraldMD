@@ -150,8 +150,8 @@ function settingsExtensions(settings: EditorSettings): Extension {
 export interface MarkdownEditorOptions {
 	parent: HTMLElement;
 	onChange?: (text: string) => void;
-	/** Cmd/Ctrl-click on a wikilink. */
-	onOpenLink?: (linktext: string) => void;
+	/** A wikilink to follow: a click in Live Preview, or Cmd/Ctrl-click (then `newTab`). */
+	onOpenLink?: (linktext: string, newTab: boolean) => void;
 	/** Files pasted or dropped into the editor, with the document position to insert at. */
 	onFiles?: (files: File[], pos: number) => void;
 	/** A click on a rendered external link in Live Preview. */
@@ -231,7 +231,7 @@ export class MarkdownEditor {
 					const rendered = this.livePreviewOn && event.button === 0 ? target?.closest<HTMLElement>('[data-lp-link], [data-lp-href]') : null;
 					if (rendered && !(event.metaKey || event.ctrlKey || event.shiftKey || event.altKey)) {
 						const { lpLink: link, lpHref: href } = rendered.dataset;
-						if (link !== undefined && options.onOpenLink) options.onOpenLink(link);
+						if (link !== undefined && options.onOpenLink) options.onOpenLink(link, false);
 						else if (href !== undefined && options.onOpenUrl) options.onOpenUrl(href);
 						else return false;
 						event.preventDefault();
@@ -244,7 +244,7 @@ export class MarkdownEditor {
 					const link = wikilinkAt(line.text, pos - line.from);
 					if (link === null) return false;
 					event.preventDefault();
-					options.onOpenLink(link);
+					options.onOpenLink(link, true);
 					return true;
 				},
 			}),
@@ -260,6 +260,24 @@ export class MarkdownEditor {
 	/** Replaces the document and resets undo history (used when switching files). */
 	setValue(text: string): void {
 		this.view.setState(this.createState(text));
+	}
+
+	/** The editor's state (text, selection, undo history), to keep for a tab in the background. */
+	getState(): EditorState {
+		return this.view.state;
+	}
+
+	/** Shows a state kept with `getState`, with the current settings, mode and extensions. */
+	restoreState(state: EditorState, effects: StateEffect<unknown>[] = []): void {
+		this.view.setState(state);
+		this.view.dispatch({
+			effects: [
+				this.settingsCompartment.reconfigure(settingsExtensions(this.settings)),
+				this.mode.reconfigure(this.livePreviewOn ? this.livePreviewExtension : []),
+				this.extra.reconfigure(this.extraExtensions),
+				...effects,
+			],
+		});
 	}
 
 	/** Replaces the document but keeps undo history and the cursor where possible (external edits). */

@@ -27,7 +27,11 @@ end-to-end tests; the rest is in priority order within each section.
       move to, delete, reveal in Finder, copy path) extended by plugins
       (`file-menu`), rename in place; links are rewritten when notes move
 - [x] Back/forward history (⌥⌘←/→, header buttons, mouse buttons)
-- [ ] Tabs and splits in the main area
+- [x] Tabs in the main area: each tab keeps its note, cursor, undo history,
+      scroll, reading/editing mode and back/forward history; ⌘T, ⌘W, ⇧⌘T,
+      ⌃Tab, ⌘1–9, ⌘-click or middle click for a new tab; canvas and plugin
+      views in tabs (`getLeaf('tab')`); open tabs restored with the vault
+- [ ] Splits in the main area
 - [x] Hover preview of links (page preview): reading view on hover, editor
       with ⌘, sections and blocks, `hover-link` from plugins
 - [x] Daily notes and templates (core plugins, with their settings and
@@ -66,7 +70,7 @@ end-to-end tests; the rest is in priority order within each section.
 ### Native macOS
 
 - [x] App menu (EmeraldMD, File, Edit, View, Window) with standard
-      shortcuts; ⌘W closes the note, ⌘Q saves before quitting, ⌘, opens
+      shortcuts; ⌘T/⌘W/⇧⌘T for tabs, ⌘Q saves before quitting, ⌘, opens
       settings
 - [x] Window size, position and workspace (open note, sidebars) restored
 - [x] Large vaults: 10,000 notes (39 MB) open in about 0.5 s on an M-series

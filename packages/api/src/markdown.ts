@@ -13,6 +13,7 @@ import { Component } from './component';
 import { renderMermaid } from './diagrams';
 import type { HoverPopover } from './hover-popover';
 import { getIcon, setIcon } from './icons';
+import { Keymap } from './keymap';
 import { renderMath } from './math';
 import { getFrontMatterInfo, parseYaml, sanitizeHTMLToDom } from './util';
 
@@ -717,7 +718,8 @@ function linkInternalLinks(app: App, el: HTMLElement, sourcePath: string): void 
 		if (linkpath && !app.metadataCache.getFirstLinkpathDest(linkpath, sourcePath)) a.addClass('is-unresolved');
 		a.addEventListener('click', (evt) => {
 			evt.preventDefault();
-			void app.workspace.openLinkText(href, sourcePath);
+			// Cmd/Ctrl-click opens a new tab.
+			void app.workspace.openLinkText(href, sourcePath, Keymap.isModEvent(evt));
 		});
 		// Page preview: in the reading view no modifier key is needed.
 		a.addEventListener('mouseover', (event) => {
