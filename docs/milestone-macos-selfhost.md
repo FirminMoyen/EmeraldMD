@@ -38,7 +38,11 @@ end-to-end tests; the rest is in priority order within each section.
       the `{{date}}`/`{{time}}`/`{{title}}` variables)
 - [x] Bookmarks (core plugin, `.obsidian/bookmarks.json`, groups, follow
       renames, left sidebar pane, file menu item)
-- [ ] Properties editor
+- [x] Properties editor: frontmatter as properties in Live Preview and the
+      reading view (text, list, number, checkbox, date, date & time, tags,
+      aliases), types in `.obsidian/types.json`, rename/add/remove, "Add file
+      property" (⌘;), "Properties in document" setting (visible, hidden,
+      source)
 
 ### Navigation and core panes
 

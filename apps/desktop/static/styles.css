@@ -336,6 +336,61 @@ body {
 	--table-header-color: inherit;
 	--table-header-weight: var(--font-semibold);
 
+	/* Properties (frontmatter) at the top of notes, and pills for lists. */
+	--metadata-background: transparent;
+	--metadata-display-editing: block;
+	--metadata-display-reading: block;
+	--metadata-max-width: none;
+	--metadata-padding: var(--size-4-2) 0;
+	--metadata-border-color: var(--background-modifier-border);
+	--metadata-border-radius: 0;
+	--metadata-border-width: 0;
+	--metadata-divider-color: var(--background-modifier-border);
+	--metadata-divider-width: 0;
+	--metadata-gap: 3px;
+	--metadata-property-padding: 0;
+	--metadata-property-radius: 6px;
+	--metadata-property-radius-hover: 6px;
+	--metadata-property-radius-focus: 6px;
+	--metadata-property-background: transparent;
+	--metadata-property-background-hover: transparent;
+	--metadata-property-background-active: var(--background-modifier-hover);
+	--metadata-property-box-shadow-hover: 0 0 0 1px var(--background-modifier-border-hover);
+	--metadata-property-box-shadow-focus: 0 0 0 2px var(--background-modifier-border-focus);
+	--metadata-label-background: transparent;
+	--metadata-label-background-hover: transparent;
+	--metadata-label-background-active: var(--background-modifier-hover);
+	--metadata-label-font: var(--font-interface);
+	--metadata-label-font-size: var(--font-smaller);
+	--metadata-label-font-weight: inherit;
+	--metadata-label-text-color: var(--text-muted);
+	--metadata-label-text-color-hover: var(--text-muted);
+	--metadata-label-width: 9em;
+	--metadata-input-background: transparent;
+	--metadata-input-background-hover: transparent;
+	--metadata-input-background-active: var(--background-modifier-hover);
+	--metadata-input-font: var(--font-interface);
+	--metadata-input-font-size: var(--font-smaller);
+	--metadata-input-font-weight: inherit;
+	--metadata-input-text-color: var(--text-normal);
+	--metadata-input-height: 28px;
+	--metadata-input-longtext-lines: 3;
+	--pill-background: transparent;
+	--pill-background-hover: transparent;
+	--pill-border-color: var(--background-modifier-border);
+	--pill-border-color-hover: var(--background-modifier-border-hover);
+	--pill-border-width: var(--border-width);
+	--pill-color: var(--text-muted);
+	--pill-color-hover: var(--text-normal);
+	--pill-color-remove: var(--text-faint);
+	--pill-color-remove-hover: var(--text-accent);
+	--pill-decoration: none;
+	--pill-decoration-hover: none;
+	--pill-padding-x: 0.65em;
+	--pill-padding-y: 0.15em;
+	--pill-radius: 2em;
+	--pill-weight: inherit;
+
 	/* Tabs of the main area. */
 	--header-height: 40px;
 	--tab-container-background: var(--background-secondary);
@@ -2863,4 +2918,273 @@ a.tag {
 	to {
 		transform: rotate(360deg);
 	}
+}
+
+/* Properties (properties.ts): above the note in Live Preview and the reading view. */
+.metadata-container {
+	display: var(--metadata-display-reading);
+	max-width: var(--metadata-max-width);
+	margin-bottom: var(--size-4-3);
+	padding: var(--metadata-padding);
+	background: var(--metadata-background);
+	border: var(--metadata-border-width) solid var(--metadata-border-color);
+	border-radius: var(--metadata-border-radius);
+	font-family: var(--metadata-label-font);
+}
+
+.cm-properties-widget .metadata-container {
+	display: var(--metadata-display-editing);
+	margin-bottom: var(--size-4-2);
+}
+
+.metadata-properties-heading {
+	display: flex;
+	align-items: center;
+	padding: 0 0 var(--size-4-1);
+	color: var(--text-normal);
+	font-size: var(--font-ui-small);
+	font-weight: var(--font-semibold);
+	cursor: default;
+}
+
+.metadata-container.is-collapsed .metadata-content {
+	display: none;
+}
+
+.metadata-properties {
+	display: flex;
+	flex-direction: column;
+	gap: var(--metadata-gap);
+}
+
+.metadata-property {
+	display: flex;
+	align-items: flex-start;
+	padding: var(--metadata-property-padding);
+	background: var(--metadata-property-background);
+	border-radius: var(--metadata-property-radius);
+	border-bottom: var(--metadata-divider-width) solid var(--metadata-divider-color);
+}
+
+.metadata-property:hover {
+	background: var(--metadata-property-background-hover);
+	box-shadow: var(--metadata-property-box-shadow-hover);
+	border-radius: var(--metadata-property-radius-hover);
+}
+
+.metadata-property:focus-within {
+	box-shadow: var(--metadata-property-box-shadow-focus);
+	border-radius: var(--metadata-property-radius-focus);
+}
+
+.metadata-property-key {
+	flex: 0 0 var(--metadata-label-width);
+	display: flex;
+	align-items: center;
+	gap: var(--size-4-1);
+	min-height: var(--metadata-input-height);
+	padding: 0 var(--size-4-1);
+	background: var(--metadata-label-background);
+	border-radius: var(--metadata-property-radius) 0 0 var(--metadata-property-radius);
+	color: var(--metadata-label-text-color);
+	font-size: var(--metadata-label-font-size);
+	font-weight: var(--metadata-label-font-weight);
+}
+
+.metadata-property-key:hover {
+	background: var(--metadata-label-background-hover);
+	color: var(--metadata-label-text-color-hover);
+}
+
+.metadata-property-key:focus-within {
+	background: var(--metadata-label-background-active);
+}
+
+.metadata-property-icon {
+	display: flex;
+	color: var(--icon-color);
+	cursor: pointer;
+}
+
+.metadata-property-icon svg {
+	width: 14px;
+	height: 14px;
+}
+
+.metadata-property .metadata-property-key-input {
+	flex: 1;
+	min-width: 0;
+	padding: 0;
+	border: none;
+	background: transparent;
+	color: inherit;
+	font: inherit;
+	text-overflow: ellipsis;
+}
+
+.metadata-property .metadata-property-key-input:focus {
+	outline: none;
+}
+
+.metadata-property-value {
+	flex: 1;
+	min-width: 0;
+	display: flex;
+	align-items: center;
+	min-height: var(--metadata-input-height);
+	padding: 0 var(--size-4-2);
+	background: var(--metadata-input-background);
+	border-radius: 0 var(--metadata-property-radius) var(--metadata-property-radius) 0;
+	color: var(--metadata-input-text-color);
+	font-family: var(--metadata-input-font);
+	font-size: var(--metadata-input-font-size);
+	font-weight: var(--metadata-input-font-weight);
+}
+
+.metadata-property-value:hover {
+	background: var(--metadata-input-background-hover);
+}
+
+.metadata-property-value:focus-within {
+	background: var(--metadata-input-background-active);
+}
+
+.metadata-input-longtext {
+	flex: 1;
+	min-width: 0;
+	padding: 4px 0;
+	outline: none;
+	white-space: pre-wrap;
+	overflow-wrap: anywhere;
+}
+
+.metadata-input-longtext.mod-truncate:not(:focus) {
+	display: -webkit-box;
+	-webkit-box-orient: vertical;
+	-webkit-line-clamp: var(--metadata-input-longtext-lines);
+	overflow: hidden;
+}
+
+.metadata-input-longtext:empty::before,
+.multi-select-input:empty::before {
+	content: attr(data-placeholder);
+	color: var(--text-faint);
+}
+
+.metadata-input-longtext.mod-unknown {
+	color: var(--text-muted);
+	font-family: var(--font-monospace);
+}
+
+.metadata-property .metadata-input {
+	flex: 1;
+	min-width: 0;
+	height: var(--metadata-input-height);
+	padding: 0;
+	border: none;
+	background: transparent;
+	color: inherit;
+	font: inherit;
+}
+
+.metadata-property .metadata-input:focus {
+	outline: none;
+}
+
+.metadata-input-checkbox {
+	margin: 0;
+	accent-color: var(--interactive-accent);
+}
+
+.metadata-add-button {
+	display: inline-flex;
+	align-items: center;
+	gap: var(--size-4-1);
+	margin-top: var(--size-4-1);
+	padding: 2px var(--size-4-1);
+	border-radius: var(--radius-s);
+	color: var(--text-faint);
+	font-size: var(--metadata-label-font-size);
+	cursor: pointer;
+}
+
+.metadata-add-button:hover {
+	background: var(--background-modifier-hover);
+	color: var(--text-muted);
+}
+
+.text-button-icon {
+	display: flex;
+}
+
+.text-button-icon svg {
+	width: 14px;
+	height: 14px;
+}
+
+/* Lists (List, tags, aliases) as pills. */
+.multi-select-container {
+	flex: 1;
+	min-width: 0;
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: 4px;
+	padding: 3px 0;
+}
+
+.multi-select-pill {
+	display: inline-flex;
+	align-items: center;
+	gap: 2px;
+	max-width: 100%;
+	padding: var(--pill-padding-y) var(--pill-padding-x);
+	background: var(--pill-background);
+	border: var(--pill-border-width) solid var(--pill-border-color);
+	border-radius: var(--pill-radius);
+	color: var(--pill-color);
+	font-weight: var(--pill-weight);
+	text-decoration: var(--pill-decoration);
+}
+
+.multi-select-pill:hover {
+	background: var(--pill-background-hover);
+	border-color: var(--pill-border-color-hover);
+	color: var(--pill-color-hover);
+	text-decoration: var(--pill-decoration-hover);
+}
+
+.multi-select-pill-content {
+	overflow: hidden;
+	white-space: nowrap;
+	text-overflow: ellipsis;
+}
+
+.multi-select-pill-remove-button {
+	display: flex;
+	color: var(--pill-color-remove);
+	cursor: pointer;
+}
+
+.multi-select-pill-remove-button:hover {
+	color: var(--pill-color-remove-hover);
+}
+
+.multi-select-pill-remove-button svg {
+	width: 12px;
+	height: 12px;
+}
+
+.multi-select-input {
+	flex: 1;
+	min-width: 4em;
+	outline: none;
+}
+
+.metadata-container.is-read-only .metadata-property-icon {
+	cursor: default;
+}
+
+.mod-header > pre.frontmatter {
+	margin-top: 0;
 }

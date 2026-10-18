@@ -148,3 +148,50 @@ describe('Vim key bindings', () => {
 		expect(editor.view.scrollDOM.classList.contains('cm-vimMode')).toBe(false);
 	});
 });
+
+describe('properties in Live Preview', () => {
+	function withProperties(doc: string, mode: () => 'visible' | 'hidden' | 'source' = () => 'visible') {
+		const parent = document.body.appendChild(document.createElement('div'));
+		const shown: string[] = [];
+		const editor = new MarkdownEditor({
+			parent,
+			livePreview: {
+				renderProperties: (yaml, el) => {
+					el.textContent = `props: ${yaml}`;
+					shown.push(yaml);
+					return { update: (next) => ((el.textContent = `props: ${next}`), true) };
+				},
+				validProperties: (yaml) => !yaml.includes('['),
+				propertiesInDocument: mode,
+			},
+		});
+		editors.push(editor);
+		editor.setValue(doc);
+		editor.setLivePreview(true);
+		return { editor, shown };
+	}
+
+	it('draws the frontmatter as properties, keeps the cursor out of it, and updates in place', () => {
+		const { editor, shown } = withProperties('---\ntitle: A\n---\nBody');
+		const widget = editor.view.dom.querySelector('.cm-properties-widget')!;
+		expect(widget.textContent).toBe('props: title: A');
+		expect(lines(editor)).toEqual(['Body']);
+		// The note opens after its frontmatter, and the cursor cannot go back into it.
+		expect(editor.view.state.selection.main.head).toBe(editor.getValue().indexOf('Body'));
+		moveTo(editor, 2);
+		expect(editor.view.state.selection.main.head).toBe(editor.getValue().indexOf('Body'));
+
+		editor.view.dispatch({ changes: { from: 4, to: 12, insert: 'title: B' } });
+		expect(editor.view.dom.querySelector('.cm-properties-widget')).toBe(widget);
+		expect(widget.textContent).toBe('props: title: B');
+		expect(shown).toEqual(['title: A']);
+	});
+
+	it('leaves invalid YAML and the source setting as text, and hides properties when asked', () => {
+		expect(lines(withProperties('---\ntags: [a\n---\nBody').editor)).toEqual(['---', 'tags: [a', '---', 'Body']);
+		expect(lines(withProperties('---\na: 1\n---\nBody', () => 'source').editor)).toEqual(['---', 'a: 1', '---', 'Body']);
+		const hidden = withProperties('---\na: 1\n---\nBody', () => 'hidden').editor;
+		expect(lines(hidden)).toEqual(['Body']);
+		expect(hidden.view.dom.querySelector('.cm-properties-widget')).toBeNull();
+	});
+});
