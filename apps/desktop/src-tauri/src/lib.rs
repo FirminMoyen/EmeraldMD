@@ -310,6 +310,13 @@ fn open_vault_root(state: &AppState) -> CmdResult<String> {
     with_vault(state, |v| Ok(v.root().display().to_string()))
 }
 
+/// Opens the system's print dialog for the window ("Export to PDF": the page
+/// prints only the note it prepared; macOS offers Save as PDF).
+#[tauri::command]
+async fn print_page(window: tauri::WebviewWindow) -> CmdResult<()> {
+    window.print().map_err(|e| e.to_string())
+}
+
 /// The key under which a vault's plugin trust is kept: the local vault's
 /// folder, or `remote:<server URL>|<vault id>` for a server vault.
 fn trust_key(state: &AppState, remote: Option<String>) -> CmdResult<String> {
@@ -394,6 +401,7 @@ pub fn run() {
             synced::open_vault_sync,
             synced::sync_now,
             synced::set_sync_config,
+            print_page,
             menu::quit_app,
         ])
         .build(tauri::generate_context!())

@@ -3688,3 +3688,52 @@ body.mod-macos.is-hidden-frameless:not(.is-fullscreen) {
 	width: 14px;
 	height: 14px;
 }
+
+/* Export to PDF (main.ts): only the note prepared for printing shows on paper. */
+@media screen {
+	body > .print {
+		display: none;
+	}
+}
+
+@media print {
+	@page {
+		margin: 1.8cm 1.6cm;
+	}
+
+	body > :not(.print) {
+		display: none !important;
+	}
+
+	body {
+		background: white !important;
+	}
+
+	body > .print {
+		display: block;
+		color-scheme: light;
+		background: white;
+		color: var(--text-normal);
+		font-family: var(--font-text);
+		font-size: var(--font-text-size);
+	}
+
+	.print .markdown-preview-view {
+		padding: 0;
+		overflow: visible;
+	}
+
+	.print pre,
+	.print blockquote,
+	.print table,
+	.print img,
+	.print .callout {
+		break-inside: avoid;
+	}
+
+	.print h1,
+	.print h2,
+	.print h3 {
+		break-after: avoid;
+	}
+}

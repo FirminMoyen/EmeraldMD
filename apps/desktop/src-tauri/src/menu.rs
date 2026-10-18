@@ -67,6 +67,8 @@ pub fn build<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> {
             &command("app:open-vault", "Open Vault…", None)?,
             &command("emerald:connect-server", "Connect to Server…", None)?,
             &separator()?,
+            &command("workspace:export-pdf", "Export to PDF…", None)?,
+            &separator()?,
             &command("workspace:new-tab", "New Tab", Some("CmdOrCtrl+T"))?,
             &command("workspace:close", "Close Tab", Some("CmdOrCtrl+W"))?,
             &command("workspace:undo-close-pane", "Reopen Closed Tab", Some("CmdOrCtrl+Shift+T"))?,
