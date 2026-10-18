@@ -3737,3 +3737,100 @@ body.mod-macos.is-hidden-frameless:not(.is-fullscreen) {
 		break-after: avoid;
 	}
 }
+
+/* Graph settings (core-views/graph-settings.ts): the panel at the top right of the graph. */
+.graph-view-container {
+	position: relative;
+}
+
+.graph-controls {
+	position: absolute;
+	top: var(--size-4-2);
+	right: var(--size-4-2);
+	z-index: 2;
+	width: 240px;
+	max-height: calc(100% - 16px);
+	overflow-y: auto;
+	padding: var(--size-4-2);
+	border: 1px solid var(--background-modifier-border);
+	border-radius: var(--radius-m);
+	background: var(--background-secondary);
+	box-shadow: var(--shadow-s, 0 2px 8px rgba(0, 0, 0, 0.12));
+	font-size: var(--font-ui-small);
+}
+
+.graph-controls.is-close {
+	width: auto;
+	padding: 2px;
+}
+
+.graph-controls .graph-controls-button.mod-close {
+	position: absolute;
+	top: 6px;
+	right: 6px;
+}
+
+.graph-controls:not(.is-close) .graph-controls-button.mod-open,
+.graph-controls.is-close .graph-controls-button.mod-close {
+	display: none;
+}
+
+.graph-control-section + .graph-control-section {
+	border-top: 1px solid var(--background-modifier-border);
+	margin-top: var(--size-4-1);
+	padding-top: var(--size-4-1);
+}
+
+.graph-control-section-header {
+	font-weight: var(--font-semibold);
+}
+
+.graph-control-section-content {
+	display: flex;
+	flex-direction: column;
+	gap: 2px;
+	padding: var(--size-4-1) 0 var(--size-4-1) var(--size-4-1);
+}
+
+.graph-controls .setting-item {
+	padding: 4px 0;
+	border: none;
+}
+
+.graph-controls .setting-item.mod-slider {
+	flex-direction: column;
+	align-items: stretch;
+	gap: 2px;
+}
+
+.graph-controls .setting-item-name {
+	font-size: var(--font-ui-small);
+}
+
+.graph-controls .graph-search {
+	width: 100%;
+	margin-bottom: var(--size-4-1);
+}
+
+.graph-color-group {
+	display: flex;
+	align-items: center;
+	gap: var(--size-4-1);
+}
+
+.graph-color-query {
+	flex: 1;
+	min-width: 0;
+}
+
+.graph-color-picker {
+	width: 28px;
+	height: 24px;
+	padding: 0;
+	border: none;
+	background: none;
+}
+
+.graph-color-button-container {
+	margin-top: var(--size-4-1);
+}

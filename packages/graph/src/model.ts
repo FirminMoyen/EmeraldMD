@@ -29,6 +29,8 @@ export interface GraphData {
 export interface GraphFilters {
 	/** Only keep nodes whose id contains this text (case-insensitive). Empty keeps all. */
 	search?: string;
+	/** Only keep these notes (the results of a search query); other nodes stay only if linked to them. */
+	files?: Set<string>;
 	showTags?: boolean;
 	showAttachments?: boolean;
 	/** Links to notes that do not exist yet. */
@@ -48,7 +50,7 @@ export interface GraphInput {
 	tags: Record<string, string[]>;
 }
 
-const DEFAULTS: Required<Omit<GraphFilters, 'local' | 'search'>> = {
+const DEFAULTS: Required<Omit<GraphFilters, 'local' | 'search' | 'files'>> = {
 	showTags: false,
 	showAttachments: false,
 	showUnresolved: false,
@@ -132,6 +134,8 @@ export function buildGraph(input: GraphInput, filters: GraphFilters = {}): Graph
 	if (filters.local) keep = neighbourhood(filters.local.center, filters.local.depth, links, keep);
 	const search = filters.search?.trim().toLowerCase();
 	if (search) keep = new Set([...keep].filter((id) => id.toLowerCase().includes(search)));
+	const only = filters.files;
+	if (only) keep = new Set([...keep].filter((id) => nodes.get(id)!.kind !== 'note' || only.has(id)));
 
 	const kept = dedupe(links.filter((l) => keep.has(l.source) && keep.has(l.target)));
 	for (const l of kept) {
@@ -139,7 +143,11 @@ export function buildGraph(input: GraphInput, filters: GraphFilters = {}): Graph
 		nodes.get(l.target)!.degree++;
 	}
 	const result = [...nodes.values()].filter(
-		(n) => keep.has(n.id) && (f.showOrphans || n.degree > 0 || n.id === filters.local?.center),
+		(n) =>
+			keep.has(n.id) &&
+			(f.showOrphans || n.degree > 0 || n.id === filters.local?.center) &&
+			// With a search, tags, attachments and missing notes show only next to a note it found.
+			(!only || n.kind === 'note' || n.degree > 0),
 	);
 	return { nodes: result, links: kept };
 }

@@ -68,6 +68,10 @@ end-to-end tests; the rest is in priority order within each section.
 - [x] Search pane (Obsidian query syntax), quick switcher (⌘O), command
       palette (⌘P)
 - [x] Backlinks, outline, tags, graph view (⌘G), local graph
+- [x] Graph settings as Obsidian's, in `.obsidian/graph.json`: filters
+      (search with Obsidian's syntax, tags, attachments, existing files
+      only, orphans), colour groups by query, display (arrows, text fade,
+      node size, link thickness) and forces
 - [x] Canvas files (`.canvas`): view and edit
 - [x] Backlinks with the line of each link; unlinked mentions (name and
       aliases, whole words, outside links) turned into links in one click

@@ -10,4 +10,4 @@ export {
 	type GraphNode,
 	type NodeKind,
 } from './model';
-export { GraphView, type GraphViewOptions } from './view';
+export { DEFAULT_DISPLAY, GraphView, type GraphDisplay, type GraphViewOptions } from './view';
