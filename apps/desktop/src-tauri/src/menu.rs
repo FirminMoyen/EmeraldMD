@@ -2,8 +2,8 @@
 //!
 //! Items that run app commands carry the command id (`file-explorer:new-file`…)
 //! and send it to the webview as a `menu-command` event, where it runs like a
-//! hotkey would. Only standard shortcuts are menu accelerators (⌘N, ⌘, ⌘W,
-//! ⌘Q and the Edit menu); the others stay in the page, where the vault's
+//! hotkey would. Only standard shortcuts are menu accelerators (⌘N, ⌘T, ⌘W,
+//! ⇧⌘T, ⌘, ⌘Q and the Edit menu); the others stay in the page, where the vault's
 //! hotkeys can change them.
 //!
 //! Quitting goes through the page first (`quit-requested`), so unsaved edits
@@ -67,7 +67,9 @@ pub fn build<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> {
             &command("app:open-vault", "Open Vault…", None)?,
             &command("emerald:connect-server", "Connect to Server…", None)?,
             &separator()?,
-            &command("workspace:close", "Close Note", Some("CmdOrCtrl+W"))?,
+            &command("workspace:new-tab", "New Tab", Some("CmdOrCtrl+T"))?,
+            &command("workspace:close", "Close Tab", Some("CmdOrCtrl+W"))?,
+            &command("workspace:undo-close-pane", "Reopen Closed Tab", Some("CmdOrCtrl+Shift+T"))?,
             &command(CLOSE_WINDOW_ID, "Close Window", Some("CmdOrCtrl+Shift+W"))?,
         ],
     )?;
@@ -111,7 +113,13 @@ pub fn build<R: Runtime>(app: &AppHandle<R>) -> tauri::Result<Menu<R>> {
         app,
         "Window",
         true,
-        &[&PredefinedMenuItem::minimize(app, None)?, &PredefinedMenuItem::maximize(app, None)?],
+        &[
+            &PredefinedMenuItem::minimize(app, None)?,
+            &PredefinedMenuItem::maximize(app, None)?,
+            &separator()?,
+            &command("workspace:previous-tab", "Show Previous Tab", None)?,
+            &command("workspace:next-tab", "Show Next Tab", None)?,
+        ],
     )?;
     Menu::with_items(app, &[&app_menu, &file, &edit, &view, &window])
 }

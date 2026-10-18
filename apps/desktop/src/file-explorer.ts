@@ -13,7 +13,7 @@
  * folder they are dropped on; a file dragged into a note inserts a link.
  */
 
-import { FuzzySuggestModal, Menu, setIcon, type App } from '@emeraldmd/api';
+import { FuzzySuggestModal, Keymap, Menu, setIcon, type App } from '@emeraldmd/api';
 import { joinPath, TFile, TFolder, type TAbstractFile } from '@emeraldmd/core';
 
 /** Drag data type carrying a vault path. */
@@ -21,7 +21,8 @@ export const PATH_TYPE = 'application/x-emeraldmd-path';
 
 export interface FileExplorerHost {
 	activeFile(): TFile | null;
-	openFile(file: TFile): Promise<void>;
+	/** Opens a file in the current tab, or a new one (Cmd/Ctrl-click, middle click, "Open in new tab"). */
+	openFile(file: TFile, newTab?: boolean): Promise<void>;
 	/** Saves pending edits; called before files move. */
 	flush(): Promise<void>;
 	newNote(folder: TFolder): Promise<void>;
@@ -151,8 +152,11 @@ export class FileExplorer {
 		if (active) this.activeTitle = title;
 		const content = title.createDiv({ cls: 'tree-item-inner nav-file-title-content', text: file.extension === 'md' ? file.basename : file.name });
 		if (file.extension !== 'md') title.createDiv({ cls: 'nav-file-tag', text: file.extension });
-		title.addEventListener('click', () => {
-			if (this.renaming !== file) void this.host.openFile(file);
+		title.addEventListener('click', (event) => {
+			if (this.renaming !== file) void this.host.openFile(file, Boolean(Keymap.isModEvent(event)));
+		});
+		title.addEventListener('auxclick', (event) => {
+			if (event.button === 1 && this.renaming !== file) void this.host.openFile(file, true);
 		});
 		this.common(title, content, file);
 		// Dropping on a file drops into its folder.
@@ -192,6 +196,9 @@ export class FileExplorer {
 		if (folder) {
 			menu.addItem((item) => item.setTitle('New note').setIcon('square-pen').setSection('new').onClick(() => void this.host.newNote(folder)));
 			menu.addItem((item) => item.setTitle('New folder').setIcon('folder-plus').setSection('new').onClick(() => void this.host.newFolder(folder)));
+		}
+		if (file instanceof TFile) {
+			menu.addItem((item) => item.setTitle('Open in new tab').setIcon('file-plus').setSection('open').onClick(() => void this.host.openFile(file, true)));
 		}
 		if (!(folder?.isRoot() ?? false)) {
 			menu.addItem((item) => item.setTitle('Rename…').setIcon('pencil').setSection('action').onClick(() => this.startRename(file)));
