@@ -113,6 +113,9 @@ end-to-end tests; the rest is in priority order within each section.
 - [x] App menu (EmeraldMD, File, Edit, View, Window) with standard
       shortcuts; ⌘T/⌘W/⇧⌘T for tabs, ⌘Q saves before quitting, ⌘, opens
       settings
+- [x] Export to PDF (command, File menu): the note as in the reading view,
+      light, with its name as the title, in the system's print dialog
+      (Save as PDF)
 - [x] Title bar hidden as in Obsidian on macOS: the window buttons sit in
       the row of tab headers (ribbon and first header leave them room, none
       in full screen); empty parts of the header rows move the window;

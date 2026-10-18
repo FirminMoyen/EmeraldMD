@@ -1,7 +1,9 @@
 import {
 	App,
+	Component,
 	DailyNotes,
 	isDangerousUrl,
+	MarkdownRenderer,
 	registerEditorCommands,
 	type Editor,
 	isMacOS,
@@ -987,6 +989,16 @@ class EmeraldApp {
 			},
 		});
 		add({
+			id: 'workspace:export-pdf',
+			name: 'Export to PDF…',
+			checkCallback: (checking) => {
+				const file = this.activeFile;
+				if (!file) return false;
+				if (!checking) void this.exportToPdf(file);
+				return true;
+			},
+		});
+		add({
 			id: 'app:delete-file',
 			name: 'Delete current file',
 			checkCallback: (checking) => {
@@ -1033,6 +1045,34 @@ class EmeraldApp {
 	private propertiesInDocument(): 'visible' | 'hidden' | 'source' {
 		const mode = this.vault?.getConfig('propertiesInDocument');
 		return mode === 'hidden' || mode === 'source' ? mode : 'visible';
+	}
+
+	/**
+	 * "Export to PDF": the note rendered as in the reading view (light, with
+	 * its name as the title) in a container only print shows, then the
+	 * system's print dialog, where macOS saves to PDF.
+	 */
+	private async exportToPdf(file: TFile): Promise<void> {
+		const app = this.app!;
+		await this.flush();
+		document.querySelector('body > .print')?.remove();
+		const container = document.body.createDiv('print theme-light');
+		const view = container.createDiv('markdown-preview-view markdown-rendered');
+		view.createEl('h1', { cls: 'inline-title', text: file.basename });
+		const body = view.createDiv('markdown-preview-sizer');
+		const component = new Component();
+		component.load();
+		try {
+			await MarkdownRenderer.render(app, await app.vault.cachedRead(file), body, file.path, component);
+			// Let images, formulas and diagrams finish drawing.
+			await Promise.all([...container.querySelectorAll('img')].map((img) => (img.complete ? null : new Promise((done) => img.addEventListener('load', done, { once: true })))));
+			await new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(done)));
+			await invoke('print_page').catch(() => window.print());
+		} catch (err) {
+			this.notice(`Could not export ${file.name}: ${err}`);
+		} finally {
+			component.unload();
+		}
 	}
 
 	/** Opens a web or mail link in the default app. */

@@ -84,3 +84,21 @@ it('searches and replaces in the note from the bar at the top', async () => {
 	bar.querySelector<HTMLElement>('.document-search-close-button')!.click();
 	expect(document.querySelector('.document-search-container')).toBeNull();
 });
+
+it('exports the note to PDF through a print-only copy rendered as in the reading view', async () => {
+	const shell = (globalThis as { app?: import('@emeraldmd/api').App }).app!;
+	(document.activeElement as HTMLElement | null)?.blur();
+	const editor = shell.workspace.activeEditor!.editor!;
+	editor.setValue('# Heading\n\nSome **bold** text.');
+	shell.commands.executeCommandById('workspace:export-pdf');
+	const printed = await vi.waitFor(() => {
+		const el = document.querySelector<HTMLElement>('body > .print.theme-light');
+		if (!el?.querySelector('strong')) throw new Error('not rendered yet');
+		return el;
+	});
+	expect(printed.querySelector('.inline-title')?.textContent).toBe('Note');
+	expect(printed.querySelector('.markdown-preview-sizer h1')?.textContent).toBe('Heading');
+	// A second export replaces the first copy.
+	shell.commands.executeCommandById('workspace:export-pdf');
+	await vi.waitFor(() => expect(document.querySelectorAll('body > .print')).toHaveLength(1));
+});
