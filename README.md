@@ -9,50 +9,55 @@ Targets: Linux, macOS, Windows, iOS/iPadOS and Android, built on
 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the design, the plugin
 compatibility strategy and the roadmap.
 
-![EmeraldMD desktop, phase 0](docs/images/phase0-desktop.jpg)
-
 > EmeraldMD is an independent project and is not affiliated with Obsidian.
 > "Compatible with Obsidian plugins" describes interoperability only.
 
 ## Status
 
-Phase 0 (foundations), implemented on desktop (built and run on macOS so far):
+The current focus is the **macOS app and self-hosting**; mobile apps and
+Windows/Linux packages come after. Progress is tracked item by item in
+[docs/milestone-macos-selfhost.md](docs/milestone-macos-selfhost.md).
 
-- Open any folder as a vault (existing Obsidian vaults included). Hidden
-  folders such as `.obsidian` and `.trash` are left alone.
-- File tree, new note/folder, rename via the title field, move to `.trash`
-  (nothing is ever deleted permanently).
-- CodeMirror 6 Markdown editor with 2-second autosave, and Cmd/Ctrl-click to
-  follow `[[wikilinks]]`. Following a link to a missing note creates it.
-- Rust index of frontmatter, headings, links, embeds, tags and block ids, with
-  link resolution and a backlinks pane.
-- Live reload of changes made outside the app (another editor, sync tools,
-  Obsidian itself).
+**Your Obsidian vault, as it is.** Notes and attachments, `.obsidian`
+settings, hotkeys, themes and CSS snippets, community plugins (behind
+restricted mode, as in Obsidian), and the tabs and splits Obsidian left in
+`workspace.json`. Nothing is converted, and deletions go to `.trash`.
 
-Self-hosting (phase 3, first slice):
+**Editing.** Live Preview, source mode and the reading view; properties;
+callouts, embeds, math, Mermaid and footnotes; Obsidian's editing commands
+(⌘B, ⌘K, ⌘L…), folding, search and replace in the note, the editor menu, Vim
+keys, attachments by paste or drop, Export to PDF.
 
-- `emeraldmd-server` serves vault folders over HTTP, with a WebSocket that
-  pushes every change, including edits made directly on the server's disk.
-  Argon2-hashed bearer tokens, a Docker image, and a guide for running it
-  behind HTTPS: [docs/self-hosting.md](docs/self-hosting.md).
-- The desktop app connects to it with **Connect to server** (URL and token).
-  You browse, edit and create notes on the server, and changes from other
-  devices show up live. Tokens are kept in the OS keychain.
+**Finding your way.** Tabs and splits (drag tabs between panes), back and
+forward, hover previews, the quick switcher and command palette, search with
+Obsidian's query syntax, backlinks with unlinked mentions, outgoing links,
+outline, tags, bookmarks, properties views, the graph with Obsidian's graph
+settings, and canvas files.
 
-Plugin host (phase 1, first slice):
+**Core plugins.** Daily notes, templates, page preview, bookmarks, file
+recovery, note composer, workspaces, slash commands, random note and unique
+note creator.
 
-- Community plugins that use only the plugin API load from a vault's
-  `.obsidian/plugins` folder, honouring `community-plugins.json`: the
-  `obsidian` module (`packages/api`), a plugin loader with restricted mode
-  (`packages/plugin-host`), a command palette (Ctrl/Cmd+P) and a settings
-  window (Ctrl/Cmd+,) with the installed plugins and their setting tabs.
-- 15 of 16 popular community plugins pass the headless smoke tests; see
-  [docs/compat/plugins.md](docs/compat/plugins.md).
-- For now, plugins run in local vaults only.
+**Plugins and themes.** Browse, install, update and uninstall community
+plugins and themes from the community lists.
 
-Not yet: themes and CSS snippets, Node.js and Electron shims for desktop-only
-plugins, installing plugins from the community list, live preview and reading
-view, offline sync in the app, mobile builds. See the roadmap.
+**macOS.** Native menus with the usual shortcuts, a hidden title bar as in
+Obsidian, window and workspace restored, large vaults (10,000 notes open in
+about half a second).
+
+**Self-hosting.** `emeraldmd-server` serves vault folders over HTTP with a
+live WebSocket, tokens scoped to vaults, rate and size limits, a Docker image
+and an HTTPS guide ([docs/self-hosting.md](docs/self-hosting.md)). In the app:
+
+- **Online vaults**: edits from other devices appear live; while the server
+  is unreachable, edits are kept and saved when it is back. Settings,
+  themes and community plugins are stored on the server.
+- **Synced copies**: a full offline copy, synced on changes with a
+  three-way merge and conflict copies, optionally with `.obsidian`
+  ([docs/sync.md](docs/sync.md)).
+
+**Not yet.** A signed and notarized DMG and a published server image (they
+need the owner's accounts), mobile apps, Windows and Linux packages.
 
 ## Repository layout
 
@@ -60,8 +65,11 @@ view, offline sync in the app, mobile builds. See the roadmap.
 |---|---|
 | `crates/emerald-core` | Rust: vault I/O, Markdown metadata parser, link index, `VaultSession` |
 | `crates/emerald-server` | Rust: `emeraldmd-server`, the self-hosted server (`Dockerfile` at the root) |
+| `crates/emerald-sync` | Rust: offline sync between a local copy and a server (three-way merge, conflict copies) |
 | `packages/core` | TypeScript mirror of the vault and metadata cache, with the plugin API's shapes, and `RemoteBackend` for server vaults |
-| `packages/editor` | CodeMirror 6 editor |
+| `packages/editor` | CodeMirror 6 editor: Live Preview, properties, search, folding |
+| `packages/graph` | The graph view: model, force layout, canvas renderer |
+| `packages/canvas` | Canvas files (`.canvas`): model and view |
 | `packages/api` | The `obsidian` module for plugins, implemented from the public typings |
 | `packages/plugin-host` | Loads community plugins: `require`, restricted mode, enable/disable, settings tab |
 | `compat/` | Community plugin smoke tests and API coverage report |
