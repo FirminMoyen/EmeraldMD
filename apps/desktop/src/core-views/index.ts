@@ -10,6 +10,7 @@ import { CANVAS_VIEW, CanvasFileView } from './canvas';
 import { GlobalGraphView, GRAPH_VIEW, LOCAL_GRAPH_VIEW, LocalGraphView } from './graph';
 import type { CoreViewHost } from './host';
 import { OUTGOING_VIEW, OutgoingLinksView } from './outgoing';
+import { ALL_PROPERTIES_VIEW, AllPropertiesView, FILE_PROPERTIES_VIEW, FilePropertiesView } from './properties';
 import { OUTLINE_VIEW, OutlineView } from './outline';
 import { QuickSwitcher } from './quick-switcher';
 import { SEARCH_VIEW, SearchView } from './search';
@@ -27,6 +28,8 @@ export function registerCoreViews(app: App, host: CoreViewHost): void {
 	views.registerView(LOCAL_GRAPH_VIEW, (leaf) => new LocalGraphView(leaf, host));
 	views.registerView(OUTLINE_VIEW, (leaf) => new OutlineView(leaf, host));
 	views.registerView(OUTGOING_VIEW, (leaf) => new OutgoingLinksView(leaf, host));
+	views.registerView(ALL_PROPERTIES_VIEW, (leaf) => new AllPropertiesView(leaf, host));
+	views.registerView(FILE_PROPERTIES_VIEW, (leaf) => new FilePropertiesView(leaf));
 	views.registerView(TAGS_VIEW, (leaf) => new TagsView(leaf, host));
 	views.registerView(CANVAS_VIEW, (leaf) => new CanvasFileView(leaf, host));
 	views.registerView(BOOKMARKS_VIEW, (leaf) => new BookmarksView(leaf, host));
@@ -46,6 +49,8 @@ export function registerCoreViews(app: App, host: CoreViewHost): void {
 	add({ id: 'graph:open-local', name: 'Graph view: Open local graph', callback: () => ws.ensureSideLeaf(LOCAL_GRAPH_VIEW, 'right') });
 	add({ id: 'outline:open', name: 'Outline: Show outline', callback: () => ws.ensureSideLeaf(OUTLINE_VIEW, 'right') });
 	add({ id: 'outgoing-links:open', name: 'Outgoing links: Show outgoing links', callback: () => ws.ensureSideLeaf(OUTGOING_VIEW, 'right') });
+	add({ id: 'properties:open', name: 'Properties view: Show all properties', callback: () => ws.ensureSideLeaf(ALL_PROPERTIES_VIEW, 'left') });
+	add({ id: 'properties:open-local', name: 'Properties view: Show file properties', callback: () => ws.ensureSideLeaf(FILE_PROPERTIES_VIEW, 'right') });
 	add({ id: 'tag-pane:open', name: 'Tags view: Show tags', callback: () => ws.ensureSideLeaf(TAGS_VIEW, 'right') });
 	add({ id: 'canvas:new-file', name: 'Canvas: Create new canvas', callback: newCanvas });
 	add({
