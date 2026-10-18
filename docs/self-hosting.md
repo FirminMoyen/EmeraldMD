@@ -327,16 +327,16 @@ streams), 503 (server busy) or 500. Every response carries
 | `POST /api/vaults/{id}/files` | `{"path", "data"}` | `VaultUpdate`; 409 if it exists |
 | `GET /api/vaults/{id}/raw?path=` | | The file's bytes, attachments included |
 | `PUT /api/vaults/{id}/raw?path=` | The bytes | `VaultUpdate`; Markdown must be UTF-8 |
-| `GET /api/vaults/{id}/manifest` | | `{path: {"hash", "size"}}` for every visible file (SHA-256), for sync clients |
+| `GET /api/vaults/{id}/manifest` | | `{path: {"hash", "size"}}` for every visible file (SHA-256), for sync clients; `?config=true` adds the `.obsidian` files (not `workspace.json`) and the `X-EmeraldMD-Manifest-Config` header |
 | `GET /api/vaults/{id}/search?q=` | | Search with Obsidian's query syntax ([search.md](search.md)); also `caseSensitive=true`, `sort` (`path-asc`, `path-desc`, `modified-newest`, `modified-oldest`, `created-newest`, `created-oldest`) and `limit`. `{"files", "totalFiles"}` |
 | `POST /api/vaults/{id}/folders` | `{"path"}` | `VaultUpdate` |
 | `POST /api/vaults/{id}/rename` | `{"from", "to"}` | `VaultUpdate` |
 | `POST /api/vaults/{id}/trash` | `{"path"}` | `VaultUpdate` (moved to `.trash`) |
 | `GET /api/vaults/{id}/config/list?path=` | | `{"files", "folders"}` of a folder in `.obsidian` |
 | `GET /api/vaults/{id}/config/stat?path=` | | The entry of a path in `.obsidian`, or `null` |
-| `PUT /api/vaults/{id}/config/file?path=` | The new text | 204; writes a file in `.obsidian` (read it with `GET /files`). Not announced on the event stream |
+| `PUT /api/vaults/{id}/config/file?path=` | The new content (text or bytes) | 204; writes a file in `.obsidian` (read it with `GET /files` or `GET /raw`). Not announced on the event stream |
 | `POST /api/vaults/{id}/config/folders` | `{"path"}` | 204; creates a folder in `.obsidian` |
-| `POST /api/vaults/{id}/config/trash` | `{"path"}` | 204; moves a plugin's or theme's folder (`.obsidian/plugins/<id>`, `.obsidian/themes/<name>`) to `.trash` |
+| `POST /api/vaults/{id}/config/trash` | `{"path"}` | 204; moves a file or folder inside `.obsidian` (a plugin's folder to uninstall it, a settings file deleted on a synced device) to `.trash`; `.obsidian` itself is refused |
 | `POST /api/vaults/{id}/events/ticket` | | `{"ticket", "expiresInSecs"}` |
 | `GET /api/vaults/{id}/events` | | WebSocket, see below |
 

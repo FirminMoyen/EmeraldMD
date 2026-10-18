@@ -67,6 +67,11 @@ impl Vault {
 
     /// Writes a config file, creating parent folders as needed.
     pub fn write_config(&self, path: &str, data: &str) -> Result<()> {
+        self.write_config_bytes(path, data.as_bytes())
+    }
+
+    /// Writes a config file's bytes (fonts, images and other files of themes and plugins).
+    pub fn write_config_bytes(&self, path: &str, data: &[u8]) -> Result<()> {
         if normalize_path(path) == CONFIG_DIR {
             return Err(VaultError::NotConfigPath(path.to_owned()));
         }
@@ -129,9 +134,39 @@ impl Vault {
         if !allowed {
             return Err(VaultError::NotConfigPath(path.to_owned()));
         }
+        self.trash_config(&normalized)
+    }
+
+    /// Moves a file or folder inside the config folder (not the folder
+    /// itself) to the vault's `.trash`; returns where it went.
+    pub fn trash_config(&self, path: &str) -> Result<String> {
+        let normalized = normalize_path(path);
+        if normalized == CONFIG_DIR {
+            return Err(VaultError::NotConfigPath(path.to_owned()));
+        }
         // Resolves symbolic links and refuses anything outside the config folder.
         self.config_path(&normalized)?;
         self.trash(&normalized)
+    }
+
+    /// Every file in the config folder, recursively, with its size and times.
+    pub fn scan_config(&self) -> Result<Vec<FileEntry>> {
+        let mut files = Vec::new();
+        if self.config_entry(CONFIG_DIR)?.is_none() {
+            return Ok(files);
+        }
+        let mut folders = vec![CONFIG_DIR.to_owned()];
+        while let Some(folder) = folders.pop() {
+            let listing = self.list_config(&folder)?;
+            for file in listing.files {
+                if let Some(entry) = self.config_entry(&file)? {
+                    files.push(entry);
+                }
+            }
+            folders.extend(listing.folders);
+        }
+        files.sort_by(|a, b| a.path.cmp(&b.path));
+        Ok(files)
     }
 }
 

@@ -8,7 +8,7 @@ use argon2::{Algorithm, Argon2, Params, Version};
 use emerald_core::VaultSession;
 use emerald_server::Server;
 use emerald_server::config::{Config, TokenConfig, VaultConfig};
-use emerald_sync::{Action, HttpRemote, SyncReport, sync_once};
+use emerald_sync::{Action, HttpRemote, SyncOptions, SyncReport, sync_once, sync_once_with};
 
 const TOKEN: &str = "sync-test-token";
 
@@ -30,12 +30,16 @@ fn sync(base: &str, root: &Path, device: &str) -> SyncReport {
     sync_once(&mut session, &mut remote, device).unwrap()
 }
 
-#[tokio::test(flavor = "multi_thread")]
-async fn devices_sync_through_the_server() {
-    let server_dir = tempfile::tempdir().unwrap();
-    write(server_dir.path(), "Server note.md", b"# On the server\n");
+fn sync_settings(base: &str, root: &Path, device: &str, config: bool) -> SyncReport {
+    let mut session = VaultSession::open(root).unwrap();
+    let mut remote = HttpRemote::new(base, "notes", TOKEN, device).unwrap().with_config(config);
+    sync_once_with(&mut session, &mut remote, device, SyncOptions { config }).unwrap()
+}
+
+/// A server for `dir` on a free port: its address, and a sender that stops it.
+async fn start(dir: &Path) -> (String, tokio::sync::oneshot::Sender<()>) {
     let config = Config {
-        vaults: vec![VaultConfig { id: "notes".into(), path: server_dir.path().to_owned(), name: None }],
+        vaults: vec![VaultConfig { id: "notes".into(), path: dir.to_owned(), name: None }],
         tokens: vec![TokenConfig { name: "test".into(), hash: quick_hash(TOKEN), vaults: None }],
         ..Config::default()
     };
@@ -46,6 +50,72 @@ async fn devices_sync_through_the_server() {
     tokio::spawn(server.serve(listener, async {
         let _ = stopped.await;
     }));
+    (base, stop)
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn settings_sync_between_devices_that_opt_in() {
+    let server_dir = tempfile::tempdir().unwrap();
+    let (base, stop) = start(server_dir.path()).await;
+    let server_root = server_dir.path().to_owned();
+    tokio::task::spawn_blocking(move || {
+        let laptop = tempfile::tempdir().unwrap();
+        let phone = tempfile::tempdir().unwrap();
+        write(laptop.path(), "Note.md", b"text\n");
+        write(laptop.path(), ".obsidian/app.json", b"{\"vimMode\":true}");
+        write(laptop.path(), ".obsidian/snippets/wide.css", b".a {}");
+        write(laptop.path(), ".obsidian/plugins/x/icon.bin", &[0, 159, 255, 1]);
+        write(laptop.path(), ".obsidian/workspace.json", b"{\"layout\":1}");
+
+        let report = sync_settings(&base, laptop.path(), "Laptop", true);
+        assert!(report.failed.is_empty(), "{:?}", report.failed);
+        assert_eq!(fs::read(server_root.join(".obsidian/plugins/x/icon.bin")).unwrap(), [0, 159, 255, 1]);
+        assert!(server_root.join(".obsidian/snippets/wide.css").exists());
+        // The window layout stays on each device.
+        assert!(!server_root.join(".obsidian/workspace.json").exists());
+
+        // A device that does not opt in gets notes only.
+        sync_settings(&base, phone.path(), "Phone", false);
+        assert!(phone.path().join("Note.md").exists());
+        assert!(!phone.path().join(".obsidian").exists());
+        sync_settings(&base, phone.path(), "Phone", true);
+        assert_eq!(fs::read_to_string(phone.path().join(".obsidian/app.json")).unwrap(), "{\"vimMode\":true}");
+
+        // Deletions travel through the server's trash.
+        fs::remove_file(phone.path().join(".obsidian/snippets/wide.css")).unwrap();
+        sync_settings(&base, phone.path(), "Phone", true);
+        assert!(!server_root.join(".obsidian/snippets/wide.css").exists());
+        let report = sync_settings(&base, laptop.path(), "Laptop", true);
+        assert_eq!(report.done, [Action::DeleteLocal(".obsidian/snippets/wide.css".into())]);
+        assert!(!laptop.path().join(".obsidian/snippets/wide.css").exists());
+
+        // Changed on both sides: the server's version stays, the local one goes to .trash.
+        write(phone.path(), ".obsidian/app.json", b"{\"vimMode\":false}");
+        write(laptop.path(), ".obsidian/app.json", b"{\"spellcheck\":true}");
+        sync_settings(&base, phone.path(), "Phone", true);
+        let report = sync_settings(&base, laptop.path(), "Laptop", true);
+        assert!(report.failed.is_empty(), "{:?}", report.failed);
+        assert_eq!(fs::read_to_string(laptop.path().join(".obsidian/app.json")).unwrap(), "{\"vimMode\":false}");
+        let kept = report.conflict_copies.first().expect("the local version is kept");
+        assert!(kept.starts_with(".trash/app (conflict "), "{kept}");
+        assert_eq!(fs::read_to_string(laptop.path().join(kept)).unwrap(), "{\"spellcheck\":true}");
+
+        // Turning the option off leaves settings alone on both sides.
+        let report = sync_settings(&base, laptop.path(), "Laptop", false);
+        assert!(report.done.is_empty(), "{:?}", report.done);
+        assert!(laptop.path().join(".obsidian/app.json").exists());
+        assert!(server_root.join(".obsidian/app.json").exists());
+    })
+    .await
+    .unwrap();
+    let _ = stop.send(());
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn devices_sync_through_the_server() {
+    let server_dir = tempfile::tempdir().unwrap();
+    write(server_dir.path(), "Server note.md", b"# On the server\n");
+    let (base, stop) = start(server_dir.path()).await;
 
     let server_root = server_dir.path().to_owned();
     // The sync client is blocking, as it runs on a worker thread in the app.

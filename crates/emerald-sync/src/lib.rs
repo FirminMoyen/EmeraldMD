@@ -16,8 +16,8 @@ pub mod manifest;
 pub mod merge;
 pub mod plan;
 
-pub use engine::{Remote, SyncError, SyncReport, SyncState, sync_once};
-pub use manifest::{FileState, HashCache, Manifest, hash_bytes};
+pub use engine::{Remote, SyncError, SyncOptions, SyncReport, SyncState, sync_once, sync_once_with};
+pub use manifest::{FileState, HashCache, MANIFEST_CONFIG_HEADER, Manifest, hash_bytes, is_config};
 pub use plan::Action;
 #[cfg(feature = "http")]
 pub use events::watch_changes;

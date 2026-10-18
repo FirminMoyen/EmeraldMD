@@ -400,7 +400,13 @@ class EmeraldApp {
 		vault.on('config-changed', (key: string) => this.onConfigChanged(key));
 		this.registerCommands(app);
 		await app.internalPlugins.load(app);
-		if (local) void setupSyncStatus(app, { notice: (message) => this.notice(message), reconnect: () => this.remote.showDialog() });
+		if (local) {
+			void setupSyncStatus(app, {
+				notice: (message) => this.notice(message),
+				reconnect: () => this.remote.showDialog(),
+				reload: () => void this.flush().finally(() => window.location.reload()),
+			});
+		}
 		registerCoreViews(app, {
 			search: backend.search ? (query, options) => backend.search!(query, options) : undefined,
 			openFile: (file, select) => this.openFileAt(file, select),

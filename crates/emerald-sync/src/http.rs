@@ -7,7 +7,7 @@ use reqwest::blocking::{Client, RequestBuilder, Response};
 use serde_json::json;
 
 use crate::engine::{Remote, SyncError};
-use crate::manifest::Manifest;
+use crate::manifest::{MANIFEST_CONFIG_HEADER, Manifest, is_config};
 
 /// Header that stops the server from echoing our own changes back over its event stream.
 const CLIENT_HEADER: &str = "X-EmeraldMD-Client";
@@ -18,6 +18,7 @@ pub struct HttpRemote {
     vault: String,
     token: String,
     client_id: String,
+    config: bool,
 }
 
 fn remote_error(message: impl Into<String>) -> SyncError {
@@ -36,7 +37,14 @@ impl HttpRemote {
             .timeout(Duration::from_secs(120))
             .build()
             .map_err(|e| remote_error(e.to_string()))?;
-        Ok(Self { client, base, vault: vault.to_owned(), token: token.to_owned(), client_id: client_id.to_owned() })
+        Ok(Self { client, base, vault: vault.to_owned(), token: token.to_owned(), client_id: client_id.to_owned(), config: false })
+    }
+
+    /// Also syncs the config folder (see [`crate::SyncOptions::config`]):
+    /// the manifest lists it, and its files go through the config endpoints.
+    pub fn with_config(mut self, config: bool) -> Self {
+        self.config = config;
+        self
     }
 
     /// `endpoint` may have several segments (`events/ticket`).
@@ -92,7 +100,16 @@ impl HttpRemote {
 
 impl Remote for HttpRemote {
     fn manifest(&mut self) -> Result<Manifest, SyncError> {
-        self.send(self.client.get(self.url("manifest")))?.json().map_err(|e| remote_error(e.to_string()))
+        let mut request = self.client.get(self.url("manifest"));
+        if self.config {
+            request = request.query(&[("config", "true")]);
+        }
+        let response = self.send(request)?;
+        // An older server leaves the config folder out; syncing against that would delete it here.
+        if self.config && response.headers().get(MANIFEST_CONFIG_HEADER).is_none() {
+            return Err(remote_error("this server cannot sync settings (.obsidian); update emeraldmd-server"));
+        }
+        response.json().map_err(|e| remote_error(e.to_string()))
     }
 
     fn read(&mut self, path: &str) -> Result<Vec<u8>, SyncError> {
@@ -101,12 +118,14 @@ impl Remote for HttpRemote {
     }
 
     fn write(&mut self, path: &str, data: &[u8]) -> Result<(), SyncError> {
-        self.send(self.client.put(self.url("raw")).query(&[("path", path)]).body(data.to_vec()))?;
+        let endpoint = if is_config(path) { "config/file" } else { "raw" };
+        self.send(self.client.put(self.url(endpoint)).query(&[("path", path)]).body(data.to_vec()))?;
         Ok(())
     }
 
     fn trash(&mut self, path: &str) -> Result<(), SyncError> {
-        self.send(self.client.post(self.url("trash")).json(&json!({ "path": path })))?;
+        let endpoint = if is_config(path) { "config/trash" } else { "trash" };
+        self.send(self.client.post(self.url(endpoint)).json(&json!({ "path": path })))?;
         Ok(())
     }
 }
