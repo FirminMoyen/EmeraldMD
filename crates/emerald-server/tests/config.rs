@@ -108,7 +108,7 @@ async fn tokens_reach_only_their_vaults() {
 }
 
 #[tokio::test]
-async fn plugin_and_theme_folders_can_be_moved_to_the_trash() {
+async fn config_files_and_folders_can_be_moved_to_the_trash() {
     let server = TestServer::start().await;
     assert_eq!(server.put_config(".obsidian/plugins/calendar/main.js", "x", ALL).await, StatusCode::NO_CONTENT);
     let trash = |path: &'static str| {
@@ -122,10 +122,12 @@ async fn plugin_and_theme_folders_can_be_moved_to_the_trash() {
     assert_eq!(trash(".obsidian/plugins/calendar").await.unwrap().status(), StatusCode::NO_CONTENT);
     assert!(!server.notes.path().join(".obsidian/plugins/calendar").exists());
     assert!(server.notes.path().join(".trash").is_dir());
-    for path in [".obsidian/app.json", ".obsidian", ".obsidian/plugins", "Home.md", ".obsidian/plugins/../../Home.md"] {
+    // A settings file too (deleted on another device that syncs settings).
+    assert_eq!(trash(".obsidian/app.json").await.unwrap().status(), StatusCode::NO_CONTENT);
+    for path in [".obsidian", ".obsidian/", "Home.md", ".obsidian/../Home.md", "../outside"] {
         let status = trash(path).await.unwrap().status();
         assert!(status.is_client_error(), "{path}: {status}");
     }
     assert!(server.notes.path().join("Home.md").exists());
-    assert!(server.notes.path().join(".obsidian/app.json").exists());
+    assert!(server.notes.path().join(".obsidian").is_dir());
 }

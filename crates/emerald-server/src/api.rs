@@ -419,14 +419,30 @@ async fn write_raw(
     .await
 }
 
+#[derive(Deserialize)]
+struct ManifestQuery {
+    /// Also list the config folder (`.obsidian`), for clients that sync settings.
+    #[serde(default)]
+    config: bool,
+}
+
 /// Every visible file with its SHA-256, so sync clients can tell what changed.
+/// With `?config=true`, also the config folder's files (except
+/// `workspace.json`), which the response confirms with a header.
 async fn manifest(
     State(state): State<AppState>,
     Extension(principal): Extension<Arc<Principal>>,
     Path(id): Path<String>,
-) -> ApiResult<Json<emerald_sync::Manifest>> {
+    Query(query): Query<ManifestQuery>,
+) -> ApiResult<Response> {
     let vault = state.vault(&principal, &id)?;
-    blocking(move || vault.manifest()).await.map(Json)
+    let config = query.config;
+    let manifest = blocking(move || vault.manifest(config)).await?;
+    let mut response = Json(manifest).into_response();
+    if config {
+        response.headers_mut().insert(emerald_sync::MANIFEST_CONFIG_HEADER, axum::http::HeaderValue::from_static("1"));
+    }
+    Ok(response)
 }
 
 #[derive(Deserialize)]
@@ -506,13 +522,14 @@ async fn config_stat(
     blocking(move || vault.config_entry(&query.path)).await.map(Json)
 }
 
-/// `PUT /config/file?path=`: writes a config file from the body (UTF-8 text). Read it back with `GET /files`.
+/// `PUT /config/file?path=`: writes a config file from the body (text, or
+/// the bytes of a theme's or plugin's other files). Read it back with `GET /files` or `GET /raw`.
 async fn config_write(
     State(state): State<AppState>,
     Extension(principal): Extension<Arc<Principal>>,
     Path(id): Path<String>,
     Query(query): Query<PathQuery>,
-    data: String,
+    data: Bytes,
 ) -> ApiResult<StatusCode> {
     let vault = state.vault(&principal, &id)?;
     blocking(move || vault.write_config(&query.path, &data)).await?;
@@ -531,9 +548,9 @@ async fn config_folder(
     Ok(StatusCode::NO_CONTENT)
 }
 
-/// `POST /config/trash` with `{"path": ".obsidian/plugins/<id>"}` (or a theme's
-/// folder): moves it to the vault's `.trash`, for uninstalling. Other config
-/// paths are refused.
+/// `POST /config/trash` with `{"path": ".obsidian/…"}`: moves a file or folder
+/// of the config folder (a plugin's folder, to uninstall it; a settings file
+/// deleted on another device) to the vault's `.trash`.
 async fn config_trash(
     State(state): State<AppState>,
     Extension(principal): Extension<Arc<Principal>>,
@@ -541,7 +558,7 @@ async fn config_trash(
     Json(body): Json<PathBody>,
 ) -> ApiResult<StatusCode> {
     let vault = state.vault(&principal, &id)?;
-    blocking(move || vault.trash_config_folder(&body.path)).await?;
+    blocking(move || vault.trash_config(&body.path)).await?;
     Ok(StatusCode::NO_CONTENT)
 }
 

@@ -38,6 +38,27 @@ a guess.
 Text files (merged line by line): `md txt canvas base csv json css js html svg`.
 Everything else is compared as binary.
 
+## Settings, themes and plugins (opt-in)
+
+With **Settings → Sync → Sync settings, themes and plugins** on, a pass also
+covers the vault's `.obsidian` folder: settings, hotkeys, themes, CSS
+snippets and community plugins. `workspace.json`, `workspace-mobile.json` and
+hidden files stay on each device. It is off by default and decided per device:
+a device that leaves it off syncs notes only and never touches `.obsidian`.
+
+Settings files are not merged: a line merge of two JSON files can produce one
+that no longer parses. When a file changed on both sides, the server's
+version is kept and this device's is saved in the vault's `.trash`
+(`.trash/app (conflict 2026-10-18 1012 Laptop).json`); a notice says so.
+Deletions go to `.trash` on both sides, as for notes.
+
+The client asks for `GET /manifest?config=true`; the server confirms with the
+`X-EmeraldMD-Manifest-Config` header. Against an older server without it the
+pass stops with "this server cannot sync settings": syncing anyway would read
+the missing listing as deletions. Settings received from another device apply
+after a reload, which the app offers in a notice; themes and snippets apply at
+once.
+
 ## Where state lives
 
 In the vault's hidden `.emeraldmd/` folder, which the app, the index and sync
@@ -55,6 +76,9 @@ itself ignore:
 | `GET /api/vaults/{id}/raw?path=` | a file's bytes, attachments included |
 | `PUT /api/vaults/{id}/raw?path=` | write a file from the request body; returns a `VaultUpdate`, and other clients receive it on the event stream |
 | `POST /api/vaults/{id}/trash` | (existing) move to the server's `.trash` |
+| `GET /api/vaults/{id}/manifest?config=true` | the manifest with the `.obsidian` files too (settings sync) |
+| `PUT /api/vaults/{id}/config/file?path=` | write a `.obsidian` file from the request body |
+| `POST /api/vaults/{id}/config/trash` | move a `.obsidian` file or folder to the server's `.trash` |
 
 All need the usual bearer token.
 
@@ -95,4 +119,7 @@ so a local test server works without Keychain prompts. Release builds ignore it.
   conflict producing a conflict copy on both sides.
 - Done: changes pushed from the server's event stream (with the
   one-minute poll as a fallback), tested against a running server.
-- Next: syncing `.obsidian/` settings as an opt-in.
+- Done: `.obsidian` settings, themes and plugins as an opt-in, tested with
+  two vaults through a running server (opt-in per device, deletions, the
+  server winning a clash, turning it off), and in the app against a local
+  server (a server accent colour applied after the reload notice).

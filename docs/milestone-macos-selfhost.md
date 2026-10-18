@@ -101,7 +101,9 @@ end-to-end tests; the rest is in priority order within each section.
       `.obsidian/plugins`, installed and updated there, uninstalled to its
       `.trash` (`POST /config/trash`); restricted mode decided per server and
       vault, with a warning that the server holds the code
-- [ ] `.obsidian` in synced copies (opt-in)
+- [x] `.obsidian` in synced copies (opt-in, per device): settings, themes,
+      snippets and plugins; the server's version wins a clash and the local
+      one goes to `.trash`; a notice offers to reload
 - [x] Server operations: health endpoint, token management CLI (list,
       revoke), Docker Compose example
 - [ ] Published server image (registry account: owner)

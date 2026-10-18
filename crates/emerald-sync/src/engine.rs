@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 
 use emerald_core::{Vault, VaultError, VaultSession, VaultUpdate};
 
-use crate::manifest::{FileState, HashCache, Manifest, hash_bytes};
+use crate::manifest::{FileState, HashCache, Manifest, hash_bytes, is_config};
 use crate::merge::merge_text;
 use crate::plan::{Action, is_text, plan};
 
@@ -83,16 +83,32 @@ fn base_blob(hash: &str) -> String {
     format!("{BASE_DIR}/{hash}")
 }
 
+/// What a pass syncs besides notes and attachments.
+#[derive(Clone, Copy, Debug, Default)]
+pub struct SyncOptions {
+    /// The config folder (`.obsidian`: settings, themes, snippets, plugins),
+    /// except `workspace.json`. The server must list it too (see
+    /// [`crate::HttpRemote::with_config`]). Config files are not merged: when
+    /// both sides changed one, the server's version stays and the local one
+    /// goes to the vault's `.trash`.
+    pub config: bool,
+}
+
 /// Brings `session`'s vault and the server in line. `device` names conflict copies.
 pub fn sync_once(session: &mut VaultSession, remote: &mut dyn Remote, device: &str) -> Result<SyncReport, SyncError> {
+    sync_once_with(session, remote, device, SyncOptions::default())
+}
+
+/// [`sync_once`], with options.
+pub fn sync_once_with(session: &mut VaultSession, remote: &mut dyn Remote, device: &str, options: SyncOptions) -> Result<SyncReport, SyncError> {
     let mut state = SyncState::load(session.vault())?;
-    let local = state.hashes.scan(session.vault())?;
+    let local = state.hashes.scan_with(session.vault(), options.config)?;
     let server = remote.manifest()?;
     let mut report = SyncReport::default();
     // The file watcher normally keeps the index current; don't depend on its timing.
     let stale: Vec<String> = local
         .keys()
-        .filter(|p| session.index().entry(p).is_none())
+        .filter(|p| !is_config(p) && session.index().entry(p).is_none())
         .cloned()
         .chain(
             session
@@ -106,7 +122,12 @@ pub fn sync_once(session: &mut VaultSession, remote: &mut dyn Remote, device: &s
         absorb(&mut report.update, session.sync_path(&path)?);
     }
     let mut run = Runner { session: &mut *session, remote, state: &mut state, local: &local, server: &server, device };
-    for action in plan(&run.state.base.clone(), &local, &server) {
+    // Config files the server lists while this pass leaves config out are not this pass's business.
+    let base = run.state.base.clone();
+    let in_scope = |manifest: &Manifest| -> Manifest {
+        manifest.iter().filter(|(path, _)| options.config || !is_config(path)).map(|(p, s)| (p.clone(), s.clone())).collect()
+    };
+    for action in plan(&in_scope(&base), &in_scope(&local), &in_scope(&server)) {
         match run.apply(&action, &mut report) {
             Ok(()) => report.done.push(action),
             Err(err) => report.failed.push((action, err.to_string())),
@@ -136,7 +157,7 @@ impl Runner<'_> {
             }
             Action::Download(path) => {
                 let data = self.download(path)?;
-                absorb(&mut report.update, self.session.write_bytes(path, &data)?);
+                self.write_local(path, &data, report)?;
                 self.agreed(path, &data)
             }
             Action::DeleteRemote(path) => {
@@ -145,10 +166,15 @@ impl Runner<'_> {
                 Ok(())
             }
             Action::DeleteLocal(path) => {
-                absorb(&mut report.update, self.session.trash(path)?);
+                if is_config(path) {
+                    self.session.vault().trash_config(path)?;
+                } else {
+                    absorb(&mut report.update, self.session.trash(path)?);
+                }
                 self.state.base.remove(path);
                 Ok(())
             }
+            Action::Merge(path) | Action::ConflictCopy(path) if is_config(path) => self.config_conflict(path, report),
             Action::Agree(path) => {
                 match self.local.get(path) {
                     Some(_) => {
@@ -174,7 +200,7 @@ impl Runner<'_> {
                 };
                 match merged {
                     Some(text) => {
-                        absorb(&mut report.update, self.session.write_bytes(path, text.as_bytes())?);
+                        self.write_local(path, text.as_bytes(), report)?;
                         self.remote.write(path, text.as_bytes())?;
                         self.agreed(path, text.as_bytes())
                     }
@@ -187,6 +213,30 @@ impl Runner<'_> {
                 self.conflict_copy(path, local_data, remote_data, report)
             }
         }
+    }
+
+    /// Writes a file here: notes through the session (indexed), config files through the config folder's checks.
+    fn write_local(&mut self, path: &str, data: &[u8], report: &mut SyncReport) -> Result<(), SyncError> {
+        if is_config(path) {
+            self.session.vault().write_config_bytes(path, data)?;
+        } else {
+            absorb(&mut report.update, self.session.write_bytes(path, data)?);
+        }
+        Ok(())
+    }
+
+    /// A config file changed on both sides: the server's version stays (a
+    /// line merge could leave broken JSON), the local one goes to `.trash`.
+    fn config_conflict(&mut self, path: &str, report: &mut SyncReport) -> Result<(), SyncError> {
+        let local_data = self.session.vault().read_bytes(path)?;
+        let remote_data = self.download(path)?;
+        let name = self.copy_name(path);
+        let kept = format!(".trash/{}", name.rsplit('/').next().unwrap_or(&name));
+        self.session.vault().write_bytes(&kept, &local_data)?;
+        self.write_local(path, &remote_data, report)?;
+        self.agreed(path, &remote_data)?;
+        report.conflict_copies.push(kept);
+        Ok(())
     }
 
     /// Downloads `path` and checks it against the server manifest, so a file
@@ -238,7 +288,8 @@ impl Runner<'_> {
     /// Records that both sides now hold `data` at `path`.
     fn agreed(&mut self, path: &str, data: &[u8]) -> Result<(), SyncError> {
         let hash = hash_bytes(data);
-        if is_text(path) {
+        // Config files are never merged, so they need no base content.
+        if is_text(path) && !is_config(path) {
             self.session.vault().write_bytes(&base_blob(&hash), data)?;
         }
         self.state.base.insert(path.to_owned(), FileState { hash, size: data.len() as u64 });

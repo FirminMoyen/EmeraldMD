@@ -26,7 +26,10 @@ export interface Shell {
 
 const VAULT = '/vault';
 
-export async function startShell(files: Record<string, string>, config: Record<string, string>, trusted = false): Promise<Shell> {
+/** Answers for other Rust commands (`open_vault_sync`…), by command name. */
+export type ExtraCommands = Record<string, (args: Record<string, unknown>) => unknown>;
+
+export async function startShell(files: Record<string, string>, config: Record<string, string>, trusted = false, extra: ExtraCommands = {}): Promise<Shell> {
 	const html = readFileSync('apps/desktop/static/index.html', 'utf8');
 	document.body.innerHTML = /<body[^>]*>([\s\S]*)<\/body>/.exec(html)![1]!.replace(/<script[\s\S]*?<\/script>/g, '');
 	const backend = new MemoryBackend(files);
@@ -37,6 +40,7 @@ export async function startShell(files: Record<string, string>, config: Record<s
 	mockIPC(
 		async (cmd, args) => {
 			const a = (args ?? {}) as Record<string, string & boolean>;
+			if (extra[cmd]) return extra[cmd](a);
 			switch (cmd) {
 				case 'last_vault':
 					return VAULT;

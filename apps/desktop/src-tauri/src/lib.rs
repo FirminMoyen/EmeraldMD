@@ -103,6 +103,9 @@ fn watch(app: AppHandle, root: PathBuf) -> notify::Result<notify::RecommendedWat
             // The config folder is not indexed; the webview reloads themes and snippets from it.
             if vault_path.starts_with(".obsidian/") {
                 let _ = app.emit("config-changed", &vault_path);
+                if let Some(syncer) = &open.syncer {
+                    syncer.nudge_config();
+                }
                 continue;
             }
             match open.session.sync_path(&vault_path) {
@@ -390,6 +393,7 @@ pub fn run() {
             synced::forget_synced_vault,
             synced::open_vault_sync,
             synced::sync_now,
+            synced::set_sync_config,
             menu::quit_app,
         ])
         .build(tauri::generate_context!())

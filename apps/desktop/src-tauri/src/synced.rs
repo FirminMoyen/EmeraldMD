@@ -14,7 +14,7 @@ use std::sync::Arc;
 use std::thread;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use emerald_sync::{HttpRemote, sync_once};
+use emerald_sync::{Action, HttpRemote, SyncOptions, is_config, sync_once_with};
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, Manager, State};
 
@@ -34,6 +34,9 @@ pub struct SyncedVault {
     pub server_url: String,
     pub vault_id: String,
     pub name: String,
+    /// Also sync `.obsidian` (settings, themes, snippets, plugins); off unless the user turns it on.
+    #[serde(default)]
+    pub sync_config: bool,
 }
 
 #[derive(Serialize, Clone, Debug)]
@@ -92,6 +95,8 @@ pub struct Syncer {
     trigger: Sender<()>,
     /// Stops the event-stream thread when the vault closes.
     stop: Arc<AtomicBool>,
+    /// Whether passes include `.obsidian` (the vault's `sync_config`, changed while open by `set_sync_config`).
+    sync_config: Arc<AtomicBool>,
 }
 
 impl Drop for Syncer {
@@ -105,7 +110,9 @@ impl Syncer {
         let (trigger, requests) = mpsc::channel::<()>();
         let device = device_name();
         let stop = Arc::new(AtomicBool::new(false));
+        let sync_config = Arc::new(AtomicBool::new(config.sync_config));
         Self::watch_server(&config, &device, trigger.clone(), stop.clone());
+        let pass_config = sync_config.clone();
         thread::spawn(move || {
             loop {
                 // A nudge (opening, edits, "Sync now") or the poll interval starts a pass.
@@ -124,11 +131,11 @@ impl Syncer {
                         }
                     }
                 }
-                let status = run_pass(&app, &config, &root, &device);
+                let status = run_pass(&app, &config, &root, &device, pass_config.load(Ordering::SeqCst));
                 let _ = app.emit("sync-status", &status);
             }
         });
-        Self { trigger, stop }
+        Self { trigger, stop, sync_config }
     }
 
     /// Syncs as soon as the server vault changes, through its event stream.
@@ -156,6 +163,13 @@ impl Syncer {
     pub fn nudge(&self) {
         let _ = self.trigger.send(());
     }
+
+    /// After a change in `.obsidian`: a pass, if settings are synced.
+    pub fn nudge_config(&self) {
+        if self.sync_config.load(Ordering::SeqCst) {
+            self.nudge();
+        }
+    }
 }
 
 /// The server token from the Keychain.
@@ -169,7 +183,7 @@ fn token(config: &SyncedVault) -> Result<String, keyring::Error> {
     keyring::Entry::new(KEYCHAIN_SERVICE, &config.server_url)?.get_password()
 }
 
-fn run_pass(app: &AppHandle, config: &SyncedVault, root: &Path, device: &str) -> SyncStatus {
+fn run_pass(app: &AppHandle, config: &SyncedVault, root: &Path, device: &str, sync_config: bool) -> SyncStatus {
     let _ = app.emit("sync-status", &SyncStatus::Syncing);
     let token = match token(config) {
         Ok(token) => token,
@@ -177,7 +191,7 @@ fn run_pass(app: &AppHandle, config: &SyncedVault, root: &Path, device: &str) ->
         Err(err) => return SyncStatus::Error { message: format!("keychain: {err}") },
     };
     let mut remote = match HttpRemote::new(&config.server_url, &config.vault_id, &token, &format!("sync-{device}")) {
-        Ok(remote) => remote,
+        Ok(remote) => remote.with_config(sync_config),
         Err(err) => return SyncStatus::Error { message: err.to_string() },
     };
     let state = app.state::<AppState>();
@@ -186,10 +200,22 @@ fn run_pass(app: &AppHandle, config: &SyncedVault, root: &Path, device: &str) ->
     if open.session.vault().root() != root {
         return SyncStatus::Error { message: "another vault is open".into() };
     }
-    match sync_once(&mut open.session, &mut remote, device) {
+    match sync_once_with(&mut open.session, &mut remote, device, SyncOptions { config: sync_config }) {
         Ok(report) => {
             if !report.update.is_empty() {
                 let _ = app.emit("vault-changed", &report.update);
+            }
+            // Settings that came from another device: the page offers to reload.
+            let received: Vec<&str> = report
+                .done
+                .iter()
+                .filter_map(|action| match action {
+                    Action::Download(p) | Action::DeleteLocal(p) | Action::Merge(p) | Action::ConflictCopy(p) if is_config(p) => Some(p.as_str()),
+                    _ => None,
+                })
+                .collect();
+            if !received.is_empty() {
+                let _ = app.emit("config-synced", &received);
             }
             SyncStatus::Synced { last_sync: now_ms(), conflict_copies: report.conflict_copies, failed: report.failed.len() }
         }
@@ -225,7 +251,7 @@ pub async fn create_synced_vault(
         .map_err(|e| format!("keychain: {e}"))?;
     let mut vaults = load(&app);
     vaults.retain(|v| v.local_path != canonical);
-    vaults.push(SyncedVault { local_path: canonical.clone(), server_url, vault_id, name });
+    vaults.push(SyncedVault { local_path: canonical.clone(), server_url, vault_id, name, sync_config: false });
     save(&app, &vaults)?;
     Ok(canonical)
 }
@@ -250,6 +276,23 @@ pub async fn forget_synced_vault(app: AppHandle, state: State<'_, AppState>, loc
 pub async fn open_vault_sync(app: AppHandle, state: State<'_, AppState>) -> CmdResult<Option<SyncedVault>> {
     let guard = state.vault.lock().map_err(|_| "vault state is poisoned".to_owned())?;
     Ok(guard.as_ref().and_then(|open| config_for(&app, open.session.vault().root())))
+}
+
+/// Turns syncing `.obsidian` on or off for the open synced vault, then syncs.
+#[tauri::command]
+pub async fn set_sync_config(app: AppHandle, state: State<'_, AppState>, enabled: bool) -> CmdResult<()> {
+    let guard = state.vault.lock().map_err(|_| "vault state is poisoned".to_owned())?;
+    let open = guard.as_ref().ok_or("no vault is open")?;
+    let root = open.session.vault().root().display().to_string();
+    let mut vaults = load(&app);
+    let entry = vaults.iter_mut().find(|v| v.local_path == root).ok_or("this vault is not synced")?;
+    entry.sync_config = enabled;
+    save(&app, &vaults)?;
+    if let Some(syncer) = open.syncer.as_ref() {
+        syncer.sync_config.store(enabled, Ordering::SeqCst);
+        syncer.nudge();
+    }
+    Ok(())
 }
 
 #[tauri::command]

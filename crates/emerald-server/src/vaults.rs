@@ -179,10 +179,10 @@ impl SharedVault {
     /// Writes a config file (settings, a theme, a plugin's data). Not indexed
     /// and not announced on the event stream. Takes the write lock so writes
     /// to the vault folder stay one at a time.
-    pub fn write_config(&self, path: &str, data: &str) -> VaultResult<()> {
+    pub fn write_config(&self, path: &str, data: &[u8]) -> VaultResult<()> {
         let inner = self.write_inner();
         paths::check_config(inner.session.vault(), path)?;
-        inner.session.vault().write_config(path, data)
+        inner.session.vault().write_config_bytes(path, data)
     }
 
     pub fn create_config_folder(&self, path: &str) -> VaultResult<()> {
@@ -191,18 +191,18 @@ impl SharedVault {
         inner.session.vault().create_config_folder(path)
     }
 
-    /// Moves a plugin's or theme's folder to the vault's `.trash` (uninstalling).
-    pub fn trash_config_folder(&self, path: &str) -> VaultResult<String> {
+    /// Moves a config file or folder (not the config folder) to the vault's `.trash`.
+    pub fn trash_config(&self, path: &str) -> VaultResult<String> {
         let inner = self.write_inner();
         paths::check_config(inner.session.vault(), path)?;
-        inner.session.vault().trash_config_folder(path)
+        inner.session.vault().trash_config(path)
     }
 
-    /// Every visible file with its content hash, for sync clients.
-    pub fn manifest(&self) -> VaultResult<Manifest> {
+    /// Every visible file with its content hash, for sync clients; with `config`, the config folder's files too.
+    pub fn manifest(&self, config: bool) -> VaultResult<Manifest> {
         let inner = self.read_inner();
         let mut hashes = self.hashes.lock().unwrap_or_else(|e| e.into_inner());
-        let mut manifest = hashes.scan(inner.session.vault())?;
+        let mut manifest = hashes.scan_with(inner.session.vault(), config)?;
         let escapes = Escapes::find(inner.session.vault(), manifest.keys().map(String::as_str));
         manifest.retain(|path, _| !escapes.hides(path));
         Ok(manifest)
