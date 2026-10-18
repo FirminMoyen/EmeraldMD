@@ -3246,3 +3246,46 @@ a.tag {
 .mod-header > pre.frontmatter {
 	margin-top: 0;
 }
+
+/* Dragging tabs (tabs.ts, pane.ts): where a tab would go. */
+.workspace-tab-header.is-being-dragged {
+	opacity: 0.5;
+}
+
+.mod-root .workspace-tab-header.is-drop-before {
+	box-shadow: inset 2px 0 0 var(--interactive-accent);
+}
+
+.mod-root .workspace-tab-header.is-drop-after {
+	box-shadow: inset -2px 0 0 var(--interactive-accent);
+}
+
+.mod-root .workspace-tab-container {
+	position: relative;
+}
+
+.workspace-drop-overlay {
+	position: absolute;
+	z-index: 20;
+	inset: 0;
+	border: 2px solid var(--interactive-accent);
+	border-radius: var(--radius-m);
+	background: color-mix(in srgb, var(--interactive-accent) 12%, transparent);
+	pointer-events: none;
+}
+
+.workspace-drop-overlay[data-zone='left'] {
+	right: 50%;
+}
+
+.workspace-drop-overlay[data-zone='right'] {
+	left: 50%;
+}
+
+.workspace-drop-overlay[data-zone='top'] {
+	bottom: 50%;
+}
+
+.workspace-drop-overlay[data-zone='bottom'] {
+	top: 50%;
+}

@@ -32,8 +32,10 @@ end-to-end tests; the rest is in priority order within each section.
       ⌃Tab, ⌘1–9, ⌘-click or middle click for a new tab; canvas and plugin
       views in tabs (`getLeaf('tab')`); open tabs restored with the vault
 - [x] Splits in the main area: split right or down (commands, tab menu,
-      View menu), nested, resizable by dragging, each pane with its own tabs
-      and editor; files open in the current pane; `getLeaf('split')`,
+      View menu, or by dropping a tab on a pane's edge), nested, resizable
+      by dragging, each pane with its own tabs and editor; tabs dragged to
+      reorder them or move them to another pane; files open in the current
+      pane; `getLeaf('split')`,
       `splitActiveLeaf`, `createLeafBySplit` and `iterateRootLeaves` for
       plugins; the layout and sizes come back with the vault
 - [x] Hover preview of links (page preview): reading view on hover, editor

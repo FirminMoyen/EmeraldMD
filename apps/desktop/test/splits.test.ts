@@ -76,3 +76,57 @@ describe('splits', () => {
 		await vi.waitFor(() => expect(panes()).toHaveLength(2));
 	});
 });
+
+describe('dragging tabs', () => {
+	it('reorders tabs, moves them between panes, and splits when dropped on an edge', async () => {
+		const shell = (globalThis as { app?: import('@emeraldmd/api').App }).app!;
+		const headersOf = (pane: HTMLElement) => [...pane.querySelectorAll<HTMLElement>('.workspace-tab-header')];
+		const dataTransfer = () => new DataTransfer();
+		const drag = (from: HTMLElement, to: HTMLElement, at: { x: number; y: number }) => {
+			const transfer = dataTransfer();
+			// happy-dom keeps neither the `dataTransfer` nor the pointer position passed to DragEvent.
+			const event = (type: string) =>
+				Object.defineProperties(new DragEvent(type, { bubbles: true, cancelable: true }), {
+					dataTransfer: { value: transfer },
+					clientX: { value: at.x },
+					clientY: { value: at.y },
+				});
+			from.dispatchEvent(event('dragstart'));
+			to.dispatchEvent(event('dragover'));
+			to.dispatchEvent(event('drop'));
+			from.dispatchEvent(event('dragend'));
+		};
+		// Two panes: [B, A] and [A]; add a tab C to the first pane.
+		panes()[0]!.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }));
+		await shell.workspace.getLeaf('tab').openFile(shell.vault.getFileByPath('C.md') as TFile);
+		await vi.waitFor(() => expect(titlesOf(panes()[0]!)).toEqual(['A', 'C']));
+
+		// Within a bar (happy-dom has no layout: a drop lands after the last header).
+		drag(headersOf(panes()[0]!)[0]!, panes()[0]!.querySelector('.workspace-tab-header-container')!, { x: 9999, y: 0 });
+		expect(titlesOf(panes()[0]!)).toEqual(['C', 'A']);
+
+		// The note area has no layout in happy-dom: give it a 100×100 box.
+		const box = (pane: HTMLElement) => {
+			const el = pane.querySelector<HTMLElement>('.workspace-tab-container')!;
+			Object.defineProperty(el, 'getBoundingClientRect', { configurable: true, value: () => ({ left: 0, top: 0, right: 100, bottom: 100, width: 100, height: 100 }) });
+			return el;
+		};
+		// Dropped in the middle of the other pane's note: the tab moves there and is current.
+		drag(headersOf(panes()[0]!)[1]!, box(panes()[1]!), { x: 50, y: 50 });
+		await vi.waitFor(() => expect(titlesOf(panes()[1]!)).toEqual(['A', 'A']));
+		expect(titlesOf(panes()[0]!)).toEqual(['C']);
+		expect(panes()[1]!.classList.contains('mod-active')).toBe(true);
+
+		// Dropped near the right edge: a new pane on that side gets it.
+		drag(headersOf(panes()[1]!)[1]!, box(panes()[1]!), { x: 95, y: 50 });
+		await vi.waitFor(() => expect(panes()).toHaveLength(3));
+		expect(panes().map(titlesOf)).toEqual([['C'], ['A'], ['A']]);
+		expect(panes()[2]!.classList.contains('mod-active')).toBe(true);
+
+		// The last tab of a pane moved away: the pane closes.
+		drag(headersOf(panes()[0]!)[0]!, box(panes()[1]!), { x: 50, y: 50 });
+		await vi.waitFor(() => expect(panes()).toHaveLength(2));
+		expect(panes().map(titlesOf)).toEqual([['A', 'C'], ['A']]);
+		await vi.waitFor(() => expect(shell.workspace.getActiveFile()?.path).toBe('C.md'));
+	});
+});

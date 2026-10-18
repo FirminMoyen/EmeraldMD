@@ -26,7 +26,7 @@ import {
 import { getLinkpath, TFile, type TAbstractFile } from '@emeraldmd/core';
 import { frontmatterAt, MarkdownEditor } from '@emeraldmd/editor';
 import type { Extension } from '@codemirror/state';
-import { emptyTab, isEmptyTab, TabBar, type Tab } from './tabs';
+import { draggedTab, emptyTab, isEmptyTab, TabBar, type Tab } from './tabs';
 
 /** Same autosave delay as Obsidian. */
 const SAVE_DELAY_MS = 2000;
@@ -69,7 +69,13 @@ export interface PaneHost {
 	editorExtensions(): Extension[];
 	/** The context menu of a tab's header. */
 	tabMenu(pane: NotePane, tab: Tab, event: MouseEvent): void;
+	/** A tab dragged from the bar `from` was dropped on `to`, at `index` among its tabs. */
+	moveTab(tab: Tab, from: TabBar, to: NotePane, index: number): void;
+	/** A tab dragged from the bar `from` was dropped on an edge of `target`: a new pane there gets it. */
+	splitWithTab(tab: Tab, from: TabBar, target: NotePane, direction: 'vertical' | 'horizontal', before: boolean): void;
 }
+
+type DropZone = 'center' | 'left' | 'right' | 'top' | 'bottom';
 
 /** The note view's parts, taken from the page for the first pane and made for the others. */
 export interface PaneParts {
@@ -112,6 +118,9 @@ export class NotePane {
 	private navigating = false;
 	private readonly el: PaneParts;
 	private readonly navButtons: { back: HTMLElement; forward: HTMLElement };
+	/** `.workspace-tab-container`, where tabs dragged from elsewhere can be dropped. */
+	private readonly tabContainerEl: HTMLElement;
+	private dropOverlay: HTMLElement | null = null;
 	private readonly noHistory = { back: [] as TFile[], forward: [] as TFile[] };
 
 	constructor(
@@ -187,10 +196,13 @@ export class NotePane {
 			close: (tab) => this.closeTab(tab),
 			newTab: () => this.newTab(),
 			menu: (tab, event) => host.tabMenu(this, tab, event),
+			drop: (tab, from, index) => host.moveTab(tab, from, this, index),
 		});
 		this.containerEl = createDiv('workspace-tabs mod-top');
 		this.containerEl.append(this.tabBar.containerEl);
-		this.containerEl.createDiv('workspace-tab-container').append(leaf.containerEl);
+		this.tabContainerEl = this.containerEl.createDiv('workspace-tab-container');
+		this.tabContainerEl.append(leaf.containerEl);
+		this.listenForDroppedTabs();
 		// A click or the focus anywhere in the pane makes it the current one.
 		this.containerEl.addEventListener('mousedown', () => host.activate(this), true);
 		this.containerEl.addEventListener('focusin', () => host.activate(this));
@@ -208,6 +220,62 @@ export class NotePane {
 
 	get hasUnsavedEdits(): boolean {
 		return this.dirty;
+	}
+
+	/**
+	 * Tabs dragged over the note: dropped in the middle, the tab moves here;
+	 * near an edge, a new pane opens on that side with it. Listened to before
+	 * the editor, which would otherwise take the drop as text.
+	 */
+	private listenForDroppedTabs(): void {
+		const el = this.tabContainerEl;
+		const zoneOf = (event: DragEvent): DropZone => {
+			const r = el.getBoundingClientRect();
+			const x = (event.clientX - r.left) / (r.width || 1);
+			const y = (event.clientY - r.top) / (r.height || 1);
+			const edge = Math.min(x, 1 - x, y, 1 - y);
+			if (edge > 0.25) return 'center';
+			return edge === x ? 'left' : edge === 1 - x ? 'right' : edge === y ? 'top' : 'bottom';
+		};
+		el.addEventListener(
+			'dragover',
+			(event) => {
+				if (!draggedTab()) return;
+				event.preventDefault();
+				event.stopPropagation();
+				if (event.dataTransfer) event.dataTransfer.dropEffect = 'move';
+				this.showDropZone(zoneOf(event));
+			},
+			true,
+		);
+		el.addEventListener('dragleave', (event) => {
+			if (!(event.relatedTarget instanceof Node) || !el.contains(event.relatedTarget)) this.showDropZone(null);
+		});
+		el.addEventListener(
+			'drop',
+			(event) => {
+				const drag = draggedTab();
+				this.showDropZone(null);
+				if (!drag) return;
+				event.preventDefault();
+				event.stopPropagation();
+				const zone = zoneOf(event);
+				if (zone === 'center') this.host.moveTab(drag.tab, drag.bar, this, this.tabBar.tabs.length);
+				else this.host.splitWithTab(drag.tab, drag.bar, this, zone === 'left' || zone === 'right' ? 'vertical' : 'horizontal', zone === 'left' || zone === 'top');
+			},
+			true,
+		);
+	}
+
+	/** Highlights where a dropped tab would go (`null`: hides it). */
+	private showDropZone(zone: DropZone | null): void {
+		if (!zone) {
+			this.dropOverlay?.detach();
+			this.dropOverlay = null;
+			return;
+		}
+		this.dropOverlay ??= this.tabContainerEl.createDiv('workspace-drop-overlay');
+		this.dropOverlay.dataset.zone = zone;
 	}
 
 	/** Marks the pane as the current one (`.mod-active`, as themes style it). */
@@ -347,12 +415,16 @@ export class NotePane {
 	 * else leaves an empty tab.
 	 */
 	closeTab(tab: Tab): void {
+		this.removeTab(tab, true);
+	}
+
+	private removeTab(tab: Tab, record: boolean): void {
 		const bar = this.tabBar;
 		const i = bar.tabs.indexOf(tab);
 		if (i === -1) return;
 		const current = tab === bar.active;
 		if (current) this.leaveTab();
-		if (!isEmptyTab(tab)) this.host.closed(this, tab, i);
+		if (record && !isEmptyTab(tab)) this.host.closed(this, tab, i);
 		bar.tabs.splice(i, 1);
 		if (!current) {
 			bar.render();
@@ -370,6 +442,34 @@ export class NotePane {
 		bar.tabs.push(empty);
 		this.setActiveTab(empty);
 		this.showEmptyTab();
+	}
+
+	/** Takes a tab out without recording it as closed (it moves to another pane); like `closeTab` otherwise. */
+	release(tab: Tab): void {
+		this.removeTab(tab, false);
+	}
+
+	/** A tab from another pane: put at `index`, made current and shown (its note loads afresh here). */
+	takeTab(tab: Tab, index: number): void {
+		const bar = this.tabBar;
+		this.leaveTab();
+		// Editor state belongs to the editor it came from.
+		tab.state = null;
+		bar.tabs.splice(Math.min(index, bar.tabs.length), 0, tab);
+		this.setActiveTab(tab);
+		this.host.activate(this);
+		void this.showTab(tab);
+	}
+
+	/** Moves one of this pane's tabs to `index` (counted with the tab still in place). */
+	reorder(tab: Tab, index: number): void {
+		const bar = this.tabBar;
+		const from = bar.tabs.indexOf(tab);
+		if (from === -1) return;
+		bar.tabs.splice(from, 1);
+		bar.tabs.splice(index > from ? index - 1 : index, 0, tab);
+		bar.render();
+		this.host.saveLayout();
 	}
 
 	/** Puts back a closed tab at `index` (an empty current tab gives it its place) and shows it. */
