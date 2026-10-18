@@ -117,8 +117,12 @@ end-to-end tests; the rest is in priority order within each section.
 - [x] Server operations: health endpoint, token management CLI (list,
       revoke), Docker Compose example
 - [ ] Published server image (registry account: owner)
-- [ ] End-to-end check in the real app: connect, live edits from two
-      devices, offline edits then reconnect
+- [x] End-to-end check in the real app against a local server: online
+      vault reopened from the saved list, live edits from another client
+      shown within 2 s, edits from the app on the server, offline edits kept
+      and saved about 8 s after the server came back (the Connect dialog
+      itself, with a token typed and saved to the Keychain, is still to be
+      tried by the owner)
 - [x] Hardening: rate limits, request size limits, trusted-proxy client
       addresses, symlink-safe path handling
 - [x] Security review of the desktop app (docs/security-desktop.md: inert

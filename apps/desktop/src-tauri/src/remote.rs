@@ -69,6 +69,20 @@ fn save(app: &AppHandle, vaults: &RemoteVaults) -> CmdResult<()> {
     fs::write(&path, text).map_err(|e| format!("could not save {}: {e}", path.display()))
 }
 
+/// Debug builds only: one token for every server, from `EMERALDMD_DEV_TOKEN`
+/// (or the older `EMERALDMD_DEV_SYNC_TOKEN`), so a local test server works
+/// without the Keychain, for online vaults and synced copies alike. Release
+/// builds always use the Keychain.
+#[cfg(debug_assertions)]
+pub(crate) fn dev_token() -> Option<String> {
+    std::env::var("EMERALDMD_DEV_TOKEN").or_else(|_| std::env::var("EMERALDMD_DEV_SYNC_TOKEN")).ok()
+}
+
+#[cfg(not(debug_assertions))]
+pub(crate) fn dev_token() -> Option<String> {
+    None
+}
+
 /// Keychain calls can block (the OS may ask the user), so they run off the
 /// async runtime's workers.
 async fn keychain<T: Send + 'static>(f: impl FnOnce() -> keyring::Result<T> + Send + 'static) -> CmdResult<T> {
@@ -116,6 +130,9 @@ pub async fn forget_remote_vault(app: AppHandle, server_url: String, vault_id: S
 
 #[tauri::command]
 pub async fn remote_token(server_url: String) -> CmdResult<Option<String>> {
+    if let Some(token) = dev_token() {
+        return Ok(Some(token));
+    }
     keychain(move || match keyring::Entry::new(KEYCHAIN_SERVICE, &server_url)?.get_password() {
         Ok(token) => Ok(Some(token)),
         Err(keyring::Error::NoEntry) => Ok(None),
