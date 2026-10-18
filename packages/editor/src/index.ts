@@ -32,6 +32,7 @@ import { vim } from '@replit/codemirror-vim';
 /** The Vim emulation's API (`Vim.map`, `Vim.defineEx`…), which plugins reach as `CodeMirrorAdapter.Vim`. */
 export { Vim } from '@replit/codemirror-vim';
 import { frontmatterAt, lineClasses, livePreview, refreshLivePreview, type LivePreviewOptions } from './live-preview';
+import { documentSearch, openDocumentSearch } from './search-panel';
 
 export { frontmatterAt, lineClasses, livePreview, refreshLivePreview, type LivePreviewOptions, type PropertiesHandle } from './live-preview';
 
@@ -96,8 +97,8 @@ const WIKILINK = /!?\[\[[^[\]\n]+?\]\]/g;
 const TAG = /(?<lead>^|\s)#[\p{L}\p{N}_/-]*[\p{L}_/-][\p{L}\p{N}_/-]*/gu;
 
 /** The link text (without alias) of the wikilink under `col`, if any. */
-/** Keys CodeMirror binds by default that Obsidian gives to its own commands (italics ⌘I, comment ⌘/). */
-const OBSIDIAN_KEYS = new Set(['Mod-i', 'Mod-/']);
+/** Keys CodeMirror binds by default that Obsidian gives to its own commands (italics ⌘I, comment ⌘/, search ⌘F). */
+const OBSIDIAN_KEYS = new Set(['Mod-i', 'Mod-/', 'Mod-f']);
 
 export function wikilinkAt(lineText: string, col: number): string | null {
 	for (const match of lineText.matchAll(WIKILINK)) {
@@ -208,7 +209,14 @@ export class MarkdownEditor {
 			decorate(TAG, 'cm-hashtag'),
 			lineClasses(),
 			placeholder('Start writing…'),
-			keymap.of([...closeBracketsKeymap, ...defaultKeymap.filter((b) => !OBSIDIAN_KEYS.has(b.key ?? '')), ...searchKeymap, ...historyKeymap, indentWithTab]),
+			documentSearch(),
+			keymap.of([
+				...closeBracketsKeymap,
+				...defaultKeymap.filter((b) => !OBSIDIAN_KEYS.has(b.key ?? '')),
+				...searchKeymap.filter((b) => !OBSIDIAN_KEYS.has(b.key ?? '')),
+				...historyKeymap,
+				indentWithTab,
+			]),
 			EditorView.updateListener.of((update) => {
 				if (update.docChanged) options.onChange?.(update.state.doc.toString());
 			}),
@@ -335,6 +343,11 @@ export class MarkdownEditor {
 
 	destroy(): void {
 		this.view.destroy();
+	}
+
+	/** Search in the note (with the replace row): the bar at the top of the editor. */
+	openSearch(replace = false): void {
+		openDocumentSearch(this.view, replace);
 	}
 
 	/** Redraws Live Preview's blocks, after a setting they read changed ("Properties in document"). */

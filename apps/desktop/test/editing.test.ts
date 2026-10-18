@@ -57,3 +57,30 @@ it('has Obsidian’s editor menu, with submenus and items from plugins (editor-m
 	expect(document.querySelector('.menu')).toBeNull();
 	shell.workspace.offref(ref);
 });
+
+it('searches and replaces in the note from the bar at the top', async () => {
+	const shell = (globalThis as { app?: import('@emeraldmd/api').App }).app!;
+	const editor = shell.workspace.activeEditor!.editor!;
+	editor.setValue('one fish two fish red fish');
+	shell.commands.executeCommandById('editor:open-search-replace');
+	const bar = await vi.waitFor(() => {
+		const el = document.querySelector<HTMLElement>('.cm-panels-top .document-search-container');
+		if (!el) throw new Error('no search bar');
+		return el;
+	});
+	const input = bar.querySelector<HTMLInputElement>('.document-search-input')!;
+	input.value = 'fish';
+	input.dispatchEvent(new Event('input'));
+	await vi.waitFor(() => expect(bar.querySelector('.document-search-count')?.textContent).toBe('1 of 3'));
+	expect(bar.querySelector<HTMLElement>('.document-replace')!.hidden).toBe(false);
+	const replace = bar.querySelector<HTMLInputElement>('.document-replace-input')!;
+	replace.value = 'cat';
+	replace.dispatchEvent(new Event('input'));
+	bar.querySelector<HTMLElement>('.document-replace-button.mod-all')!.click();
+	expect(editor.getValue()).toBe('one cat two cat red cat');
+	input.value = 'dog';
+	input.dispatchEvent(new Event('input'));
+	await vi.waitFor(() => expect(bar.querySelector('.document-search-count')?.textContent).toBe('No results'));
+	bar.querySelector<HTMLElement>('.document-search-close-button')!.click();
+	expect(document.querySelector('.document-search-container')).toBeNull();
+});
