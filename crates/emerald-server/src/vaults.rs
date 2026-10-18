@@ -191,6 +191,13 @@ impl SharedVault {
         inner.session.vault().create_config_folder(path)
     }
 
+    /// Moves a plugin's or theme's folder to the vault's `.trash` (uninstalling).
+    pub fn trash_config_folder(&self, path: &str) -> VaultResult<String> {
+        let inner = self.write_inner();
+        paths::check_config(inner.session.vault(), path)?;
+        inner.session.vault().trash_config_folder(path)
+    }
+
     /// Every visible file with its content hash, for sync clients.
     pub fn manifest(&self) -> VaultResult<Manifest> {
         let inner = self.read_inner();

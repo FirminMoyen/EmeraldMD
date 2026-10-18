@@ -336,6 +336,7 @@ streams), 503 (server busy) or 500. Every response carries
 | `GET /api/vaults/{id}/config/stat?path=` | | The entry of a path in `.obsidian`, or `null` |
 | `PUT /api/vaults/{id}/config/file?path=` | The new text | 204; writes a file in `.obsidian` (read it with `GET /files`). Not announced on the event stream |
 | `POST /api/vaults/{id}/config/folders` | `{"path"}` | 204; creates a folder in `.obsidian` |
+| `POST /api/vaults/{id}/config/trash` | `{"path"}` | 204; moves a plugin's or theme's folder (`.obsidian/plugins/<id>`, `.obsidian/themes/<name>`) to `.trash` |
 | `POST /api/vaults/{id}/events/ticket` | | `{"ticket", "expiresInSecs"}` |
 | `GET /api/vaults/{id}/events` | | WebSocket, see below |
 

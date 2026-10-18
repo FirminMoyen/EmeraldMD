@@ -12,11 +12,14 @@ export class CommunityPluginsTab extends SettingTab {
 	/** Plugins with a newer version (id → version), after "Check for updates". */
 	private updates: Record<string, string> | null = null;
 	private checking = false;
+	/** The server a server vault is on: its plugins' code comes from there. */
+	private readonly server: string | undefined;
 
-	constructor(app: App, host: PluginHost, directory = new CommunityDirectory(app)) {
+	constructor(app: App, host: PluginHost, directory = new CommunityDirectory(app), options: { server?: string } = {}) {
 		super(app);
 		this.host = host;
 		this.directory = directory;
+		this.server = options.server;
 		this.id = 'community-plugins';
 		this.name = 'Community plugins';
 		this.icon = 'blocks';
@@ -29,12 +32,16 @@ export class CommunityPluginsTab extends SettingTab {
 		const { containerEl, host } = this;
 		containerEl.empty();
 
+		const fromServer = this.server
+			? ` This vault is on ${this.server}: its plugins are stored there, so anyone who can change the vault on the server can change the code that runs here.`
+			: '';
 		if (host.restricted) {
 			new Setting(containerEl)
 				.setName('Restricted mode is on')
 				.setDesc(
 					'Community plugins run code with access to this vault, the network and the app. ' +
-						'Turn them on only for plugins and vaults you trust.',
+						'Turn them on only for plugins and vaults you trust.' +
+						fromServer,
 				)
 				.addButton((b) => b.setButtonText('Turn on community plugins').setCta().onClick(() => host.setRestricted(false)));
 		} else {

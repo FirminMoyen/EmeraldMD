@@ -106,3 +106,26 @@ async fn tokens_reach_only_their_vaults() {
     assert!(other == StatusCode::NOT_FOUND || other == StatusCode::FORBIDDEN, "{other}");
     assert_eq!(server.put_config(".obsidian/app.json", "{}", NOTES_ONLY).await, StatusCode::NO_CONTENT);
 }
+
+#[tokio::test]
+async fn plugin_and_theme_folders_can_be_moved_to_the_trash() {
+    let server = TestServer::start().await;
+    assert_eq!(server.put_config(".obsidian/plugins/calendar/main.js", "x", ALL).await, StatusCode::NO_CONTENT);
+    let trash = |path: &'static str| {
+        server
+            .http
+            .post(server.url("/api/vaults/notes/config/trash"))
+            .bearer_auth(ALL)
+            .json(&json!({ "path": path }))
+            .send()
+    };
+    assert_eq!(trash(".obsidian/plugins/calendar").await.unwrap().status(), StatusCode::NO_CONTENT);
+    assert!(!server.notes.path().join(".obsidian/plugins/calendar").exists());
+    assert!(server.notes.path().join(".trash").is_dir());
+    for path in [".obsidian/app.json", ".obsidian", ".obsidian/plugins", "Home.md", ".obsidian/plugins/../../Home.md"] {
+        let status = trash(path).await.unwrap().status();
+        assert!(status.is_client_error(), "{path}: {status}");
+    }
+    assert!(server.notes.path().join("Home.md").exists());
+    assert!(server.notes.path().join(".obsidian/app.json").exists());
+}

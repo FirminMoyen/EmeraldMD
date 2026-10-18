@@ -81,6 +81,7 @@ pub fn router(state: AppState) -> Router {
         .route("/api/vaults/{id}/config/stat", get(config_stat))
         .route("/api/vaults/{id}/config/file", axum::routing::put(config_write))
         .route("/api/vaults/{id}/config/folders", post(config_folder).layer(small()))
+        .route("/api/vaults/{id}/config/trash", post(config_trash).layer(small()))
         .route("/api/vaults/{id}/events/ticket", post(events_ticket).layer(small()))
         .route("/api/vaults/{id}/events", get(events::stream))
         // Applies to every route and to unknown paths alike.
@@ -527,6 +528,20 @@ async fn config_folder(
 ) -> ApiResult<StatusCode> {
     let vault = state.vault(&principal, &id)?;
     blocking(move || vault.create_config_folder(&body.path)).await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+/// `POST /config/trash` with `{"path": ".obsidian/plugins/<id>"}` (or a theme's
+/// folder): moves it to the vault's `.trash`, for uninstalling. Other config
+/// paths are refused.
+async fn config_trash(
+    State(state): State<AppState>,
+    Extension(principal): Extension<Arc<Principal>>,
+    Path(id): Path<String>,
+    Json(body): Json<PathBody>,
+) -> ApiResult<StatusCode> {
+    let vault = state.vault(&principal, &id)?;
+    blocking(move || vault.trash_config_folder(&body.path)).await?;
     Ok(StatusCode::NO_CONTENT)
 }
 

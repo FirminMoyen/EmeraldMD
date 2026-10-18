@@ -57,8 +57,9 @@ fn with_vault<T>(state: &AppState, f: impl FnOnce(&Vault) -> emerald_core::vault
 #[serde(rename_all = "camelCase")]
 struct Settings {
     last_vault: Option<String>,
-    /// Vault folders where the user turned community plugins on (restricted
-    /// mode off). Plugins run code, so this is decided per vault, in EmeraldMD.
+    /// Vaults where the user turned community plugins on (restricted mode
+    /// off): local folders, and `remote:<server URL>|<vault id>` for server
+    /// vaults. Plugins run code, so this is decided per vault, in EmeraldMD.
     #[serde(default)]
     trusted_vaults: Vec<String>,
 }
@@ -234,17 +235,7 @@ async fn config_mkdir(state: State<'_, AppState>, path: String) -> CmdResult<()>
 /// Other config paths are refused.
 #[tauri::command]
 async fn config_trash(state: State<'_, AppState>, path: String) -> CmdResult<String> {
-    let normalized = path.trim_matches('/');
-    let parts: Vec<&str> = normalized.split('/').collect();
-    let allowed = matches!(parts.as_slice(), [".obsidian", "plugins" | "themes", name] if !name.is_empty() && *name != "." && *name != "..");
-    if !allowed {
-        return Err(format!("only a plugin or theme folder can be moved to the trash: {path}"));
-    }
-    with_vault(&state, |v| {
-        // Resolves symbolic links and refuses anything outside the config folder.
-        v.config_path(normalized)?;
-        v.trash(normalized)
-    })
+    with_vault(&state, |v| v.trash_config_folder(&path))
 }
 
 /// Config folders the UI may show in the file manager.
@@ -316,20 +307,35 @@ fn open_vault_root(state: &AppState) -> CmdResult<String> {
     with_vault(state, |v| Ok(v.root().display().to_string()))
 }
 
+/// The key under which a vault's plugin trust is kept: the local vault's
+/// folder, or `remote:<server URL>|<vault id>` for a server vault.
+fn trust_key(state: &AppState, remote: Option<String>) -> CmdResult<String> {
+    match remote {
+        Some(id) => {
+            if id.is_empty() || id.len() > 2048 || id.chars().any(char::is_control) {
+                return Err("invalid server vault".into());
+            }
+            Ok(format!("remote:{id}"))
+        }
+        None => open_vault_root(state),
+    }
+}
+
 /// Whether community plugins may run in the open vault (restricted mode is off).
+/// `remote` names a server vault (`<server URL>|<vault id>`); without it, the open local vault.
 #[tauri::command]
-async fn community_plugins_trusted(app: AppHandle, state: State<'_, AppState>) -> CmdResult<bool> {
-    let root = open_vault_root(&state)?;
-    Ok(load_settings(&app).trusted_vaults.contains(&root))
+async fn community_plugins_trusted(app: AppHandle, state: State<'_, AppState>, remote: Option<String>) -> CmdResult<bool> {
+    let key = trust_key(&state, remote)?;
+    Ok(load_settings(&app).trusted_vaults.contains(&key))
 }
 
 #[tauri::command]
-async fn set_community_plugins_trusted(app: AppHandle, state: State<'_, AppState>, trusted: bool) -> CmdResult<()> {
-    let root = open_vault_root(&state)?;
+async fn set_community_plugins_trusted(app: AppHandle, state: State<'_, AppState>, trusted: bool, remote: Option<String>) -> CmdResult<()> {
+    let key = trust_key(&state, remote)?;
     let mut settings = load_settings(&app);
-    settings.trusted_vaults.retain(|v| v != &root);
+    settings.trusted_vaults.retain(|v| v != &key);
     if trusted {
-        settings.trusted_vaults.push(root);
+        settings.trusted_vaults.push(key);
     }
     save_settings(&app, &settings);
     Ok(())

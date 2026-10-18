@@ -8,7 +8,7 @@ server's in [security.md](security.md).
 | Source | Treated as |
 |---|---|
 | Notes, attachments, canvas files, settings in `.obsidian`, themes, CSS snippets | Untrusted data. Vaults are shared, synced and downloaded; nothing in them may run code. |
-| Community plugins | Trusted code, once the user turns restricted mode off for that vault. The choice is kept in the app's settings, not in the vault, so a copied vault cannot turn plugins on. |
+| Community plugins | Trusted code, once the user turns restricted mode off for that vault. The choice is kept in the app's settings, not in the vault, so a copied vault cannot turn plugins on. For a server vault the choice is kept per server and vault (`remote:<server URL>|<vault id>`); its plugins are stored on the server, so whoever can write to that vault there can change the code that runs here, which the Community plugins tab says. |
 | A server | Trusted for the content of its vaults; the token is the authorization. |
 
 The webview can call every command the Rust side registers (`invoke`), so
