@@ -8,7 +8,8 @@
 import { Events, type MetadataCache } from '@emeraldmd/core';
 import { Appearance, type BaseTheme, type ThemeSetting } from './appearance';
 import { Commands } from './commands';
-import { InternalPlugins } from './core-plugins';
+import { defaultCorePlugins, InternalPlugins } from './core-plugins';
+import { FileRecovery } from './file-recovery';
 import { CustomCss } from './custom-css';
 import { FileManager } from './file-manager';
 import { HotkeyManager } from './hotkeys';
@@ -131,7 +132,7 @@ export class App {
 	/** @internal */
 	plugins: PluginsApi = noPlugins;
 	/** @internal */
-	internalPlugins = new InternalPlugins();
+	internalPlugins = new InternalPlugins([...defaultCorePlugins(), new FileRecovery()]);
 	/** @internal */
 	viewRegistry = new ViewRegistry();
 	/** @internal Property types; call `load()` once the vault is open. */

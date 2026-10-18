@@ -475,7 +475,12 @@ export interface InternalPlugin {
 }
 
 /** Core plugins that are on in a new vault. */
-const ENABLED_BY_DEFAULT = new Set(['daily-notes', 'templates', 'page-preview', 'bookmarks']);
+const ENABLED_BY_DEFAULT = new Set(['daily-notes', 'templates', 'page-preview', 'bookmarks', 'file-recovery']);
+
+/** The core plugins defined here (app.ts adds those in their own modules). */
+export function defaultCorePlugins(): InternalPluginInstance[] {
+	return [new DailyNotes(), new Templates(), new PagePreview(), new Bookmarks()];
+}
 
 export class InternalPlugins {
 	plugins: Record<string, InternalPlugin> = {};
@@ -483,7 +488,7 @@ export class InternalPlugins {
 	config: Record<string, boolean> = {};
 	private app: App | null = null;
 
-	constructor(instances: InternalPluginInstance[] = [new DailyNotes(), new Templates(), new PagePreview(), new Bookmarks()]) {
+	constructor(instances: InternalPluginInstance[] = defaultCorePlugins()) {
 		for (const instance of instances) this.plugins[instance.id] = { enabled: false, instance };
 	}
 
