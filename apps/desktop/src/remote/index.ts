@@ -123,6 +123,11 @@ export class RemoteVaults {
 		return true;
 	}
 
+	/** The server vault open now, if any. */
+	activeVault(): RemoteVault | null {
+		return this.active?.vault ?? null;
+	}
+
 	/** Called by the app whenever a vault is shown. Closes the remote connection if it is another vault. */
 	vaultOpened(backend: VaultBackend): void {
 		if (this.active?.backend === backend) return;

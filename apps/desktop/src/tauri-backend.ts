@@ -71,11 +71,13 @@ export class TauriConfigStore implements ConfigStore {
 	}
 }
 
-/** Whether community plugins may run in the open vault; stored in the app's settings. */
-export const tauriTrustStore: TrustStore = {
-	isTrusted: () => invoke('community_plugins_trusted'),
-	setTrusted: (trusted) => invoke('set_community_plugins_trusted', { trusted }),
-};
+/** Whether community plugins may run, decided per vault (the open local vault, or a server vault: `<server URL>|<vault id>`); stored in the app's settings. */
+export function tauriTrustStore(remote?: string): TrustStore {
+	return {
+		isTrusted: () => invoke('community_plugins_trusted', { remote }),
+		setTrusted: (trusted) => invoke('set_community_plugins_trusted', { trusted, remote }),
+	};
+}
 
 interface HttpResponse {
 	status: number;

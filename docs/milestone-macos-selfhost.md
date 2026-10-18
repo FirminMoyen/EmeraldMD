@@ -97,8 +97,11 @@ end-to-end tests; the rest is in priority order within each section.
 - [x] Synced mode: sync immediately on server events (event stream)
 - [x] `.obsidian` settings for online server vaults: settings, hotkeys,
       themes and snippets are kept on the server (config endpoints)
-- [ ] Community plugins in server vaults; `.obsidian` in synced copies
-      (opt-in)
+- [x] Community plugins in server vaults: loaded from the server's
+      `.obsidian/plugins`, installed and updated there, uninstalled to its
+      `.trash` (`POST /config/trash`); restricted mode decided per server and
+      vault, with a warning that the server holds the code
+- [ ] `.obsidian` in synced copies (opt-in)
 - [x] Server operations: health endpoint, token management CLI (list,
       revoke), Docker Compose example
 - [ ] Published server image (registry account: owner)

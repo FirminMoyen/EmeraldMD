@@ -330,6 +330,7 @@ describe('RemoteBackend config folder', () => {
 			'PUT /api/vaults/notes/config/file': new Response(null, { status: 204 }),
 			'GET /api/vaults/notes/config/list': json({ files: ['.obsidian/app.json'], folders: ['.obsidian/themes'] }),
 			'POST /api/vaults/notes/config/folders': new Response(null, { status: 204 }),
+			'POST /api/vaults/notes/config/trash': new Response(null, { status: 204 }),
 		});
 		const backend = new RemoteBackend({ serverUrl: SERVER, vaultId: 'notes', token: 't', fetch });
 		expect(await backend.supportsConfig()).toBe(true);
@@ -343,6 +344,10 @@ describe('RemoteBackend config folder', () => {
 		expect(put.url.searchParams.get('path')).toBe('.obsidian/appearance.json');
 		expect(put.body).toBe('{}');
 		expect(JSON.parse(calls.find((c) => c.method === 'POST')!.body!)).toEqual({ path: '.obsidian/snippets' });
+		// Uninstalling a plugin moves its folder to the vault's trash.
+		await backend.trashConfig('.obsidian/plugins/calendar');
+		const trash = calls.find((c) => c.url.pathname.endsWith('/config/trash'))!;
+		expect(JSON.parse(trash.body!)).toEqual({ path: '.obsidian/plugins/calendar' });
 	});
 
 	it('tells when the server has no config endpoints', async () => {

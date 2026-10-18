@@ -52,6 +52,7 @@ import { CorePluginsTab, DailyNotesTab, TemplatesTab } from './core-plugin-tabs'
 import { CommandPalette } from './command-palette';
 import { registerCoreViews, revealSearch } from './core-views';
 import { RemoteVaults } from './remote';
+import { hostOf } from './remote/connect-modal';
 import { setupSyncStatus } from './synced';
 import { emptyTab, isEmptyTab, TabBar, type Tab } from './tabs';
 import { TauriBackend, TauriConfigStore, tauriRequestBackend, tauriTrustStore } from './tauri-backend';
@@ -95,6 +96,7 @@ async function remoteConfigStore(backend: VaultBackend): Promise<ConfigStore> {
 			return entry && { type: entry.kind, ctime: entry.ctime, mtime: entry.mtime, size: entry.size };
 		},
 		mkdir: (path) => backend.mkdirConfig(path),
+		trash: (path) => backend.trashConfig(path),
 	};
 }
 
@@ -384,7 +386,7 @@ class EmeraldApp {
 		app.setting.addBuiltInTab(
 			new AppearanceTab(app, {
 				showFolder: local ? (path) => invoke('show_config_folder', { path }) : undefined,
-				directory: local ? directory : undefined,
+				directory: local || !(config instanceof MemoryConfigStore) ? directory : undefined,
 			}),
 		);
 		app.setting.addBuiltInTab(new HotkeysTab(app));
@@ -428,14 +430,15 @@ class EmeraldApp {
 		if (daily instanceof DailyNotes && daily.options.autorun === true && !keep) await daily.openDay(moment());
 		else await this.showTab(this.tab!);
 
-		if (!local) {
-			// Community plugins run from the local `.obsidian` folder only, for now.
+		// Server vaults keep their plugins in `.obsidian` on the server; servers without the config endpoints have none.
+		const server = local ? null : this.remote.activeVault();
+		if (!local && (!server || config instanceof MemoryConfigStore)) {
 			app.workspace.setLayoutReady();
 			return;
 		}
-		const host = new PluginHost(app, tauriTrustStore);
+		const host = new PluginHost(app, tauriTrustStore(server ? `${server.serverUrl}|${server.vaultId}` : undefined));
 		this.host = host;
-		app.setting.addBuiltInTab(new CommunityPluginsTab(app, host, directory));
+		app.setting.addBuiltInTab(new CommunityPluginsTab(app, host, directory, { server: server ? hostOf(server.serverUrl) : undefined }));
 		try {
 			await host.initialize();
 		} catch (err) {
@@ -443,7 +446,8 @@ class EmeraldApp {
 		}
 		app.workspace.setLayoutReady();
 		if (host.restricted && [...host.enabledPlugins].some((id) => host.manifests[id])) {
-			this.notice('This vault uses community plugins. They stay off until you turn them on in Settings → Community plugins.', 10000);
+			const where = server ? ` (stored on ${hostOf(server.serverUrl)})` : '';
+			this.notice(`This vault uses community plugins${where}. They stay off until you turn them on in Settings → Community plugins.`, 10000);
 		}
 	}
 

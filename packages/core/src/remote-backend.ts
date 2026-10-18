@@ -243,6 +243,11 @@ export class RemoteBackend implements VaultBackend {
 		await this.request('POST', '/config/folders', { json: { path } });
 	}
 
+	/** Moves a plugin's or theme's folder to the vault's `.trash` (uninstalling). */
+	async trashConfig(path: string): Promise<void> {
+		await this.request('POST', '/config/trash', { json: { path } });
+	}
+
 	async search(query: string, options: SearchOptions = {}): Promise<SearchResults> {
 		const params: Record<string, string> = { q: query };
 		if (options.caseSensitive) params.caseSensitive = 'true';

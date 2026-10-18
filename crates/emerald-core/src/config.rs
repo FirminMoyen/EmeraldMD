@@ -118,11 +118,40 @@ impl Vault {
         self.config_path(path)?;
         self.entry(path)
     }
+
+    /// Moves a plugin's or theme's folder (`.obsidian/plugins/<id>`,
+    /// `.obsidian/themes/<name>`) to the vault's `.trash`, for uninstalling;
+    /// returns where it went. Other config paths are refused.
+    pub fn trash_config_folder(&self, path: &str) -> Result<String> {
+        let normalized = normalize_path(path);
+        let parts: Vec<&str> = normalized.split('/').collect();
+        let allowed = matches!(parts.as_slice(), [CONFIG_DIR, "plugins" | "themes", name] if !name.is_empty() && *name != "." && *name != "..");
+        if !allowed {
+            return Err(VaultError::NotConfigPath(path.to_owned()));
+        }
+        // Resolves symbolic links and refuses anything outside the config folder.
+        self.config_path(&normalized)?;
+        self.trash(&normalized)
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn only_plugin_and_theme_folders_go_to_the_trash() {
+        let (dir, vault) = vault();
+        vault.write_config(".obsidian/plugins/calendar/main.js", "x").unwrap();
+        vault.write_config(".obsidian/app.json", "{}").unwrap();
+        let trashed = vault.trash_config_folder(".obsidian/plugins/calendar").unwrap();
+        assert!(trashed.starts_with(".trash/"), "{trashed}");
+        assert!(!dir.path().join(".obsidian/plugins/calendar").exists());
+        for path in [".obsidian/app.json", ".obsidian", ".obsidian/plugins", ".obsidian/plugins/..", ".obsidian/snippets/a.css", "Notes"] {
+            assert!(vault.trash_config_folder(path).is_err(), "{path}");
+        }
+        assert!(dir.path().join(".obsidian/app.json").exists());
+    }
 
     fn vault() -> (tempfile::TempDir, Vault) {
         let dir = tempfile::tempdir().unwrap();
