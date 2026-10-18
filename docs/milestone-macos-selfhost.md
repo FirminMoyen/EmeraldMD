@@ -31,7 +31,11 @@ end-to-end tests; the rest is in priority order within each section.
       scroll, reading/editing mode and back/forward history; ⌘T, ⌘W, ⇧⌘T,
       ⌃Tab, ⌘1–9, ⌘-click or middle click for a new tab; canvas and plugin
       views in tabs (`getLeaf('tab')`); open tabs restored with the vault
-- [ ] Splits in the main area
+- [x] Splits in the main area: split right or down (commands, tab menu,
+      View menu), nested, resizable by dragging, each pane with its own tabs
+      and editor; files open in the current pane; `getLeaf('split')`,
+      `splitActiveLeaf`, `createLeafBySplit` and `iterateRootLeaves` for
+      plugins; the layout and sizes come back with the vault
 - [x] Hover preview of links (page preview): reading view on hover, editor
       with ⌘, sections and blocks, `hover-link` from plugins
 - [x] Daily notes and templates (core plugins, with their settings and

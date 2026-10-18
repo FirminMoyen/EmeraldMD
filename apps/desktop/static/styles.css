@@ -564,6 +564,63 @@ button {
 	flex-direction: column;
 }
 
+/* Splits (splits.ts): `.mod-vertical` puts its children side by side, `.mod-horizontal` stacks them. */
+.workspace-split.mod-root.mod-vertical,
+.workspace-split.mod-root .workspace-split.mod-vertical {
+	flex-direction: row;
+}
+
+.workspace-split.mod-root.mod-horizontal,
+.workspace-split.mod-root .workspace-split.mod-horizontal {
+	flex-direction: column;
+}
+
+.workspace-split.mod-root .workspace-split {
+	display: flex;
+	flex: 1 1 0;
+	min-width: 0;
+	min-height: 0;
+}
+
+.workspace-split.mod-root .workspace-tabs {
+	flex-basis: 0;
+	min-width: 0;
+}
+
+.workspace-leaf-resize-handle {
+	position: relative;
+	z-index: 2;
+	flex: 0 0 1px;
+	background: var(--divider-color);
+}
+
+/* A wider area to grab than the line itself. */
+.workspace-leaf-resize-handle::before {
+	content: '';
+	position: absolute;
+	inset: 0 -3px;
+	cursor: col-resize;
+}
+
+.workspace-leaf-resize-handle.mod-horizontal::before {
+	inset: -3px 0;
+	cursor: row-resize;
+}
+
+.workspace-leaf-resize-handle:hover,
+body.is-resizing .workspace-leaf-resize-handle {
+	background: var(--interactive-accent);
+}
+
+body.is-resizing {
+	user-select: none;
+}
+
+/* Only the current pane's current tab stands out. */
+.mod-root .workspace-tabs:not(.mod-active) .workspace-tab-header.is-active {
+	color: var(--tab-text-color-active);
+}
+
 .nav-header {
 	display: flex;
 	align-items: center;
@@ -2978,7 +3035,8 @@ a.tag {
 }
 
 .metadata-property-key {
-	flex: 0 0 var(--metadata-label-width);
+	flex: 0 1 var(--metadata-label-width);
+	min-width: 5em;
 	display: flex;
 	align-items: center;
 	gap: var(--size-4-1);
