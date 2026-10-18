@@ -78,6 +78,11 @@ export class EditorTab extends ConfigTab {
 		this.toggle('Readable line length', 'Limit the width of the text so long lines stay easy to read.', 'readableLineLength');
 		this.toggle('Strict line breaks', 'Follow the Markdown rule that a single line break does not start a new line in the reading view.', 'strictLineBreaks');
 		this.toggle('Show line numbers', 'Show line numbers next to the text while editing.', 'showLineNumber');
+		this.dropdown('Properties in document', 'How a note’s properties (its YAML frontmatter) show at the top of the note.', 'propertiesInDocument', {
+			visible: 'Visible',
+			hidden: 'Hidden',
+			source: 'Source',
+		});
 
 		this.heading('Behavior');
 		this.toggle('Spellcheck', 'Underline misspelled words while editing.', 'spellcheck');

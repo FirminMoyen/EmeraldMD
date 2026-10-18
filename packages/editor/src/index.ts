@@ -31,9 +31,9 @@ import { vim } from '@replit/codemirror-vim';
 
 /** The Vim emulation's API (`Vim.map`, `Vim.defineEx`…), which plugins reach as `CodeMirrorAdapter.Vim`. */
 export { Vim } from '@replit/codemirror-vim';
-import { lineClasses, livePreview, type LivePreviewOptions } from './live-preview';
+import { frontmatterAt, lineClasses, livePreview, refreshLivePreview, type LivePreviewOptions } from './live-preview';
 
-export { lineClasses, livePreview, type LivePreviewOptions } from './live-preview';
+export { frontmatterAt, lineClasses, livePreview, refreshLivePreview, type LivePreviewOptions, type PropertiesHandle } from './live-preview';
 
 const markdownHighlight = HighlightStyle.define([
 	{ tag: t.heading1, class: 'cm-header cm-header-1' },
@@ -321,9 +321,18 @@ export class MarkdownEditor {
 		this.view.destroy();
 	}
 
+	/** Redraws Live Preview's blocks, after a setting they read changed ("Properties in document"). */
+	refreshLivePreview(): void {
+		this.view.dispatch({ effects: refreshLivePreview.of(null) });
+	}
+
 	private createState(doc: string): EditorState {
+		const state = EditorState.create({ doc });
+		// A note opens with the cursor after its frontmatter.
+		const start = frontmatterAt(state.doc)?.body ?? 0;
 		return EditorState.create({
-			doc,
+			doc: state.doc,
+			selection: { anchor: start },
 			extensions: [
 				this.extensions,
 				this.settingsCompartment.of(settingsExtensions(this.settings)),
