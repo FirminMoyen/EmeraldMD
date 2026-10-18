@@ -3504,3 +3504,10 @@ body.mod-macos.is-hidden-frameless:not(.is-fullscreen) {
 	color: var(--text-muted);
 	cursor: pointer;
 }
+
+/* Submenus (Menu: setSubmenu). */
+.menu-item.has-submenu .menu-item-icon.mod-submenu {
+	margin-left: auto;
+	padding-left: var(--size-4-3);
+	color: var(--text-faint);
+}

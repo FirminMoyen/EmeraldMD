@@ -89,6 +89,9 @@ end-to-end tests; the rest is in priority order within each section.
       lists, quotes, inserts (callout, code and math blocks, table, rule),
       move and delete lines, follow link under cursor (⌥↩); folding of
       headings and lists (arrows on hover, Fold heading / Fold indent)
+- [x] Editor context menu as Obsidian's (clipboard, Format, Paragraph and
+      Insert submenus) extended by plugins (`editor-menu`); with
+      spellcheck on, the system menu with spelling suggestions
 
 ### Native macOS
 
