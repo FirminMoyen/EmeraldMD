@@ -67,7 +67,7 @@ describe('core plugins', () => {
 		await app.internalPlugins.load(app);
 		await app.internalPlugins.setEnabled('templates', false);
 		expect(app.commands.findCommand('insert-template')).toBeUndefined();
-		expect(JSON.parse(config.files.get('.obsidian/core-plugins.json')!)).toEqual({ 'daily-notes': true, templates: false, 'page-preview': true, bookmarks: true, 'file-recovery': true, 'note-composer': true });
+		expect(JSON.parse(config.files.get('.obsidian/core-plugins.json')!)).toEqual({ 'daily-notes': true, templates: false, 'page-preview': true, bookmarks: true, 'file-recovery': true, 'note-composer': true, 'slash-command': false, 'random-note': false, 'zk-prefixer': false });
 		expect(app.workspace.leftRibbon.items.map((i) => i.title)).not.toContain('Insert template');
 	});
 

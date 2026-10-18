@@ -14,6 +14,7 @@ export { type AppOptions, type PluginsApi } from './app';
 export { applyTemplateVariables, Bookmarks, DailyNotes, InternalPlugins, InternalPluginInstance, PagePreview, Templates, type BookmarkItem, type InternalPlugin } from './core-plugins';
 export { diffLines, FileRecovery, IndexedDbSnapshotStore, MemorySnapshotStore, type Snapshot, type SnapshotStore } from './file-recovery';
 export { mergeProperties, NoteComposer } from './note-composer';
+export { RandomNote, SlashCommands, UniqueNoteCreator } from './small-core-plugins';
 export { Appearance, hexToHsl, MAX_FONT_SIZE, MIN_FONT_SIZE, type BaseTheme, type ThemeSetting } from './appearance';
 export { addPluginStyle, CustomCss, type ThemeManifest } from './custom-css';
 export { Commands } from './commands';

@@ -219,3 +219,17 @@ export class NoteComposerTab extends CorePluginOptionsTab {
 			);
 	}
 }
+
+export class UniqueNoteCreatorTab extends CorePluginOptionsTab {
+	constructor(app: App) {
+		super(app, 'zk-prefixer');
+	}
+
+	override display(): void {
+		this.containerEl.empty();
+		this.text('New file location', 'New unique notes go in this folder.', 'folder', 'Example: Zettelkasten');
+		const preview = formatPreview(this.instance.options.format, 'YYYYMMDDHHmm');
+		this.text('Unique prefix format', preview.fragment, 'format', 'YYYYMMDDHHmm', preview.update);
+		this.text('Template file location', 'A note to start unique notes from.', 'template', 'Example: Templates/Zettel');
+	}
+}

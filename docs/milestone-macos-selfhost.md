@@ -49,6 +49,8 @@ end-to-end tests; the rest is in priority order within each section.
 - [x] Note composer (core plugin): merge a note into another (properties
       merged, links redirected), extract a selection or a heading's section
       into a new or existing note, leaving a link, an embed or nothing
+- [x] Slash commands, Random note and Unique note creator (core plugins,
+      off by default as in Obsidian)
 - [x] Bookmarks (core plugin, `.obsidian/bookmarks.json`, groups, follow
       renames, left sidebar pane, file menu item)
 - [x] Properties editor: frontmatter as properties in Live Preview and the
