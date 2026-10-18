@@ -46,7 +46,7 @@ describe('file explorer', () => {
 		});
 		title('Welcome.md').dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: 10, clientY: 10 }));
 		// The Bookmarks core plugin adds its item through the same event.
-		expect(menuItems()).toEqual(['Open in new tab', 'Rename…', 'Move to…', 'Bookmark', 'Copy path', 'Reveal in Finder', 'Delete', 'From a plugin']);
+		expect(menuItems()).toEqual(['Open in new tab', 'Rename…', 'Move to…', 'Bookmark', 'Copy path', 'Reveal in Finder', 'Open local history', 'Delete', 'From a plugin']);
 		expect(seen).toEqual(['Welcome.md file-explorer-context-menu']);
 		shell.press('Escape');
 		shell.app.workspace.offref(ref);

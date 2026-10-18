@@ -4,7 +4,7 @@
  * plugins" (saved in daily-notes.json and templates.json, as in Obsidian).
  */
 
-import { moment, Setting, SettingTab, type App, type InternalPluginInstance } from '@emeraldmd/api';
+import { confirmAction, FileRecovery, moment, Notice, Setting, SettingTab, type App, type InternalPluginInstance } from '@emeraldmd/api';
 
 export class CorePluginsTab extends SettingTab {
 	constructor(app: App) {
@@ -130,5 +130,53 @@ export class TemplatesTab extends CorePluginOptionsTab {
 			cls: 'setting-item-description',
 			text: 'In templates, {{title}}, {{date}} and {{time}} are replaced; {{date:YYYY}} uses its own format.',
 		});
+	}
+}
+
+export class FileRecoveryTab extends CorePluginOptionsTab {
+	constructor(app: App) {
+		super(app, 'file-recovery');
+	}
+
+	private number(name: string, desc: string, key: 'interval' | 'keep', min: number, max: number): void {
+		const recovery = this.instance as FileRecovery;
+		new Setting(this.containerEl)
+			.setName(name)
+			.setDesc(desc)
+			.addSlider((s) =>
+				s
+					.setLimits(min, max, 1)
+					.setValue(recovery[key])
+					.setDynamicTooltip()
+					.onChange((value) => {
+						recovery.options[key] = value;
+						void recovery.saveOptions().catch((err: unknown) => console.error(err));
+					}),
+			);
+	}
+
+	override display(): void {
+		this.containerEl.empty();
+		const recovery = this.instance as FileRecovery;
+		this.number('Snapshot interval', 'Minutes between two snapshots of the same note.', 'interval', 1, 60);
+		this.number('History length', 'Days snapshots are kept. They stay on this device and are not synced.', 'keep', 1, 90);
+		new Setting(this.containerEl)
+			.setName('Snapshots')
+			.setDesc('Look back at earlier versions of your notes and restore one.')
+			.addButton((b) => b.setButtonText('View').onClick(() => recovery.openHistory(null)));
+		new Setting(this.containerEl)
+			.setName('Clear history')
+			.setDesc('Delete every snapshot of this vault on this device.')
+			.addButton((b) =>
+				b
+					.setButtonText('Clear')
+					.setWarning()
+					.onClick(async () => {
+						const ok = await confirmAction(this.app, { title: 'Clear history?', message: 'All snapshots of this vault on this device are deleted.', confirm: 'Clear' });
+						if (!ok) return;
+						await recovery.clearHistory();
+						new Notice('Snapshots deleted.');
+					}),
+			);
 	}
 }

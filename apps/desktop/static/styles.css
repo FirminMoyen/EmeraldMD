@@ -3289,3 +3289,121 @@ a.tag {
 .workspace-drop-overlay[data-zone='bottom'] {
 	top: 50%;
 }
+
+/* File recovery: the local history of a note (file-recovery.ts). */
+.modal.mod-file-recovery {
+	width: min(960px, 90vw);
+	height: min(640px, 80vh);
+	display: flex;
+	flex-direction: column;
+}
+
+.mod-file-recovery .modal-content {
+	flex: 1;
+	min-height: 0;
+	display: flex;
+}
+
+.file-recovery-body {
+	flex: 1;
+	min-height: 0;
+	display: flex;
+	gap: var(--size-4-3);
+}
+
+.file-recovery-list {
+	flex: 0 0 240px;
+	overflow-y: auto;
+	border-right: 1px solid var(--background-modifier-border);
+	padding-right: var(--size-4-2);
+}
+
+.file-recovery-item {
+	padding: var(--size-4-1) var(--size-4-2);
+	border-radius: var(--radius-s);
+	cursor: pointer;
+}
+
+.file-recovery-item:hover {
+	background: var(--background-modifier-hover);
+}
+
+.file-recovery-item.is-selected {
+	background: var(--background-modifier-active-hover);
+}
+
+.file-recovery-time {
+	color: var(--text-normal);
+	font-size: var(--font-ui-small);
+}
+
+.file-recovery-path {
+	overflow: hidden;
+	white-space: nowrap;
+	text-overflow: ellipsis;
+}
+
+.file-recovery-path + .file-recovery-time,
+.file-recovery-size {
+	color: var(--text-muted);
+	font-size: var(--font-ui-smaller);
+}
+
+.file-recovery-back {
+	margin-bottom: var(--size-4-2);
+	color: var(--text-muted);
+	font-size: var(--font-ui-small);
+	cursor: pointer;
+}
+
+.file-recovery-empty {
+	color: var(--text-muted);
+	padding: var(--size-4-2);
+}
+
+.file-recovery-preview {
+	flex: 1;
+	min-width: 0;
+	display: flex;
+	flex-direction: column;
+	gap: var(--size-4-2);
+}
+
+.file-recovery-actions {
+	display: flex;
+	align-items: center;
+	gap: var(--size-4-2);
+}
+
+.file-recovery-toggle {
+	margin-right: auto;
+	color: var(--text-muted);
+	font-size: var(--font-ui-small);
+}
+
+.file-recovery-content {
+	flex: 1;
+	min-height: 0;
+	overflow: auto;
+	border: 1px solid var(--background-modifier-border);
+	border-radius: var(--radius-s);
+	background: var(--background-primary-alt);
+}
+
+.file-recovery-content pre {
+	margin: 0;
+	padding: var(--size-4-2);
+	white-space: pre-wrap;
+	font-family: var(--font-monospace);
+	font-size: var(--font-ui-small);
+}
+
+.file-recovery-line.mod-removed {
+	background: rgba(var(--color-red-rgb), 0.15);
+	color: var(--text-error);
+}
+
+.file-recovery-line.mod-added {
+	background: rgba(var(--color-green-rgb), 0.15);
+	color: var(--text-success);
+}

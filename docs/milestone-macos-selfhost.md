@@ -27,6 +27,10 @@ end-to-end tests; the rest is in priority order within each section.
       move to, delete, reveal in Finder, copy path) extended by plugins
       (`file-menu`), rename in place; links are rewritten when notes move
 - [x] Back/forward history (⌥⌘←/→, header buttons, mouse buttons)
+- [x] File recovery (core plugin, on by default): snapshots of notes on this
+      device when they open or change, at most one per interval (5 min),
+      kept 7 days; local history with the changes since a version, Copy and
+      Restore (command, file menu, settings)
 - [x] Tabs in the main area: each tab keeps its note, cursor, undo history,
       scroll, reading/editing mode and back/forward history; ⌘T, ⌘W, ⇧⌘T,
       ⌃Tab, ⌘1–9, ⌘-click or middle click for a new tab; canvas and plugin

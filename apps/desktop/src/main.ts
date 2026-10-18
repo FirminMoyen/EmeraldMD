@@ -40,7 +40,7 @@ import { AppearanceTab } from './appearance-tab';
 import { BacklinksPane } from './backlinks';
 import { FileExplorer } from './file-explorer';
 import { EditorTab, FilesTab, HotkeysTab } from './settings-tabs';
-import { CorePluginsTab, DailyNotesTab, TemplatesTab } from './core-plugin-tabs';
+import { CorePluginsTab, DailyNotesTab, FileRecoveryTab, TemplatesTab } from './core-plugin-tabs';
 import { CommandPalette } from './command-palette';
 import { registerCoreViews, revealSearch } from './core-views';
 import { RemoteVaults } from './remote';
@@ -345,6 +345,7 @@ class EmeraldApp {
 		app.setting.addBuiltInTab(new CorePluginsTab(app));
 		app.setting.addCorePluginTab(new DailyNotesTab(app));
 		app.setting.addCorePluginTab(new TemplatesTab(app));
+		app.setting.addCorePluginTab(new FileRecoveryTab(app));
 		if (local) void listen<string>('config-changed', (event) => app.customCss.onConfigFileChanged(event.payload));
 		this.mountWorkspace(app);
 		this.applyEditorSettings();
