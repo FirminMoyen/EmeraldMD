@@ -137,7 +137,7 @@ export async function setupDeepLinks(app: App, host: DeepLinkHost): Promise<void
 	});
 	// Links wait in a queue on the Rust side; `open-url` only says there are some, so none is followed twice.
 	const followPending = async () => {
-		const urls = await invoke<string[]>('take_open_urls').catch(() => []);
+		const urls = (await invoke<string[] | null>('take_open_urls').catch(() => null)) ?? [];
 		for (const url of urls) await handleDeepLink(app, host, url).catch((err: unknown) => new Notice(`Could not follow the link: ${err}`));
 	};
 	const unlisten = await listen('open-url', () => void followPending()).catch(() => null);
