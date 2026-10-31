@@ -38,4 +38,5 @@ describe('synced vault settings', () => {
 		expect(notice.textContent).toContain('Settings changed on another device.');
 		expect(notice.querySelector('button')?.textContent).toBe('Reload');
 	});
+
 });

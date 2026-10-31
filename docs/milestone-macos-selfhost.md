@@ -171,6 +171,9 @@ end-to-end tests; the rest is in priority order within each section.
       `.obsidian/plugins`, installed and updated there, uninstalled to its
       `.trash` (`POST /config/trash`); restricted mode decided per server and
       vault, with a warning that the server holds the code
+- [x] Selective sync in synced copies (per device): folders and attachment
+      types (images, audio, videos, PDFs, other) left out are neither sent,
+      fetched nor deleted, on either side
 - [x] `.obsidian` in synced copies (opt-in, per device): settings, themes,
       snippets and plugins; the server's version wins a clash and the local
       one goes to `.trash`; a notice offers to reload

@@ -33,7 +33,7 @@ fn sync(base: &str, root: &Path, device: &str) -> SyncReport {
 fn sync_settings(base: &str, root: &Path, device: &str, config: bool) -> SyncReport {
     let mut session = VaultSession::open(root).unwrap();
     let mut remote = HttpRemote::new(base, "notes", TOKEN, device).unwrap().with_config(config);
-    sync_once_with(&mut session, &mut remote, device, SyncOptions { config }).unwrap()
+    sync_once_with(&mut session, &mut remote, device, SyncOptions { config, ..SyncOptions::default() }).unwrap()
 }
 
 /// A server for `dir` on a free port: its address, and a sender that stops it.

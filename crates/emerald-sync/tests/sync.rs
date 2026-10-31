@@ -179,3 +179,35 @@ fn state_survives_reopening_the_vault() {
     assert!(exists(&root, emerald_sync::engine::STATE_PATH));
     assert!(w.sync_laptop().done.is_empty());
 }
+
+#[test]
+fn selective_sync_leaves_out_folders_and_file_types_on_both_sides() {
+    use emerald_sync::{FileType, SyncFilter, SyncOptions, sync_once_with};
+    let mut w = World::new();
+    write(&w.laptop, "Shared/Keep.md", "synced before the folder was left out");
+    w.sync_laptop();
+    write(&w.server, "Archive/Old.md", "old");
+    write(&w.server, "clip.mp4", "video");
+    write(&w.server, "Note.md", "note");
+    write(&w.laptop, "Archive/Local.md", "local only");
+    write(&w.laptop, "photo.png", "image");
+    let options = SyncOptions { filter: SyncFilter { excluded_folders: vec!["Archive".into(), "Shared".into()], excluded_types: vec![FileType::Video] }, ..SyncOptions::default() };
+    let report = sync_once_with(&mut w.laptop, &mut VaultRemote(&mut w.server), "Laptop", options.clone()).unwrap();
+    assert_eq!(report.done, [Action::Download("Note.md".into()), Action::Upload("photo.png".into())]);
+    assert!(!exists(w.laptop.vault().root(), "Archive/Old.md"));
+    assert!(!exists(w.laptop.vault().root(), "clip.mp4"));
+    assert!(!exists(w.server.vault().root(), "Archive/Local.md"));
+
+    // Deleting a left-out file here does not delete it on the server, and the other way round.
+    fs::remove_file(w.laptop.vault().root().join("Shared/Keep.md")).unwrap();
+    fs::remove_file(w.laptop.vault().root().join("Archive/Local.md")).unwrap();
+    fs::remove_file(w.server.vault().root().join("clip.mp4")).unwrap();
+    let report = sync_once_with(&mut w.laptop, &mut VaultRemote(&mut w.server), "Laptop", options).unwrap();
+    assert!(report.done.is_empty(), "{:?}", report.done);
+    assert!(exists(w.server.vault().root(), "Archive/Old.md"));
+    assert!(exists(w.server.vault().root(), "Shared/Keep.md"));
+
+    // Without the filter, the folders come back; the deletion made meanwhile is then synced.
+    let report = sync_once_with(&mut w.laptop, &mut VaultRemote(&mut w.server), "Laptop", SyncOptions::default()).unwrap();
+    assert_eq!(report.done, [Action::Download("Archive/Old.md".into()), Action::DeleteRemote("Shared/Keep.md".into())]);
+}
