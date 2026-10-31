@@ -6,7 +6,7 @@
 
 import { readFileSync } from 'node:fs';
 import { EditorView } from '@codemirror/view';
-import { mockIPC, mockWindows } from '@tauri-apps/api/mocks';
+import { mockConvertFileSrc, mockIPC, mockWindows } from '@tauri-apps/api/mocks';
 import type { App } from '@emeraldmd/api';
 import { MemoryBackend, MemoryConfigStore } from '@emeraldmd/api/testing';
 import type { VaultSnapshot } from '@emeraldmd/core';
@@ -43,6 +43,7 @@ export async function startShell(files: Record<string, string>, config: Record<s
 	const trust = { trusted };
 
 	mockWindows('main');
+	mockConvertFileSrc('macos');
 	mockIPC(
 		async (cmd, args) => {
 			const a = (args ?? {}) as Record<string, string & boolean>;

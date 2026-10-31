@@ -28,6 +28,7 @@ export { CodeMirrorEditor, editorInfoExtensions, setLivePreviewEffect } from './
 export { editorCommands, registerEditorCommands, setHeading, toggleBullet, toggleChecklist, toggleNumbered, toggleQuote, toggleWrap } from './editor-commands';
 export { eventKey, eventModifiers, formatHotkey, isMacOS } from './keymap';
 export { hasCodeBlockProcessor, onCodeBlockProcessorsChanged, renderMarkdownToDom } from './markdown';
+export { MEDIA_EXTENSIONS, mediaKind, renderMedia, resourceUrl, type MediaKind } from './media';
 export { setRequestBackend, type RawResponse, type RequestBackend } from './request';
 export { AppSetting } from './setting-tab';
 export { compareVersions, isDangerousUrl, sanitizeSvg } from './util';
