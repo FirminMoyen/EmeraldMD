@@ -139,6 +139,11 @@ end-to-end tests; the rest is in priority order within each section.
 - [x] App menu (EmeraldMD, File, Edit, View, Window) with standard
       shortcuts; ⌘T/⌘W/⇧⌘T for tabs, ⌘Q saves before quitting, ⌘, opens
       settings
+- [x] `emeraldmd://` links, like Obsidian's `obsidian://` URIs (scheme in
+      Info.plist): `open`, `new` (with `content`, `append`, `silent`),
+      `search`, `daily`, and plugins' actions (`registerObsidianProtocolHandler`);
+      they start the app if needed; "Copy EmeraldMD URL" in the command
+      palette and file menu (checked in the app, running and from a cold start)
 - [x] Export to PDF (command, File menu): the note as in the reading view,
       light, with its name as the title, in the system's print dialog
       (Save as PDF)
