@@ -10,6 +10,7 @@ import { BOOKMARKS_VIEW, BookmarksView } from './bookmarks';
 import { CANVAS_VIEW, CanvasFileView } from './canvas';
 import { FOOTNOTES_VIEW, FootnotesView } from './footnotes';
 import { MEDIA_KINDS, MediaFileView } from './media';
+import { registerQueryBlocks } from './query-block';
 import { GlobalGraphView, GRAPH_VIEW, LOCAL_GRAPH_VIEW, LocalGraphView } from './graph';
 import type { CoreViewHost } from './host';
 import { OUTGOING_VIEW, OutgoingLinksView } from './outgoing';
@@ -42,6 +43,8 @@ export function registerCoreViews(app: App, host: CoreViewHost): void {
 		views.registerView(kind, (leaf) => new MediaFileView(leaf, kind));
 		views.registerExtensions(MEDIA_EXTENSIONS[kind], kind);
 	}
+
+	registerQueryBlocks(app, host);
 
 	const ws = app.workspace;
 	const openGraph = () => ws.rootLeaf.setViewState({ type: GRAPH_VIEW, active: true });

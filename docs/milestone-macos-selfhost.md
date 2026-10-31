@@ -90,6 +90,10 @@ end-to-end tests; the rest is in priority order within each section.
 
 ### Navigation and core panes
 
+- [x] Search options as Obsidian's: sort order (name, modified, created),
+      collapse all results, copy results (links, paths, with matching
+      lines); ```query blocks embed search results in notes (reading view
+      and Live Preview)
 - [x] Search pane (Obsidian query syntax), quick switcher (⌘O), command
       palette (⌘P) with pinned commands (`command-palette.json`), recent
       ones remembered, and the user's hotkeys
