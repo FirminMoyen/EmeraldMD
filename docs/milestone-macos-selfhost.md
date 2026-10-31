@@ -111,6 +111,13 @@ end-to-end tests; the rest is in priority order within each section.
       only, orphans), colour groups by query, display (arrows, text fade,
       node size, link thickness) and forces
 - [x] Canvas files (`.canvas`): view and edit
+- [x] Canvas tools as Obsidian's: zoom in/out/fit/reset and undo/redo
+      controls (also ⌘Z / ⇧⌘Z), a menu to add a card, a note or media
+      from the vault, context menus on cards (colour, edit, open, create
+      group, remove), on edges (label, colour, remove) and on the
+      background (add at that point), files dropped from the file
+      explorer and web links dropped from elsewhere; file cards show
+      images, audio, video and PDFs
 - [x] Backlinks with the line of each link; unlinked mentions (name and
       aliases, whole words, outside links) turned into links in one click
 - [x] Footnotes view ("Footnotes view: Show footnotes"): the open note's

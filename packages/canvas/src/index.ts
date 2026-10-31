@@ -17,4 +17,4 @@ export {
 	type TextNode,
 } from './model';
 export { CANVAS_CSS } from './styles';
-export { CanvasView, type CanvasViewOptions } from './view';
+export { CanvasView, type CanvasViewOptions, type NewNode } from './view';
