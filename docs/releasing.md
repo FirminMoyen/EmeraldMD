@@ -39,7 +39,12 @@ has to create:
   Application certificate and an app-specific password, add the
   `APPLE_CERTIFICATE`, `APPLE_CERTIFICATE_PASSWORD`, `APPLE_SIGNING_IDENTITY`,
   `APPLE_ID`, `APPLE_PASSWORD` and `APPLE_TEAM_ID` repository secrets, and pass
-  them as env to `tauri-action`. Tauri then signs and notarizes.
+  them as env to `tauri-action`. Tauri then signs and notarizes. Signed
+  builds run with the hardened runtime, which blocks the microphone unless
+  the app has the `com.apple.security.device.audio-input` entitlement: add an
+  entitlements file with it (`bundle.macOS.entitlements` in
+  `tauri.conf.json`) so the Audio recorder keeps working. The usage text
+  macOS shows is already in `src-tauri/Info.plist`.
 - **Windows:** a code-signing certificate (OV/EV, or Azure Trusted Signing),
   configured in `tauri.conf.json` under `bundle.windows`.
 - **Auto-update:** generate an updater key pair (`npx tauri signer generate`),

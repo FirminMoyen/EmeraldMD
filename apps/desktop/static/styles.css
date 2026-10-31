@@ -4544,3 +4544,14 @@ div.bases-group-heading {
 	width: 14px;
 	height: 14px;
 }
+
+/* Audio recorder: the ribbon button and status while recording */
+.side-dock-ribbon-action.is-recording,
+.side-dock-ribbon-action.is-recording:hover {
+	color: var(--text-error);
+}
+
+.audio-recorder-status {
+	color: var(--text-error);
+	font-variant-numeric: tabular-nums;
+}

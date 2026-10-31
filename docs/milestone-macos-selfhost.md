@@ -59,6 +59,10 @@ end-to-end tests; the rest is in priority order within each section.
       into a new or existing note, leaving a link, an embed or nothing
 - [x] Slash commands, Random note and Unique note creator (core plugins,
       off by default as in Obsidian)
+- [x] Audio recorder (core plugin, off by default): records from the
+      microphone, saves `Recording <time>.m4a` (or `.webm`) as an attachment
+      and embeds it at the cursor; ribbon button, commands, timer in the
+      status bar (not tried with a real microphone)
 - [x] Slides (core plugin, off by default): a note presented full screen,
       one slide per part between `---` lines, from the slide with the
       cursor; arrows, Space, Page Up/Down, Home/End, Escape
