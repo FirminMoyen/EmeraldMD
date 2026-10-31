@@ -4606,3 +4606,55 @@ div.bases-group-heading {
 	color: var(--text-error);
 	font-variant-numeric: tabular-nums;
 }
+
+/* ```query blocks: search results in a note (core-views/query-block.ts) */
+.internal-query {
+	margin: var(--size-4-2) 0;
+	border: 1px solid var(--background-modifier-border);
+	border-radius: var(--radius-m);
+	overflow: hidden;
+}
+
+.internal-query-header {
+	display: flex;
+	align-items: center;
+	gap: var(--size-4-2);
+	padding: var(--size-4-2) var(--size-4-3);
+	background: var(--background-secondary);
+	border-bottom: 1px solid var(--background-modifier-border);
+	font-size: var(--font-ui-small);
+}
+
+.internal-query-header-icon {
+	display: flex;
+	color: var(--text-muted);
+}
+
+.internal-query-header-icon .svg-icon {
+	width: 14px;
+	height: 14px;
+}
+
+.internal-query-header-title {
+	flex: 1;
+	font-family: var(--font-monospace);
+}
+
+.internal-query-header-count {
+	color: var(--text-muted);
+}
+
+.internal-query.mod-error .internal-query-header-count {
+	color: var(--text-error);
+}
+
+.internal-query .search-results-container {
+	max-height: 400px;
+	overflow: auto;
+	padding: var(--size-4-1) 0;
+}
+
+.search-options-container {
+	justify-content: flex-end;
+	padding: 0 var(--size-4-2) var(--size-4-1);
+}
