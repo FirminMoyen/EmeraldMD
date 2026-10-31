@@ -92,8 +92,10 @@ export abstract class InternalPluginInstance {
 		this.commandIds.push(command.id);
 	}
 
-	protected addRibbonIcon(icon: string, title: string, callback: () => unknown): void {
-		this.ribbonEls.push(this.app.workspace.leftRibbon.addRibbonItemButton(`${this.id}:${title}`, icon, title, callback));
+	protected addRibbonIcon(icon: string, title: string, callback: () => unknown): HTMLElement {
+		const el = this.app.workspace.leftRibbon.addRibbonItemButton(`${this.id}:${title}`, icon, title, callback);
+		this.ribbonEls.push(el);
+		return el;
 	}
 
 	protected option(key: string, fallback: string): string {

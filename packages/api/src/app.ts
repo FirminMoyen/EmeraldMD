@@ -7,6 +7,7 @@
 
 import { Events, type MetadataCache } from '@emeraldmd/core';
 import { Appearance, type BaseTheme, type ThemeSetting } from './appearance';
+import { AudioRecorder } from './audio-recorder';
 import { Bases } from './bases/plugin';
 import { Commands } from './commands';
 import { defaultCorePlugins, InternalPlugins } from './core-plugins';
@@ -140,7 +141,7 @@ export class App {
 	/** @internal */
 	plugins: PluginsApi = noPlugins;
 	/** @internal */
-	internalPlugins = new InternalPlugins([...defaultCorePlugins(), new FileRecovery(), new NoteComposer(), new SlashCommands(), new RandomNote(), new UniqueNoteCreator(), new Workspaces(), new Bases(), new Slides()]);
+	internalPlugins = new InternalPlugins([...defaultCorePlugins(), new FileRecovery(), new NoteComposer(), new SlashCommands(), new RandomNote(), new UniqueNoteCreator(), new Workspaces(), new Bases(), new Slides(), new AudioRecorder()]);
 	/** @internal How embeds of other file types are drawn. */
 	embedRegistry = new EmbedRegistry();
 	/** @internal */
