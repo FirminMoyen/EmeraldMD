@@ -2130,6 +2130,105 @@ a.tag {
 	color: var(--text-faint);
 }
 
+.canvas-file-media {
+	margin-top: 6px;
+}
+
+.canvas-file-media audio,
+.canvas-file-media video {
+	display: block;
+	width: 100%;
+}
+
+.canvas-file-media.mod-pdf .pdf-frame {
+	display: block;
+	width: 100%;
+	height: calc(100% - 30px);
+	min-height: 200px;
+	border: 0;
+}
+
+.canvas-file-media.mod-pdf {
+	height: calc(100% - 24px);
+}
+
+/* Canvas tools: zoom and undo on the right, cards to add at the bottom */
+
+.canvas-controls {
+	position: absolute;
+	top: var(--size-4-2, 8px);
+	right: var(--size-4-2, 8px);
+	z-index: 2;
+	display: flex;
+	flex-direction: column;
+	gap: var(--size-4-2, 8px);
+}
+
+.canvas-control-group,
+.canvas-card-menu {
+	display: flex;
+	background: var(--background-primary);
+	border: 1px solid var(--background-modifier-border);
+	border-radius: var(--radius-m, 8px);
+	box-shadow: var(--shadow-s);
+	overflow: hidden;
+}
+
+.canvas-control-group {
+	flex-direction: column;
+}
+
+.canvas-control-item,
+.canvas-card-menu-button {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	width: 32px;
+	height: 32px;
+	border-radius: 0;
+	color: var(--icon-color, var(--text-muted));
+	cursor: var(--cursor, pointer);
+}
+
+.canvas-control-item.is-disabled {
+	opacity: 0.4;
+	pointer-events: none;
+}
+
+.canvas-card-menu {
+	position: absolute;
+	left: 50%;
+	bottom: var(--size-4-4, 16px);
+	z-index: 2;
+	transform: translateX(-50%);
+	padding: 4px;
+	gap: 4px;
+}
+
+.canvas-card-menu-button {
+	width: 40px;
+	height: 40px;
+	border-radius: var(--radius-s, 4px);
+}
+
+.canvas-control-item:hover,
+.canvas-card-menu-button:hover {
+	background: var(--background-modifier-hover);
+	color: var(--icon-color-hover, var(--text-normal));
+}
+
+.menu-item.canvas-color-item .menu-item-icon {
+	width: 12px;
+	height: 12px;
+	margin-right: 8px;
+	border-radius: 50%;
+	background: var(--canvas-color);
+}
+
+.canvas-label-input {
+	width: 100%;
+}
+
 /* Quick switcher */
 
 .suggestion-item.mod-create .suggestion-prefix {

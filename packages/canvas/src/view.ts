@@ -8,6 +8,9 @@
  * - Double-click the background for a new text card; double-click a text
  *   card to edit it, a file card to open the file.
  * - Drag from a dot on a card's edge to another card to connect them.
+ * - ⌘Z / ⇧⌘Z undo and redo; right-click and drops are handed to the app
+ *   (`onContextMenu`, `onDrop`), which adds cards, colours, groups and
+ *   labels through the methods below.
  */
 
 import { anchor, bounds, edgePath, snap, type Point } from './geometry';
@@ -25,7 +28,22 @@ export interface CanvasViewOptions {
 	readOnly?: boolean;
 	/** Snap moves and resizes to this grid (0 = off). Default 20. */
 	grid?: number;
+	/** Right-click on a card, an edge (both selected first) or the background, at that point of the canvas. */
+	onContextMenu?: (event: MouseEvent, target: { node?: CanvasNode; edge?: CanvasEdge; at: Point }) => void;
+	/** Something dropped on the canvas, at that point of the canvas. Return true if it was taken. */
+	onDrop?: (event: DragEvent, at: Point) => boolean;
 }
+
+/** A new node's fields; its id and position come from `addNodes`. */
+export type NewNode = { width: number; height: number; color?: string } & (
+	| { type: 'text'; text: string }
+	| { type: 'file'; file: string; subpath?: string }
+	| { type: 'link'; url: string }
+	| { type: 'group'; label?: string }
+);
+
+/** How many edits undo goes back. */
+const HISTORY = 100;
 
 const SIDES: Side[] = ['top', 'right', 'bottom', 'left'];
 const MIN_SIZE = 40;
@@ -51,6 +69,9 @@ export class CanvasView {
 	private editing: string | null = null;
 	private transform = { x: 0, y: 0, k: 1 };
 	private drag: Drag | null = null;
+	/** The canvas after each edit (JSON), and where undo is in it. */
+	private history: string[] = [];
+	private historyAt = 0;
 
 	constructor(
 		container: HTMLElement,
@@ -74,12 +95,24 @@ export class CanvasView {
 		this.el.addEventListener('dblclick', this.onDoubleClick);
 		this.el.addEventListener('wheel', this.onWheel, { passive: false });
 		this.el.addEventListener('keydown', this.onKeyDown);
+		this.el.addEventListener('contextmenu', this.onContextMenu);
+		this.el.addEventListener('dragover', (event) => {
+			if (!this.options.onDrop || this.options.readOnly) return;
+			event.preventDefault();
+		});
+		this.el.addEventListener('drop', (event) => {
+			if (!this.options.onDrop || this.options.readOnly) return;
+			if (this.options.onDrop(event, this.toWorld(event))) event.preventDefault();
+		});
 	}
 
+	/** Shows a canvas (undo starts from here). */
 	setData(data: CanvasData): void {
 		this.data = data;
 		const ids = new Set(data.nodes.map((n) => n.id));
 		this.selected = new Set([...this.selected].filter((id) => ids.has(id)));
+		this.history = [JSON.stringify(data)];
+		this.historyAt = 0;
 		this.render();
 	}
 
@@ -98,6 +131,142 @@ export class CanvasView {
 
 	destroy(): void {
 		this.el.remove();
+	}
+
+	// Editing from the app
+
+	/** The point of the canvas at the middle of the view. */
+	viewCenter(): Point {
+		const { width, height } = this.el.getBoundingClientRect();
+		const { x, y, k } = this.transform;
+		return { x: (width / 2 - x) / k, y: (height / 2 - y) / k };
+	}
+
+	/** Adds nodes centred on `at` (default: the middle of the view), one below the other, and selects them. */
+	addNodes(nodes: NewNode[], at: Point = this.viewCenter()): CanvasNode[] {
+		const grid = this.options.grid ?? 20;
+		const ids = this.data.nodes.map((n) => n.id);
+		let y = at.y - nodes[0]!.height / 2;
+		const added: CanvasNode[] = nodes.map((fields) => {
+			const id = newId(ids);
+			ids.push(id);
+			const node = { ...fields, id, x: snap(at.x - fields.width / 2, grid), y: snap(y, grid) } as CanvasNode;
+			y += fields.height + grid;
+			return node;
+		});
+		this.data.nodes.push(...added);
+		this.selected = new Set(added.map((n) => n.id));
+		this.selectedEdge = null;
+		this.render();
+		this.changed();
+		return added;
+	}
+
+	/** The selected nodes, and the selected edge (if any). */
+	getSelection(): { nodes: CanvasNode[]; edge: CanvasEdge | null } {
+		return {
+			nodes: this.data.nodes.filter((n) => this.selected.has(n.id)),
+			edge: this.data.edges.find((e) => e.id === this.selectedEdge) ?? null,
+		};
+	}
+
+	/** Colours the selection: `"1"`–`"6"`, a hex colour, or null for none. */
+	setColor(color: string | null): void {
+		const { nodes, edge } = this.getSelection();
+		for (const item of [...nodes, ...(edge ? [edge] : [])]) {
+			if (color) item.color = color;
+			else delete item.color;
+		}
+		this.render();
+		this.changed();
+	}
+
+	/** Removes the selected nodes (with their edges) or the selected edge. */
+	removeSelection(): void {
+		if (this.selected.size) {
+			const gone = this.selected;
+			this.data.nodes = this.data.nodes.filter((n) => !gone.has(n.id));
+			this.data.edges = this.data.edges.filter((e) => !gone.has(e.fromNode) && !gone.has(e.toNode));
+		} else if (this.selectedEdge) {
+			this.data.edges = this.data.edges.filter((e) => e.id !== this.selectedEdge);
+		} else {
+			return;
+		}
+		this.selected = new Set();
+		this.selectedEdge = null;
+		this.render();
+		this.changed();
+	}
+
+	/** Puts a group around the selected nodes. */
+	groupSelection(label = ''): CanvasNode | null {
+		const { nodes } = this.getSelection();
+		const box = bounds(nodes);
+		if (!box) return null;
+		const pad = this.options.grid || 20;
+		const group = { id: newId(this.data.nodes.map((n) => n.id)), type: 'group' as const, label, x: box.x - pad, y: box.y - pad * 2, width: box.width + pad * 2, height: box.height + pad * 3 };
+		// Groups go under their contents.
+		this.data.nodes.unshift(group);
+		this.selected = new Set([group.id]);
+		this.render();
+		this.changed();
+		return group;
+	}
+
+	/** Sets an edge's label (empty: none). */
+	setEdgeLabel(edge: CanvasEdge, label: string): void {
+		if (label.trim()) edge.label = label.trim();
+		else delete edge.label;
+		this.renderEdges();
+		this.changed();
+	}
+
+	/** Edits a text card, or a group's label. */
+	edit(node: CanvasNode): void {
+		if (node.type === 'text') this.startEditing(node);
+		else if (node.type === 'group') this.startEditingLabel(node);
+	}
+
+	/** Zooms by `factor` around the middle of the view. */
+	zoomBy(factor: number): void {
+		const { width, height } = this.el.getBoundingClientRect();
+		const [px, py] = [width / 2, height / 2];
+		const { x, y, k } = this.transform;
+		const nk = Math.min(MAX_ZOOM, Math.max(MIN_ZOOM, k * factor));
+		this.transform = { k: nk, x: px - ((px - x) / k) * nk, y: py - ((py - y) / k) * nk };
+		this.applyTransform();
+	}
+
+	/** Back to 100 %, around the middle of the view. */
+	resetZoom(): void {
+		this.zoomBy(1 / this.transform.k);
+	}
+
+	canUndo(): boolean {
+		return this.historyAt > 0;
+	}
+
+	canRedo(): boolean {
+		return this.historyAt < this.history.length - 1;
+	}
+
+	undo(): void {
+		if (!this.canUndo()) return;
+		this.restore(this.history[--this.historyAt]!);
+	}
+
+	redo(): void {
+		if (!this.canRedo()) return;
+		this.restore(this.history[++this.historyAt]!);
+	}
+
+	private restore(json: string): void {
+		this.data = JSON.parse(json) as CanvasData;
+		const ids = new Set(this.data.nodes.map((n) => n.id));
+		this.selected = new Set([...this.selected].filter((id) => ids.has(id)));
+		this.selectedEdge = null;
+		this.render();
+		this.options.onChange?.(this.data);
 	}
 
 	// Rendering
@@ -247,9 +416,32 @@ export class CanvasView {
 		return el ? (this.data.nodes.find((n) => n.id === el.dataset.id) ?? null) : null;
 	}
 
+	/** After an edit: remembered for undo, and reported. */
 	private changed(): void {
+		this.history.splice(this.historyAt + 1);
+		this.history.push(JSON.stringify(this.data));
+		if (this.history.length > HISTORY) this.history.shift();
+		this.historyAt = this.history.length - 1;
 		this.options.onChange?.(this.data);
 	}
+
+	private readonly onContextMenu = (event: MouseEvent) => {
+		if (!this.options.onContextMenu || this.editing) return;
+		event.preventDefault();
+		const node = this.nodeOf(event.target);
+		const edgeEl = (event.target as Element).closest?.('.canvas-edge') as SVGGElement | null;
+		const edge = edgeEl ? (this.data.edges.find((e) => e.id === edgeEl.dataset.id) ?? undefined) : undefined;
+		// The menu acts on what was clicked: select it unless it is already part of the selection.
+		if (node && !this.selected.has(node.id)) {
+			this.selected = new Set([node.id]);
+			this.selectedEdge = null;
+		} else if (edge) {
+			this.selected = new Set();
+			this.selectedEdge = edge.id;
+		}
+		this.refreshSelection();
+		this.options.onContextMenu(event, { node: node ?? undefined, edge, at: this.toWorld(event) });
+	};
 
 	// Pointer interaction
 
@@ -493,21 +685,18 @@ export class CanvasView {
 
 	private readonly onKeyDown = (event: KeyboardEvent) => {
 		if (this.editing || this.options.readOnly) return;
-		if (event.key !== 'Delete' && event.key !== 'Backspace') return;
-		if (this.selected.size) {
-			const gone = this.selected;
-			this.data.nodes = this.data.nodes.filter((n) => !gone.has(n.id));
-			this.data.edges = this.data.edges.filter((e) => !gone.has(e.fromNode) && !gone.has(e.toNode));
-		} else if (this.selectedEdge) {
-			this.data.edges = this.data.edges.filter((e) => e.id !== this.selectedEdge);
-		} else {
+		const mod = event.metaKey || event.ctrlKey;
+		if (mod && event.key.toLowerCase() === 'z') {
+			event.preventDefault();
+			event.stopPropagation();
+			if (event.shiftKey) this.redo();
+			else this.undo();
 			return;
 		}
+		if (event.key !== 'Delete' && event.key !== 'Backspace') return;
+		if (!this.selected.size && !this.selectedEdge) return;
 		event.preventDefault();
-		this.selected = new Set();
-		this.selectedEdge = null;
-		this.render();
-		this.changed();
+		this.removeSelection();
 	};
 
 	private refreshSelection(): void {
