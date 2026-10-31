@@ -2,7 +2,11 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-	<!-- emeraldmd:// links (src/deep_links.rs). Tauri merges this into the app's Info.plist. -->
+	<!-- Tauri merges this into the app's Info.plist. -->
+	<!-- Asked when the Audio recorder core plugin first records; without it macOS ends the app on microphone access. -->
+	<key>NSMicrophoneUsageDescription</key>
+	<string>EmeraldMD records audio notes with the microphone when you use the audio recorder.</string>
+	<!-- emeraldmd:// links (src/deep_links.rs). -->
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>

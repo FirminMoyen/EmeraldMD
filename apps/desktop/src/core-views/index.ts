@@ -1,13 +1,15 @@
 /**
  * Built-in views, registered like Obsidian's core plugins: search, graph,
- * local graph, outline, footnotes, outgoing links, tags, bookmarks, canvas files, and
+ * local graph, outline, footnotes, outgoing links, tags, bookmarks, canvas files,
+ * images, audio, video and PDFs, and
  * the quick switcher.
  */
 
-import type { App } from '@emeraldmd/api';
+import { MEDIA_EXTENSIONS, type App } from '@emeraldmd/api';
 import { BOOKMARKS_VIEW, BookmarksView } from './bookmarks';
 import { CANVAS_VIEW, CanvasFileView } from './canvas';
 import { FOOTNOTES_VIEW, FootnotesView } from './footnotes';
+import { MEDIA_KINDS, MediaFileView } from './media';
 import { GlobalGraphView, GRAPH_VIEW, LOCAL_GRAPH_VIEW, LocalGraphView } from './graph';
 import type { CoreViewHost } from './host';
 import { OUTGOING_VIEW, OutgoingLinksView } from './outgoing';
@@ -36,6 +38,10 @@ export function registerCoreViews(app: App, host: CoreViewHost): void {
 	views.registerView(CANVAS_VIEW, (leaf) => new CanvasFileView(leaf, host));
 	views.registerView(BOOKMARKS_VIEW, (leaf) => new BookmarksView(leaf, host));
 	views.registerExtensions(['canvas'], CANVAS_VIEW);
+	for (const kind of MEDIA_KINDS) {
+		views.registerView(kind, (leaf) => new MediaFileView(leaf, kind));
+		views.registerExtensions(MEDIA_EXTENSIONS[kind], kind);
+	}
 
 	const ws = app.workspace;
 	const openGraph = () => ws.rootLeaf.setViewState({ type: GRAPH_VIEW, active: true });

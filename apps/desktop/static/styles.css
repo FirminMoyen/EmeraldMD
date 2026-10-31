@@ -4443,6 +4443,84 @@ div.bases-group-heading {
 	height: 12px;
 }
 
+/* Images, audio, video and PDFs: in tabs (core-views/media.ts) and embedded in notes */
+.view-content.media-view {
+	padding: 0;
+	display: flex;
+	overflow: auto;
+}
+
+.media-view > div {
+	flex: 1;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	min-height: 100%;
+	padding: var(--size-4-4);
+}
+
+.image-view .image-container img {
+	max-width: 100%;
+	max-height: 100%;
+	object-fit: contain;
+}
+
+.video-view .video-container video {
+	max-width: 100%;
+	max-height: 100%;
+}
+
+.audio-view .audio-container audio {
+	width: min(100%, 520px);
+}
+
+.pdf-view .pdf-container {
+	padding: 0;
+	align-items: stretch;
+}
+
+.pdf-view .pdf-frame {
+	flex: 1;
+	width: 100%;
+	min-height: 100%;
+	border: none;
+	background: var(--background-secondary);
+}
+
+/* In Live Preview, embeds are inline blocks; players and PDFs take the line's width. */
+.cm-embed-block:has(.pdf-embed, .audio-embed, .video-embed) {
+	display: block;
+	width: 100%;
+}
+
+.internal-embed.audio-embed,
+.internal-embed.video-embed {
+	display: block;
+}
+
+.internal-embed.audio-embed audio {
+	width: 420px;
+	max-width: 100%;
+	display: block;
+}
+
+.internal-embed.video-embed video {
+	max-width: 100%;
+	display: block;
+}
+
+.internal-embed.pdf-embed {
+	display: block;
+}
+
+.internal-embed.pdf-embed .pdf-frame {
+	/* A width of its own: in Live Preview the embed shrinks to its content. */
+	width: 760px;
+	max-width: 100%;
+	height: 600px;
+	border: 1px solid var(--background-modifier-border);
+	border-radius: var(--radius-m);
+
 /* Pinned tabs: a pin in place of the close button */
 .workspace-tab-header-status-container {
 	display: flex;
@@ -4465,4 +4543,15 @@ div.bases-group-heading {
 .workspace-tab-header-status-icon .svg-icon {
 	width: 14px;
 	height: 14px;
+}
+
+/* Audio recorder: the ribbon button and status while recording */
+.side-dock-ribbon-action.is-recording,
+.side-dock-ribbon-action.is-recording:hover {
+	color: var(--text-error);
+}
+
+.audio-recorder-status {
+	color: var(--text-error);
+	font-variant-numeric: tabular-nums;
 }

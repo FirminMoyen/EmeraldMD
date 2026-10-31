@@ -23,6 +23,10 @@ end-to-end tests; the rest is in priority order within each section.
       and Live Preview
 - [x] Images and attachments: real binary files, image embeds, paste and
       drag-and-drop into notes, attachment folder setting
+- [x] Images, audio, video and PDFs open in tabs (Obsidian's `image`,
+      `audio`, `video` and `pdf` views; PDFs in the system's viewer) and
+      embed in notes as images, players and PDF frames (`#page=`, `#height=`),
+      in the reading view and Live Preview (checked in the app)
 - [x] File tree: drag-and-drop move, context menu (new note here, rename,
       move to, delete, reveal in Finder, copy path) extended by plugins
       (`file-menu`), rename in place; links are rewritten when notes move
@@ -55,6 +59,10 @@ end-to-end tests; the rest is in priority order within each section.
       into a new or existing note, leaving a link, an embed or nothing
 - [x] Slash commands, Random note and Unique note creator (core plugins,
       off by default as in Obsidian)
+- [x] Audio recorder (core plugin, off by default): records from the
+      microphone, saves `Recording <time>.m4a` (or `.webm`) as an attachment
+      and embeds it at the cursor; ribbon button, commands, timer in the
+      status bar (not tried with a real microphone)
 - [x] Slides (core plugin, off by default): a note presented full screen,
       one slide per part between `---` lines, from the slide with the
       cursor; arrows, Space, Page Up/Down, Home/End, Escape
