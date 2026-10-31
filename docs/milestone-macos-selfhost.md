@@ -94,6 +94,9 @@ end-to-end tests; the rest is in priority order within each section.
       palette (⌘P) with pinned commands (`command-palette.json`), recent
       ones remembered, and the user's hotkeys
 - [x] Backlinks, outline, tags, graph view (⌘G), local graph
+- [x] Outline as Obsidian's: a tree that folds (collapse/expand all), a
+      filter, the heading the cursor is under marked, and headings dragged
+      onto others to move their sections (one undo step)
 - [x] Graph settings as Obsidian's, in `.obsidian/graph.json`: filters
       (search with Obsidian's syntax, tags, attachments, existing files
       only, orphans), colour groups by query, display (arrows, text fade,
