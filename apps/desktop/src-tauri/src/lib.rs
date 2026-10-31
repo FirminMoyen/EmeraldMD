@@ -1,6 +1,7 @@
 //! Tauri shell: exposes `emerald-core` to the webview as commands, and pushes
 //! changes made outside the app as `vault-changed` events.
 
+mod deep_links;
 mod http;
 mod menu;
 mod remote;
@@ -366,6 +367,7 @@ pub fn run() {
     let builder = builder.menu(menu::build).on_menu_event(menu::on_event);
     builder
         .manage(AppState::default())
+        .manage(deep_links::OpenUrls::default())
         .invoke_handler(tauri::generate_handler![
             last_vault,
             open_vault,
@@ -403,10 +405,16 @@ pub fn run() {
             synced::set_sync_config,
             print_page,
             menu::quit_app,
+            deep_links::take_open_urls,
         ])
         .build(tauri::generate_context!())
         .expect("error while building EmeraldMD")
         .run(|app, event| {
+            // `emeraldmd://` links, when they start the app or later.
+            #[cfg(any(target_os = "macos", target_os = "ios"))]
+            if let tauri::RunEvent::Opened { urls } = &event {
+                deep_links::received(app, urls.iter().map(|u| u.as_str()));
+            }
             // Quitting from the Dock or the system: let the page save first.
             if let tauri::RunEvent::ExitRequested { api, .. } = event
                 && !menu::may_exit()
