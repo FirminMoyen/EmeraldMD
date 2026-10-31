@@ -10,6 +10,7 @@ use serde::{Deserialize, Serialize};
 
 use emerald_core::{Vault, VaultError, VaultSession, VaultUpdate};
 
+use crate::filter::SyncFilter;
 use crate::manifest::{FileState, HashCache, Manifest, hash_bytes, is_config};
 use crate::merge::merge_text;
 use crate::plan::{Action, is_text, plan};
@@ -83,8 +84,8 @@ fn base_blob(hash: &str) -> String {
     format!("{BASE_DIR}/{hash}")
 }
 
-/// What a pass syncs besides notes and attachments.
-#[derive(Clone, Copy, Debug, Default)]
+/// What a pass syncs.
+#[derive(Clone, Debug, Default)]
 pub struct SyncOptions {
     /// The config folder (`.obsidian`: settings, themes, snippets, plugins),
     /// except `workspace.json`. The server must list it too (see
@@ -92,6 +93,8 @@ pub struct SyncOptions {
     /// both sides changed one, the server's version stays and the local one
     /// goes to the vault's `.trash`.
     pub config: bool,
+    /// Folders and file types left out (selective sync).
+    pub filter: SyncFilter,
 }
 
 /// Brings `session`'s vault and the server in line. `device` names conflict copies.
@@ -122,10 +125,15 @@ pub fn sync_once_with(session: &mut VaultSession, remote: &mut dyn Remote, devic
         absorb(&mut report.update, session.sync_path(&path)?);
     }
     let mut run = Runner { session: &mut *session, remote, state: &mut state, local: &local, server: &server, device };
-    // Config files the server lists while this pass leaves config out are not this pass's business.
+    // Config files the server lists while this pass leaves config out are not this pass's
+    // business, nor are folders and file types left out: those are neither sent, fetched nor deleted.
     let base = run.state.base.clone();
     let in_scope = |manifest: &Manifest| -> Manifest {
-        manifest.iter().filter(|(path, _)| options.config || !is_config(path)).map(|(p, s)| (p.clone(), s.clone())).collect()
+        manifest
+            .iter()
+            .filter(|(path, _)| (options.config || !is_config(path)) && options.filter.includes(path))
+            .map(|(p, s)| (p.clone(), s.clone()))
+            .collect()
     };
     for action in plan(&in_scope(&base), &in_scope(&local), &in_scope(&server)) {
         match run.apply(&action, &mut report) {

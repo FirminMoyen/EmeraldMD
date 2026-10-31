@@ -59,6 +59,21 @@ the missing listing as deletions. Settings received from another device apply
 after a reload, which the app offers in a notice; themes and snippets apply at
 once.
 
+## Selective sync
+
+Like Obsidian Sync's, each device can leave folders and attachment types out
+(Settings → Sync → Selective sync): images, audio, videos, PDFs and other
+types. Notes, canvases and bases are always synced, unless their folder is
+left out.
+
+A file left out is neither sent, fetched nor deleted, on either side: the
+server keeps its copy, and so does this device. Deleting it on one side
+while it is left out is not passed on; once it is synced again, the next
+pass compares it with the last version both sides agreed on, as usual (a
+deletion made meanwhile is then passed on, and an edit wins over a
+deletion). The choice is per device, kept with the synced vault in the
+app's `synced-vaults.json` (`filter`: `excludedFolders`, `excludedTypes`).
+
 ## Where state lives
 
 In the vault's hidden `.emeraldmd/` folder, which the app, the index and sync

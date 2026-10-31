@@ -401,6 +401,7 @@ pub fn run() {
             synced::open_vault_sync,
             synced::sync_now,
             synced::set_sync_config,
+            synced::set_sync_filter,
             print_page,
             menu::quit_app,
         ])
