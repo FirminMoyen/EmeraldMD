@@ -2,6 +2,7 @@
 
 import { debounce, ItemView, type WorkspaceLeaf } from '@emeraldmd/api';
 import { buildGraph, GraphView, graphInputFromVault, type GraphFilters, type GraphNode } from '@emeraldmd/graph';
+import { cssColor, DEFAULT_GRAPH_SETTINGS, displayOf, forcesOf, GraphControls, graphSettingsSaver, loadGraphSettings, type GraphChange, type GraphSettings } from './graph-settings';
 import type { CoreViewHost } from './host';
 
 export const GRAPH_VIEW = 'graph';
@@ -50,9 +51,13 @@ abstract class BaseGraphView extends ItemView {
 }
 
 export class GlobalGraphView extends BaseGraphView {
-	private showTags = false;
-	private showAttachments = false;
-	private showOrphans = true;
+	private settings: GraphSettings = { ...DEFAULT_GRAPH_SETTINGS, colorGroups: [] };
+	private saveSettings: (settings: GraphSettings) => void = () => {};
+	private controls: GraphControls | null = null;
+	/** Notes found by the filter's search (null: no search), and each colour group's notes. */
+	private searchResults: Set<string> | null = null;
+	private groupColors = new Map<string, string>();
+	private queryRun = 0;
 
 	constructor(leaf: WorkspaceLeaf, host: CoreViewHost) {
 		super(leaf, host);
@@ -69,23 +74,60 @@ export class GlobalGraphView extends BaseGraphView {
 	}
 
 	protected override async onOpen(): Promise<void> {
-		const toggle = (icon: string, title: string, get: () => boolean, set: (v: boolean) => void) => {
-			const button = this.addAction(icon, title, () => {
-				set(!get());
-				button.toggleClass('is-active', get());
-				this.redraw();
-			});
-			button.toggleClass('is-active', get());
-		};
-		toggle('tags', 'Show tags', () => this.showTags, (v) => (this.showTags = v));
-		toggle('paperclip', 'Show attachments', () => this.showAttachments, (v) => (this.showAttachments = v));
-		toggle('circle-dot', 'Show orphans', () => this.showOrphans, (v) => (this.showOrphans = v));
 		this.addAction('maximize', 'Zoom to fit', () => this.graph?.zoomToFit());
+		this.settings = await loadGraphSettings(this.app);
+		this.saveSettings = graphSettingsSaver(this.app);
 		await super.onOpen();
+		this.graph?.setForces(forcesOf(this.settings));
+		this.graph?.setDisplay(displayOf(this.settings));
+		this.graph?.setNodeColor((node) => (node.kind === 'note' ? (this.groupColors.get(node.id) ?? null) : null));
+		this.controls = new GraphControls(this.contentEl, this.settings, (change) => this.onSettingsChange(change));
+		// Searches and colour groups follow the notes as they change.
+		const rerun = debounce(() => void this.runQueries(), 500, true);
+		this.registerEvent(
+			this.app.metadataCache.on('resolved', () => {
+				if (this.settings.search.trim() || this.settings.colorGroups.some((g) => g.query.trim())) rerun();
+			}),
+		);
+		void this.runQueries();
+	}
+
+	private onSettingsChange(change: GraphChange): void {
+		this.saveSettings(this.settings);
+		if (change === 'display') this.graph?.setDisplay(displayOf(this.settings));
+		else if (change === 'forces') this.graph?.setForces(forcesOf(this.settings));
+		else if (change === 'filter' || change === 'groups') void this.runQueries();
+	}
+
+	/** Runs the filter's search and the colour groups' queries (Obsidian's search syntax), then redraws. */
+	private async runQueries(): Promise<void> {
+		const run = ++this.queryRun;
+		const search = this.host.search;
+		const notes = async (query: string): Promise<Set<string> | null> => {
+			if (!query.trim()) return null;
+			if (!search) return new Set(this.app.vault.getMarkdownFiles().filter((f) => f.path.toLowerCase().includes(query.trim().toLowerCase())).map((f) => f.path));
+			try {
+				return new Set((await search(query, { limit: 100_000 })).files.map((f) => f.path));
+			} catch {
+				// A query being typed may not parse yet.
+				return new Set();
+			}
+		};
+		const found = await notes(this.settings.search);
+		const colors = new Map<string, string>();
+		for (const group of this.settings.colorGroups) {
+			const members = await notes(group.query);
+			for (const path of members ?? []) if (!colors.has(path)) colors.set(path, cssColor(group.color));
+		}
+		if (run !== this.queryRun) return;
+		this.searchResults = found;
+		this.groupColors = colors;
+		this.redraw();
 	}
 
 	protected filters(): GraphFilters {
-		return { showTags: this.showTags, showAttachments: this.showAttachments, showOrphans: this.showOrphans, showUnresolved: true };
+		const s = this.settings;
+		return { showTags: s.showTags, showAttachments: s.showAttachments, showOrphans: s.showOrphans, showUnresolved: !s.hideUnresolved, ...(this.searchResults ? { files: this.searchResults } : {}) };
 	}
 }
 

@@ -9,12 +9,27 @@ import type { Simulation } from 'd3-force';
 import { createSimulation, DEFAULT_FORCES, nodeRadius, type GraphForces, type SimLink, type SimNode } from './layout';
 import type { GraphData, GraphNode, NodeKind } from './model';
 
+/** Like the Display section of Obsidian's graph settings. */
+export interface GraphDisplay {
+	/** Arrowheads on links, from the linking note to the linked one. */
+	arrows: boolean;
+	/** Multiplies node sizes. */
+	nodeSize: number;
+	/** Multiplies link thickness. */
+	lineSize: number;
+	/** Text fade threshold, -3 to 3: higher shows labels from further out. */
+	textFade: number;
+}
+
+export const DEFAULT_DISPLAY: GraphDisplay = { arrows: false, nodeSize: 1, lineSize: 1, textFade: 0 };
+
 export interface GraphViewOptions {
 	/** A node was clicked (also for unresolved links, so the host can create the note). */
 	onOpen?: (node: GraphNode, event: MouseEvent) => void;
 	forces?: GraphForces;
-	/** Zoom level above which every label shows (hovered nodes always show theirs). */
-	labelZoom?: number;
+	display?: GraphDisplay;
+	/** A colour for a node (colour groups), or null for its kind's colour. */
+	nodeColor?: (node: GraphNode) => string | null;
 }
 
 interface Palette {
@@ -105,6 +120,20 @@ export class GraphView {
 			if (this.autoFit) this.zoomToFit();
 		});
 		simulation.alpha(0.8).restart();
+	}
+
+	setDisplay(display: GraphDisplay): void {
+		this.options.display = display;
+		this.requestDraw();
+	}
+
+	setNodeColor(nodeColor: ((node: GraphNode) => string | null) | undefined): void {
+		this.options.nodeColor = nodeColor;
+		this.requestDraw();
+	}
+
+	private radius(node: GraphNode): number {
+		return nodeRadius(node) * (this.options.display?.nodeSize ?? 1);
 	}
 
 	/** Highlights a node, e.g. the active note. */
@@ -215,7 +244,8 @@ export class GraphView {
 		const near = active ? this.neighbours.get(active) : undefined;
 		const dimmed = (id: string) => active !== null && id !== active && !near?.has(id);
 
-		ctx.lineWidth = 1 / k;
+		const display = this.options.display ?? DEFAULT_DISPLAY;
+		ctx.lineWidth = display.lineSize / k;
 		for (const l of this.links) {
 			const [s, t] = [l.source as SimNode, l.target as SimNode];
 			const lit = active !== null && (s.id === active || t.id === active);
@@ -225,17 +255,32 @@ export class GraphView {
 			ctx.moveTo(s.x ?? 0, s.y ?? 0);
 			ctx.lineTo(t.x ?? 0, t.y ?? 0);
 			ctx.stroke();
+			if (display.arrows) {
+				// An arrowhead touching the linked node's edge.
+				const angle = Math.atan2((t.y ?? 0) - (s.y ?? 0), (t.x ?? 0) - (s.x ?? 0));
+				const tipX = (t.x ?? 0) - Math.cos(angle) * this.radius(t);
+				const tipY = (t.y ?? 0) - Math.sin(angle) * this.radius(t);
+				const size = (4 + 2 * display.lineSize) / Math.max(k, 0.5);
+				ctx.fillStyle = ctx.strokeStyle;
+				ctx.beginPath();
+				ctx.moveTo(tipX, tipY);
+				ctx.lineTo(tipX - size * Math.cos(angle - 0.45), tipY - size * Math.sin(angle - 0.45));
+				ctx.lineTo(tipX - size * Math.cos(angle + 0.45), tipY - size * Math.sin(angle + 0.45));
+				ctx.closePath();
+				ctx.fill();
+			}
 		}
 
 		for (const n of this.nodes) {
 			ctx.globalAlpha = dimmed(n.id) ? 0.3 : 1;
-			ctx.fillStyle = n.id === this.focused || n.id === active ? palette.focused : palette.nodes[n.kind];
+			ctx.fillStyle = n.id === this.focused || n.id === active ? palette.focused : (this.options.nodeColor?.(n) ?? palette.nodes[n.kind]);
 			ctx.beginPath();
-			ctx.arc(n.x ?? 0, n.y ?? 0, nodeRadius(n), 0, Math.PI * 2);
+			ctx.arc(n.x ?? 0, n.y ?? 0, this.radius(n), 0, Math.PI * 2);
 			ctx.fill();
 		}
 
-		const showAll = k >= (this.options.labelZoom ?? 1.1);
+		// Labels show above a zoom level; the text fade threshold moves it.
+		const showAll = k >= 1.1 * Math.pow(2, -display.textFade);
 		ctx.font = palette.font;
 		ctx.textAlign = 'center';
 		ctx.textBaseline = 'top';
@@ -246,7 +291,7 @@ export class GraphView {
 			ctx.globalAlpha = dimmed(n.id) ? 0.3 : 1;
 			const scale = 1 / Math.max(k, 0.6);
 			ctx.save();
-			ctx.translate(n.x ?? 0, (n.y ?? 0) + nodeRadius(n) + 3);
+			ctx.translate(n.x ?? 0, (n.y ?? 0) + this.radius(n) + 3);
 			ctx.scale(scale, scale);
 			ctx.fillText(n.label, 0, 0);
 			ctx.restore();
@@ -267,7 +312,7 @@ export class GraphView {
 		let bestDistance = Infinity;
 		for (const n of this.nodes) {
 			const d = Math.hypot((n.x ?? 0) - gx, (n.y ?? 0) - gy);
-			const hit = nodeRadius(n) + 4 / this.transform.k;
+			const hit = this.radius(n) + 4 / this.transform.k;
 			if (d <= hit && d < bestDistance) {
 				best = n;
 				bestDistance = d;
