@@ -51,6 +51,9 @@ end-to-end tests; the rest is in priority order within each section.
       into a new or existing note, leaving a link, an embed or nothing
 - [x] Slash commands, Random note and Unique note creator (core plugins,
       off by default as in Obsidian)
+- [x] Slides (core plugin, off by default): a note presented full screen,
+      one slide per part between `---` lines, from the slide with the
+      cursor; arrows, Space, Page Up/Down, Home/End, Escape
 - [x] Obsidian's layouts: a vault opened here for the first time gets the
       tabs and splits Obsidian left in `workspace.json`; `getLayout` and
       `changeLayout` use that format; Workspaces (core plugin) saves and
