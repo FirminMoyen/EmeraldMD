@@ -177,7 +177,7 @@ export class BasesEntry {
 	) {}
 
 	getValue(propertyId: BasesPropertyId): Value | null {
-		return this.controller.valueOf(this.file, propertyId);
+		return this.controller.propertyValue(this.file, propertyId);
 	}
 }
 
@@ -391,7 +391,7 @@ export class QueryController extends Component {
 		return { app: this.app, file, thisFile: this.thisFile, formula: (name, f) => this.formulaValue(name, f) };
 	}
 
-	valueOf(file: TFile, propertyId: BasesPropertyId): Value {
+	propertyValue(file: TFile, propertyId: BasesPropertyId): Value {
 		const { type, name } = parsePropertyId(propertyId);
 		if (type === 'file') return fileProperty(this.app, file, name);
 		if (type === 'formula') return this.formulaValue(name, file);
