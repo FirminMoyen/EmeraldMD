@@ -228,28 +228,30 @@ export abstract class SettingPage {
 	}
 }
 
-/** Bases (database views) are not implemented; these exist so plugins that extend them still load. */
-export class QueryController extends Component {}
-export abstract class BasesView extends Component {
-	app: App;
-	controller: QueryController;
-	containerEl: HTMLElement;
-
-	constructor(controller: QueryController, containerEl: HTMLElement) {
-		super();
-		this.controller = controller;
-		this.containerEl = containerEl;
-		this.app = (controller as unknown as { app: App }).app;
-	}
-
-	abstract readonly type: string;
-	abstract onDataUpdated(): void;
-}
-
-export function parsePropertyId(propertyId: string): { type: string; name: string } {
-	const dot = propertyId.indexOf('.');
-	return dot === -1 ? { type: 'note', name: propertyId } : { type: propertyId.slice(0, dot), name: propertyId.slice(dot + 1) };
-}
+export { BasesView } from './bases/view';
+export { BasesEntry, BasesEntryGroup, BasesQueryResult, BasesViewConfig, parsePropertyId, QueryController } from './bases/query';
+export {
+	BooleanValue,
+	DateValue,
+	DurationValue,
+	FileValue,
+	HTMLValue,
+	IconValue,
+	ImageValue,
+	LinkValue,
+	ListValue,
+	NotNullValue,
+	NullValue,
+	NumberValue,
+	ObjectValue,
+	PrimitiveValue,
+	RegExpValue,
+	RelativeDateValue,
+	StringValue,
+	TagValue,
+	UrlValue,
+	Value,
+} from './bases/values';
 
 function unavailable(name: string): Promise<never> {
 	return Promise.reject(new Error(`${name} is not available in EmeraldMD yet`));

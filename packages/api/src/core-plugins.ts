@@ -475,7 +475,7 @@ export interface InternalPlugin {
 }
 
 /** Core plugins that are on in a new vault. */
-const ENABLED_BY_DEFAULT = new Set(['daily-notes', 'templates', 'page-preview', 'bookmarks', 'file-recovery', 'note-composer']);
+const ENABLED_BY_DEFAULT = new Set(['daily-notes', 'templates', 'page-preview', 'bookmarks', 'file-recovery', 'note-composer', 'bases']);
 
 /** The core plugins defined here (app.ts adds those in their own modules). */
 export function defaultCorePlugins(): InternalPluginInstance[] {
@@ -528,7 +528,9 @@ export class InternalPlugins {
 			plugin.instance.attach(app);
 			const options = await read(`${id}.json`);
 			if (options && typeof options === 'object' && !Array.isArray(options)) plugin.instance.options = options as Record<string, unknown>;
-			const on = saved === null ? ENABLED_BY_DEFAULT.has(id) : this.config[id] === true;
+			// Core plugins newer than the vault's core-plugins.json start as they do in a new vault.
+			const unlisted = saved === null || (!Array.isArray(saved) && !(id in this.config));
+			const on = unlisted ? ENABLED_BY_DEFAULT.has(id) : this.config[id] === true;
 			if (on) this.enable(id);
 		}
 	}

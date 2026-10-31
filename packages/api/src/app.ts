@@ -7,6 +7,7 @@
 
 import { Events, type MetadataCache } from '@emeraldmd/core';
 import { Appearance, type BaseTheme, type ThemeSetting } from './appearance';
+import { Bases } from './bases/plugin';
 import { Commands } from './commands';
 import { defaultCorePlugins, InternalPlugins } from './core-plugins';
 import { FileRecovery } from './file-recovery';
@@ -14,6 +15,7 @@ import { NoteComposer } from './note-composer';
 import { RandomNote, SlashCommands, UniqueNoteCreator } from './small-core-plugins';
 import { Workspaces } from './workspaces';
 import { CustomCss } from './custom-css';
+import { EmbedRegistry } from './embed-registry';
 import { FileManager } from './file-manager';
 import { HotkeyManager } from './hotkeys';
 import { Keymap, Scope } from './keymap';
@@ -82,6 +84,8 @@ export class StatusBar {
 
 export class RenderContext {
 	hoverPopover: unknown = null;
+	/** @internal For values that open links when clicked. */
+	app: App | null = null;
 }
 
 export class Tasks {
@@ -135,7 +139,9 @@ export class App {
 	/** @internal */
 	plugins: PluginsApi = noPlugins;
 	/** @internal */
-	internalPlugins = new InternalPlugins([...defaultCorePlugins(), new FileRecovery(), new NoteComposer(), new SlashCommands(), new RandomNote(), new UniqueNoteCreator(), new Workspaces()]);
+	internalPlugins = new InternalPlugins([...defaultCorePlugins(), new FileRecovery(), new NoteComposer(), new SlashCommands(), new RandomNote(), new UniqueNoteCreator(), new Workspaces(), new Bases()]);
+	/** @internal How embeds of other file types are drawn. */
+	embedRegistry = new EmbedRegistry();
 	/** @internal */
 	viewRegistry = new ViewRegistry();
 	/** @internal Property types; call `load()` once the vault is open. */
@@ -165,6 +171,7 @@ export class App {
 		this.vault = options.vault;
 		this.metadataCache = options.metadataCache;
 		this.appId = options.appId;
+		this.renderContext.app = this;
 		this.scope = new Scope();
 		this.keymap = new Keymap(this.scope);
 		this.statusBar = new StatusBar(options.statusBarEl ?? createDiv('status-bar'));

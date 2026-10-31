@@ -670,7 +670,11 @@ async function renderEmbeds(app: App, el: HTMLElement, sourcePath: string, compo
 			void app.workspace.openLinkText(src, sourcePath);
 		};
 		try {
-			if (IMAGE_EXTENSIONS.has(file.extension.toLowerCase())) {
+			const creator = file.extension !== 'md' ? app.embedRegistry.getEmbedCreator(file) : null;
+			if (creator) {
+				span.addClass('internal-embed');
+				component.addChild(creator({ app, containerEl: span, linktext: src, sourcePath, displayText: alt, depth: embedDepth }, file, subpath));
+			} else if (IMAGE_EXTENSIONS.has(file.extension.toLowerCase())) {
 				span.addClass('image-embed', 'media-embed');
 				const img = span.createEl('img', { attr: { alt: alt && alt !== src ? alt : file.name } });
 				const size = /^(\d+)(?:x(\d+))?$/.exec(alt.trim());
