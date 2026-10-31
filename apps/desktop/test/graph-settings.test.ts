@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, expect, it, vi } from 'vitest';
-import { cssColor, DEFAULT_GRAPH_SETTINGS, displayOf, forcesOf } from '../src/core-views/graph-settings';
+import { cssColor, DEFAULT_GRAPH_SETTINGS, DEFAULT_LOCAL_SETTINGS, displayOf, forcesOf, GraphControls, type GraphChange } from '../src/core-views/graph-settings';
 import { startShell } from './shell-harness';
 
 describe('graph settings', () => {
@@ -10,6 +10,26 @@ describe('graph settings', () => {
 		expect(forces.linkDistance).toBeCloseTo(60);
 		expect(displayOf({ ...DEFAULT_GRAPH_SETTINGS, showArrow: true, nodeSizeMultiplier: 2 })).toEqual({ arrows: true, nodeSize: 2, lineSize: 1, textFade: 0 });
 		expect(cssColor({ a: 0.5, rgb: 0xff8000 })).toBe('rgba(255, 128, 0, 0.5)');
+	});
+
+	it('gives the local graph its own section: depth and the links to follow', () => {
+		const settings = { ...DEFAULT_GRAPH_SETTINGS, ...DEFAULT_LOCAL_SETTINGS, colorGroups: [], close: false };
+		const changes: GraphChange[] = [];
+		const el = document.body.createDiv();
+		new GraphControls(el, settings, (change) => changes.push(change), true);
+		const sections = [...el.querySelectorAll('.graph-control-section-header')].map((h) => h.textContent);
+		expect(sections[0]).toBe('Local graph');
+		const setting = (name: string) => [...el.querySelectorAll('.setting-item')].find((item) => item.querySelector('.setting-item-name')?.textContent === name)!;
+		expect(setting('Neighbor links').querySelector('.checkbox-container')!.classList.contains('is-enabled')).toBe(false);
+		setting('Incoming links').querySelector<HTMLElement>('.checkbox-container')!.click();
+		expect(settings.localBacklinks).toBe(false);
+		expect(changes).toEqual(['local']);
+		expect(setting('Depth').querySelector('input[type=range]')).not.toBeNull();
+		el.remove();
+		// The global graph has no such section.
+		const global = document.body.createDiv();
+		new GraphControls(global, { ...DEFAULT_GRAPH_SETTINGS, colorGroups: [], close: false }, () => {});
+		expect(global.querySelector('.graph-control-section-header')?.textContent).toBe('Filters');
 	});
 
 	it('reads graph.json, edits it from the panel, and keeps Obsidian’s keys', async () => {

@@ -59,6 +59,22 @@ describe('buildGraph', () => {
 		expect(ids(buildGraph(input, { local: { center: 'Lonely.md', depth: 3 }, showOrphans: false }))).toEqual(['Lonely.md']);
 	});
 
+	it('follows incoming or outgoing links only, and leaves out links between neighbours', () => {
+		const tri: GraphInput = {
+			files: ['C.md', 'A.md', 'B.md', 'D.md'].map((path) => ({ path, extension: 'md' })),
+			resolvedLinks: { 'C.md': { 'A.md': 1, 'B.md': 1 }, 'A.md': { 'B.md': 1 }, 'D.md': { 'C.md': 1 } },
+			unresolvedLinks: {},
+			tags: {},
+		};
+		const local = (extra: object) => buildGraph(tri, { local: { center: 'C.md', depth: 1, ...extra } });
+		expect(ids(local({}))).toEqual(['A.md', 'B.md', 'C.md', 'D.md']);
+		expect(ids(local({ incoming: false }))).toEqual(['A.md', 'B.md', 'C.md']);
+		expect(ids(local({ outgoing: false }))).toEqual(['C.md', 'D.md']);
+		// A and B are both one link away: their link goes without neighbour links.
+		expect(pairs(local({}))).toContain('A.md -> B.md');
+		expect(pairs(local({ neighbors: false }))).not.toContain('A.md -> B.md');
+	});
+
 	it('filters by search text', () => {
 		expect(ids(buildGraph(input, { search: 'projects/' }))).toEqual(['Projects/Ideas.md', 'Projects/Plan.md']);
 	});
