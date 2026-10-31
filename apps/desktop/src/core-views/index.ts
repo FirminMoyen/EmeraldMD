@@ -1,12 +1,13 @@
 /**
  * Built-in views, registered like Obsidian's core plugins: search, graph,
- * local graph, outline, outgoing links, tags, bookmarks, canvas files, and
+ * local graph, outline, footnotes, outgoing links, tags, bookmarks, canvas files, and
  * the quick switcher.
  */
 
 import type { App } from '@emeraldmd/api';
 import { BOOKMARKS_VIEW, BookmarksView } from './bookmarks';
 import { CANVAS_VIEW, CanvasFileView } from './canvas';
+import { FOOTNOTES_VIEW, FootnotesView } from './footnotes';
 import { GlobalGraphView, GRAPH_VIEW, LOCAL_GRAPH_VIEW, LocalGraphView } from './graph';
 import type { CoreViewHost } from './host';
 import { OUTGOING_VIEW, OutgoingLinksView } from './outgoing';
@@ -27,6 +28,7 @@ export function registerCoreViews(app: App, host: CoreViewHost): void {
 	views.registerView(GRAPH_VIEW, (leaf) => new GlobalGraphView(leaf, host));
 	views.registerView(LOCAL_GRAPH_VIEW, (leaf) => new LocalGraphView(leaf, host));
 	views.registerView(OUTLINE_VIEW, (leaf) => new OutlineView(leaf, host));
+	views.registerView(FOOTNOTES_VIEW, (leaf) => new FootnotesView(leaf, host));
 	views.registerView(OUTGOING_VIEW, (leaf) => new OutgoingLinksView(leaf, host));
 	views.registerView(ALL_PROPERTIES_VIEW, (leaf) => new AllPropertiesView(leaf, host));
 	views.registerView(FILE_PROPERTIES_VIEW, (leaf) => new FilePropertiesView(leaf));
@@ -48,6 +50,7 @@ export function registerCoreViews(app: App, host: CoreViewHost): void {
 	add({ id: 'graph:open', name: 'Graph view: Open graph view', hotkeys: [{ modifiers: ['Mod'], key: 'G' }], callback: openGraph });
 	add({ id: 'graph:open-local', name: 'Graph view: Open local graph', callback: () => ws.ensureSideLeaf(LOCAL_GRAPH_VIEW, 'right') });
 	add({ id: 'outline:open', name: 'Outline: Show outline', callback: () => ws.ensureSideLeaf(OUTLINE_VIEW, 'right') });
+	add({ id: 'footnotes:open', name: 'Footnotes view: Show footnotes', callback: () => ws.ensureSideLeaf(FOOTNOTES_VIEW, 'right') });
 	add({ id: 'outgoing-links:open', name: 'Outgoing links: Show outgoing links', callback: () => ws.ensureSideLeaf(OUTGOING_VIEW, 'right') });
 	add({ id: 'properties:open', name: 'Properties view: Show all properties', callback: () => ws.ensureSideLeaf(ALL_PROPERTIES_VIEW, 'left') });
 	add({ id: 'properties:open-local', name: 'Properties view: Show file properties', callback: () => ws.ensureSideLeaf(FILE_PROPERTIES_VIEW, 'right') });

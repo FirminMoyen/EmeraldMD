@@ -86,6 +86,10 @@ end-to-end tests; the rest is in priority order within each section.
 - [x] Canvas files (`.canvas`): view and edit
 - [x] Backlinks with the line of each link; unlinked mentions (name and
       aliases, whole words, outside links) turned into links in one click
+- [x] Footnotes view ("Footnotes view: Show footnotes"): the open note's
+      footnotes in the order they are referenced, rendered, with undefined
+      and unreferenced ones marked; a click shows the definition, arrows
+      show each reference
 - [x] Outgoing links pane: the note's links, those not created yet, and
       unlinked mentions of other notes in its text
 - [x] Properties view: all properties of the vault with their counts (a
