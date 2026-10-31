@@ -48,6 +48,7 @@ import { EditorTab, FilesTab, HotkeysTab } from './settings-tabs';
 import { CorePluginsTab, DailyNotesTab, FileRecoveryTab, NoteComposerTab, TemplatesTab, UniqueNoteCreatorTab } from './core-plugin-tabs';
 import { CommandPalette, CommandPaletteTab, loadPinnedCommands } from './command-palette';
 import { registerCoreViews, revealSearch } from './core-views';
+import { setupDeepLinks } from './deep-links';
 import { RemoteVaults } from './remote';
 import { hostOf } from './remote/connect-modal';
 import { registerServerHistory } from './remote/history';
@@ -427,6 +428,8 @@ class EmeraldApp {
 			openFile: (file, select) => this.pane!.openFileAt(file, select),
 			openSearch: (query) => revealSearch(app, query),
 		});
+		// emeraldmd:// links, once the notes they open can be shown.
+		app.workspace.onLayoutReady(() => void setupDeepLinks(app, { openSearch: (query) => revealSearch(app, query) }));
 
 		for (const name of ['create', 'delete', 'rename']) vault.on(name, () => this.queueTreeRender());
 		vault.on('rename', (file: TAbstractFile) => {
