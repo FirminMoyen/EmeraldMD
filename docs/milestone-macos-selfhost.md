@@ -55,6 +55,16 @@ end-to-end tests; the rest is in priority order within each section.
       tabs and splits Obsidian left in `workspace.json`; `getLayout` and
       `changeLayout` use that format; Workspaces (core plugin) saves and
       loads named layouts in `workspaces.json`, readable by Obsidian
+- [x] Bases (core plugin, on by default): `.base` files as tables, cards
+      and lists, with Obsidian's formula language (filters, formulas,
+      summaries), sorting, grouping and limits; the toolbar (views, results
+      copied as Markdown or CSV, sort, filters, properties, formulas, new
+      note matching the filters) writes back the file in Obsidian's format;
+      note properties edited in table cells; embeds (`![[x.base#View]]`)
+      and `base` code blocks with `this`; plugins' view types
+      (`registerBasesView`) and the `Value` classes of the typings
+- [x] Live Preview renders the code blocks plugins draw (`base`,
+      Dataview…), with an edit button for their source
 - [x] Bookmarks (core plugin, `.obsidian/bookmarks.json`, groups, follow
       renames, left sidebar pane, file menu item)
 - [x] Properties editor: frontmatter as properties in Live Preview and the

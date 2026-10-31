@@ -256,7 +256,7 @@ describe('Bases views', () => {
 		expect(first[0]!.querySelector('a.internal-link')!.textContent).toBe('Dune');
 		expect(first[1]!.textContent).toBe('Frank Herbert');
 		expect(first[3]!.querySelector<HTMLInputElement>('input[type=checkbox]')!.checked).toBe(true);
-		expect(el.querySelector('.bases-summary[data-property="note.rating"]')!.textContent).toBe('Average4.66666666667');
+		expect(el.querySelector('.bases-summary[data-property="note.rating"]')!.textContent).toBe('Average4.67');
 	});
 
 	it('switches to cards and lists, with covers and groups', async () => {

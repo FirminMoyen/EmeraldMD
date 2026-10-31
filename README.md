@@ -32,7 +32,8 @@ keys, attachments by paste or drop, Export to PDF.
 forward, hover previews, the quick switcher and command palette, search with
 Obsidian's query syntax, backlinks with unlinked mentions, outgoing links,
 outline, tags, bookmarks, properties views, the graph with Obsidian's graph
-settings, and canvas files.
+settings, canvas files, and Bases (`.base` files as tables, cards and lists of
+notes, with Obsidian's formulas and filters).
 
 **Core plugins.** Daily notes, templates, page preview, bookmarks, file
 recovery, note composer, workspaces, slash commands, random note and unique

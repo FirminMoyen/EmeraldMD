@@ -12,7 +12,7 @@ import { FormulaModal, PromptModal } from './modals';
 import type { BasesEntry, BasesEntryGroup, BasesPropertyId, QueryController } from './query';
 import { normalizePropertyId, parsePropertyId, SUMMARIES } from './query';
 import { BasesView, editProperty, isEditable, renderProperty, shownProperties, wireCheckbox, type BasesViewRegistration } from './view';
-import { NullValue } from './values';
+import { NullValue, NumberValue } from './values';
 
 /** Rows drawn before "Show more". */
 const PAGE = 500;
@@ -121,7 +121,10 @@ export class TableView extends BasesView {
 			if (key) {
 				td.createSpan({ cls: 'bases-summary-label', text: key });
 				const value = this.data.getSummaryValue(this.controller, this.data.data, prop, key);
-				if (!(value instanceof NullValue)) value.renderTo(td.createSpan('bases-summary-value'), this.app.renderContext);
+				const valueEl = td.createSpan('bases-summary-value');
+				// Averages and the like, to two decimals.
+				if (value instanceof NumberValue && !Number.isInteger(value.value)) valueEl.setText(String(Math.round(value.value * 100) / 100));
+				else if (!(value instanceof NullValue)) value.renderTo(valueEl, this.app.renderContext);
 			}
 			td.addEventListener('click', (evt) => this.showSummaryMenu(evt, prop, key));
 		}
