@@ -131,6 +131,28 @@ describe('math and diagrams in Live Preview', () => {
 	});
 });
 
+describe("plugins' code blocks in Live Preview", () => {
+	it('renders blocks a plugin draws, keeps their clicks, and shows the source from the edit button', () => {
+		const parent = document.body.appendChild(document.createElement('div'));
+		const editor = new MarkdownEditor({
+			parent,
+			livePreview: { renderMarkdown: (markdown, el) => void (el.textContent = `rendered: ${markdown}`), isRenderedCodeBlock: (lang) => lang === 'base' },
+		});
+		editors.push(editor);
+		const doc = '```base\nviews: []\n```\n\n```js\nx\n```\n\nend';
+		editor.setValue(doc);
+		editor.setLivePreview(true);
+		editor.view.dispatch({ selection: { anchor: doc.length } });
+		const block = editor.view.dom.querySelector('.cm-preview-code-block.cm-lang-base')!;
+		expect(block.textContent).toBe('rendered: ```base\nviews: []\n```');
+		// Other languages stay code.
+		expect(editor.view.dom.querySelectorAll('.cm-preview-code-block')).toHaveLength(1);
+		(block.querySelector('.edit-block-button') as HTMLElement).click();
+		expect(editor.view.state.selection.main.head).toBe(doc.indexOf('views'));
+		expect(editor.view.dom.querySelector('.cm-preview-code-block')).toBeNull();
+	});
+});
+
 describe('Vim key bindings', () => {
 	it('turns on with the setting and edits with Vim keys', async () => {
 		const { DEFAULT_EDITOR_SETTINGS } = await import('../src');

@@ -12,11 +12,13 @@ import {
 	CodeMirrorEditor,
 	Component,
 	editorInfoExtensions,
+	hasCodeBlockProcessor,
 	MarkdownRenderer,
 	MarkdownView,
 	PropertiesEditor,
 	isPropertiesYaml,
 	Menu,
+	onCodeBlockProcessorsChanged,
 	setIcon,
 	setLivePreviewEffect,
 	setTooltip,
@@ -125,6 +127,8 @@ export class NotePane {
 	saving = false;
 	private dirty = false;
 	private saveTimer: ReturnType<typeof setTimeout> | undefined;
+	/** Stops redrawing Live Preview when plugins add or remove code block processors. */
+	private stopCodeBlockUpdates: () => void = () => {};
 	private applyingExternalChange = false;
 	/** Increases each time a tab starts to show, so a slower earlier one gives up. */
 	private showing = 0;
@@ -164,6 +168,7 @@ export class NotePane {
 				renderProperties: (yaml, el) => this.renderProperties(yaml, el),
 				validProperties: isPropertiesYaml,
 				propertiesInDocument: () => host.propertiesInDocument(),
+				isRenderedCodeBlock: (language) => hasCodeBlockProcessor(language),
 			},
 		});
 		parts.trash.addEventListener('click', () => void (this.activeFile && host.trash(this.activeFile)));
@@ -176,6 +181,8 @@ export class NotePane {
 			}
 		});
 		parts.title.addEventListener('change', () => void this.renameActiveFile(parts.title.value));
+		// Plugins load after the first note shows: their code blocks render once they register.
+		this.stopCodeBlockUpdates = onCodeBlockProcessorsChanged(() => this.editor.refreshLivePreview());
 
 		const view = new MarkdownView(leaf);
 		this.view = view;
@@ -337,6 +344,7 @@ export class NotePane {
 
 	destroy(): void {
 		clearTimeout(this.saveTimer);
+		this.stopCodeBlockUpdates();
 		this.editor.destroy();
 		this.containerEl.detach();
 	}
