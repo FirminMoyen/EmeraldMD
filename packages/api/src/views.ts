@@ -210,10 +210,76 @@ export interface MarkdownSubView {
 
 export type MarkdownViewModeType = 'source' | 'preview';
 
-/** Reading view of a note (`view.previewMode`). */
-export interface MarkdownPreviewView extends MarkdownSubView {
-	containerEl: HTMLElement;
-	rerender(full?: boolean): void;
+/** The reading view of a note (`view.previewMode`). */
+export class MarkdownPreviewView implements MarkdownSubView {
+	constructor(
+		private readonly view: MarkdownView,
+		readonly containerEl: HTMLElement,
+		/** The element that scrolls. */
+		private readonly scroller: HTMLElement,
+	) {}
+
+	get file(): TFile | null {
+		return this.view.file;
+	}
+
+	get(): string {
+		return this.view.getViewData();
+	}
+
+	/** Shows the note's current text (the view holds it). */
+	set(_data: string, _clear: boolean): void {
+		void this.view.renderPreview();
+	}
+
+	clear(): void {
+		this.containerEl.empty();
+	}
+
+	rerender(_full?: boolean): void {
+		void this.view.renderPreview();
+	}
+
+	getScroll(): number {
+		return this.scroller.scrollTop;
+	}
+
+	applyScroll(scroll: number): void {
+		this.scroller.scrollTop = scroll;
+	}
+}
+
+/** The editing mode of a note (`view.editMode`): the shell's CodeMirror editor. */
+export class MarkdownEditView implements MarkdownSubView {
+	constructor(private readonly view: MarkdownView) {}
+
+	get file(): TFile | null {
+		return this.view.file;
+	}
+
+	get(): string {
+		return this.view.getViewData();
+	}
+
+	set(data: string, clear: boolean): void {
+		this.view.setViewData(data, clear);
+	}
+
+	clear(): void {
+		this.view.clear();
+	}
+
+	getSelection(): string {
+		return this.view.editor?.getSelection() ?? '';
+	}
+
+	getScroll(): number {
+		return this.view.editor?.getScrollInfo().top ?? 0;
+	}
+
+	applyScroll(scroll: number): void {
+		this.view.editor?.scrollTo(null, scroll);
+	}
 }
 
 /**
@@ -226,8 +292,10 @@ export class MarkdownView extends TextFileView implements MarkdownFileInfo {
 	hoverPopover: unknown = null;
 	currentMode: MarkdownSubView;
 	previewMode: MarkdownPreviewView;
-	/** @internal The editing mode (the shell's CodeMirror editor). */
-	readonly sourceMode: MarkdownSubView;
+	/** The editing mode (the shell's CodeMirror editor). */
+	editMode: MarkdownEditView;
+	/** @internal The same as `editMode`, as Obsidian also calls it. */
+	readonly sourceMode: MarkdownEditView;
 	/** @internal Called after the mode changes, so the shell can update its controls. */
 	onModeChange: ((mode: MarkdownViewModeType) => void) | null = null;
 	/** @internal Whether editing shows Live Preview (true) or plain source (false). */
@@ -245,20 +313,8 @@ export class MarkdownView extends TextFileView implements MarkdownFileInfo {
 		// `.markdown-reading-view > .markdown-preview-view.markdown-rendered`, the structure themes style.
 		this.readingEl = this.contentEl.createDiv('markdown-reading-view');
 		const previewEl = this.readingEl.createDiv('markdown-preview-view markdown-rendered');
-		this.sourceMode = {
-			getScroll: () => this.editor?.getScrollInfo().top ?? 0,
-			applyScroll: (scroll) => this.editor?.scrollTo(null, scroll),
-			get: () => this.getViewData(),
-			set: (data, clear) => this.setViewData(data, clear),
-		};
-		this.previewMode = {
-			containerEl: previewEl,
-			getScroll: () => this.readingEl.scrollTop,
-			applyScroll: (scroll) => (this.readingEl.scrollTop = scroll),
-			get: () => this.getViewData(),
-			set: () => void this.renderPreview(),
-			rerender: () => void this.renderPreview(),
-		};
+		this.sourceMode = this.editMode = new MarkdownEditView(this);
+		this.previewMode = new MarkdownPreviewView(this, previewEl, this.readingEl);
 		this.currentMode = this.sourceMode;
 	}
 

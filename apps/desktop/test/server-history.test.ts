@@ -9,6 +9,7 @@ function fakeServer() {
 	const texts: Record<string, Record<number, string>> = {
 		'Note.md': { 200: 'second', 100: 'first' },
 		'Gone/Old.md': { 50: 'old text' },
+		'photo.png': { 65: 'PNGDATA' },
 	};
 	const encoder = new TextEncoder();
 	return {
@@ -32,8 +33,14 @@ it('reads versions and deleted notes from the server', async () => {
 		{ path: 'Note.md', time: 200, text: 'second' },
 		{ path: 'Note.md', time: 100, text: 'first' },
 	]);
-	// Attachments are left out: the modal shows text.
-	expect(await source.paths()).toEqual([{ path: 'Gone/Old.md', time: 60 }]);
+	expect(await source.paths()).toEqual([
+		{ path: 'Gone/Old.md', time: 60 },
+		{ path: 'photo.png', time: 70 },
+	]);
+	// Attachments come as bytes.
+	const [photo] = await source.list('photo.png');
+	expect(photo!.text).toBe('');
+	expect(new TextDecoder().decode(photo!.bytes!)).toBe('PNGDATA');
 });
 
 it('shows a note’s versions and restores a deleted note with its folder', async () => {
@@ -53,7 +60,7 @@ it('shows a note’s versions and restores a deleted note with its folder', asyn
 
 	expect(shell.app.commands.executeCommandById('server-history:deleted')).toBe(true);
 	const deleted = await vi.waitFor(() => {
-		const el = document.querySelector<HTMLElement>('.mod-file-recovery .file-recovery-item');
+		const el = [...document.querySelectorAll<HTMLElement>('.mod-file-recovery .file-recovery-item')].find((item) => item.querySelector('.file-recovery-path')?.textContent === 'Gone/Old.md');
 		if (!el) throw new Error('no deleted files yet');
 		return el;
 	});
@@ -76,4 +83,31 @@ it('shows a note’s versions and restores a deleted note with its folder', asyn
 		if (!shell.app.vault.getFileByPath('Gone/Old.md')) throw new Error('not restored yet');
 	});
 	expect(await shell.app.vault.read(shell.app.vault.getFileByPath('Gone/Old.md')!)).toBe('old text');
+});
+
+it('previews and restores a deleted attachment', async () => {
+	const shell = await startShell({ 'Note.md': 'n' }, {});
+	registerServerHistory(shell.app, async () => fakeServer());
+	shell.app.commands.executeCommandById('server-history:deleted');
+	const photo = await vi.waitFor(() => {
+		const el = [...document.querySelectorAll<HTMLElement>('.mod-file-recovery .file-recovery-item')].find((item) => item.querySelector('.file-recovery-path')?.textContent === 'photo.png');
+		if (!el) throw new Error('no deleted files yet');
+		return el;
+	});
+	photo.click();
+	const preview = await vi.waitFor(() => {
+		const img = document.querySelector<HTMLImageElement>('.file-recovery-content.mod-attachment img');
+		if (!img) throw new Error('no preview yet');
+		return img;
+	});
+	expect(preview.getAttribute('src')).toMatch(/^blob:/);
+	expect(document.querySelector('.mod-file-recovery .file-recovery-size')?.textContent).toBe('7 bytes');
+	[...document.querySelectorAll<HTMLButtonElement>('.file-recovery-actions button')].find((b) => b.textContent === 'Restore')!.click();
+	const confirm = await vi.waitFor(() => {
+		const button = [...document.querySelectorAll<HTMLButtonElement>('.modal-button-container button')].find((b) => b.textContent === 'Restore');
+		if (!button) throw new Error('no confirmation yet');
+		return button;
+	});
+	confirm.click();
+	await vi.waitFor(() => expect(shell.backend.files.get('photo.png')).toBe('PNGDATA'));
 });

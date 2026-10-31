@@ -94,6 +94,17 @@ export async function startShell(files: Record<string, string>, config: Record<s
 		},
 		{ shouldMockEvents: true },
 	);
+	// Binary files travel as raw bytes with their path in a header, which mockIPC drops: serve them here.
+	const internals = (window as unknown as { __TAURI_INTERNALS__: { invoke: (cmd: string, args?: unknown, options?: { headers?: Record<string, string> }) => Promise<unknown> } }).__TAURI_INTERNALS__;
+	const invoke = internals.invoke;
+	internals.invoke = async (cmd, args, options) => {
+		if (cmd === 'write_binary') {
+			const bytes = args as Uint8Array;
+			return backend.writeBinary(decodeURIComponent(options!.headers!.path!), bytes.slice().buffer);
+		}
+		if (cmd === 'read_binary') return backend.readBinary((args as { path: string }).path);
+		return invoke(cmd, args, options);
+	};
 
 	await import('../src/main');
 	const app = await vi.waitFor(
