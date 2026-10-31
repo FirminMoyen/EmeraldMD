@@ -5,11 +5,17 @@
  */
 
 import { readFileSync } from 'node:fs';
+import { EditorView } from '@codemirror/view';
 import { mockIPC, mockWindows } from '@tauri-apps/api/mocks';
 import type { App } from '@emeraldmd/api';
 import { MemoryBackend, MemoryConfigStore } from '@emeraldmd/api/testing';
 import type { VaultSnapshot } from '@emeraldmd/core';
-import { vi } from 'vitest';
+import { afterAll, vi } from 'vitest';
+
+// CodeMirror's timers that fire after a test file ends find no window any more: stop the editors first.
+afterAll(() => {
+	for (const el of document.querySelectorAll<HTMLElement>('.cm-editor')) EditorView.findFromDOM(el)?.destroy();
+});
 
 export interface Shell {
 	app: App;
