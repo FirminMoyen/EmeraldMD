@@ -10,20 +10,25 @@
 //! Everything that leaves this module goes through the path policy in
 //! [`crate::paths`]: nothing behind a symbolic link that leads out of the
 //! vault folder is read, written or listed.
+//!
+//! With version history on, every change (from a client or seen by the
+//! watcher) is also kept in the vault's [`History`].
 
 use std::collections::VecDeque;
 use std::path::Path;
 use std::sync::{Arc, RwLock, RwLockReadGuard, RwLockWriteGuard, Weak};
 
 use axum::extract::ws::Utf8Bytes;
+use emerald_core::path::{is_hidden, normalize_path};
 use emerald_core::vault::Result as VaultResult;
-use emerald_core::{ConfigListing, FileEntry, SearchError, SearchOptions, SearchResults, Vault, VaultSession, VaultSnapshot, VaultUpdate};
+use emerald_core::{ConfigListing, EntryKind, FileEntry, SearchError, SearchOptions, SearchResults, Vault, VaultError, VaultSession, VaultSnapshot, VaultUpdate};
 use emerald_sync::{HashCache, Manifest};
 use notify::{RecursiveMode, Watcher};
 use serde::Serialize;
 use tokio::sync::broadcast;
 
 use crate::config::VaultConfig;
+use crate::history::{self, DeletedFile, History, HistorySettings, VersionInfo};
 use crate::paths::{self, Escapes};
 
 const HISTORY_LEN: usize = 1024;
@@ -81,13 +86,29 @@ pub struct SharedVault {
     watcher: std::sync::Mutex<Option<notify::RecommendedWatcher>>,
     /// Content hashes for sync manifests, reused while files are unchanged.
     hashes: std::sync::Mutex<HashCache>,
+    /// Earlier versions of files and deleted files; `None` when history is off.
+    history: Option<History>,
+    /// What `history` was opened with; a reload reopens the vault if this changes.
+    pub(crate) history_settings: Option<HistorySettings>,
 }
+
+/// Version history is off on this server.
+#[derive(Debug)]
+pub struct NoHistory;
 
 
 impl SharedVault {
     /// Opens and indexes the vault, and starts watching it for outside changes.
-    pub fn open(config: &VaultConfig) -> Result<Arc<Self>, String> {
+    pub fn open(config: &VaultConfig, history: Option<&HistorySettings>) -> Result<Arc<Self>, String> {
         let session = VaultSession::open(&config.path).map_err(|e| format!("vault {:?} ({}): {e}", config.id, config.path.display()))?;
+        // A history folder that cannot be written must not keep the vault from being served.
+        let history_store = history.and_then(|settings| match History::open(settings, &config.id) {
+            Ok(history) => Some(history),
+            Err(err) => {
+                tracing::warn!(vault = %config.id, dir = %settings.dir.display(), "version history is off for this vault: {err}");
+                None
+            }
+        });
         let name = config.name.clone().unwrap_or_else(|| session.vault().name());
         let root = session.vault().root().to_path_buf();
         let vault = Arc::new(Self {
@@ -99,6 +120,8 @@ impl SharedVault {
             events: broadcast::channel(CHANNEL_CAPACITY).0,
             watcher: std::sync::Mutex::new(None),
             hashes: std::sync::Mutex::new(HashCache::default()),
+            history: history_store,
+            history_settings: history.cloned(),
         });
         let watcher = watch(Arc::downgrade(&vault), &root).map_err(|e| format!("cannot watch {}: {e}", root.display()))?;
         *vault.watcher.lock().map_err(|_| "watcher lock poisoned")? = Some(watcher);
@@ -210,17 +233,117 @@ impl SharedVault {
 
     /// Runs a mutation and publishes its update to every other client. `f`
     /// runs under the vault's lock and should check its paths with
-    /// [`crate::paths`] before touching anything.
+    /// [`crate::paths`] before touching anything. `changes` are the paths it
+    /// will change or delete: those (and the files under them) that have no
+    /// version yet get one of their current content first.
     pub fn mutate(
         &self,
         origin: Option<String>,
+        changes: &[&str],
         f: impl FnOnce(&mut VaultSession) -> VaultResult<VaultUpdate>,
     ) -> VaultResult<VaultUpdate> {
         let mut inner = self.write_inner();
+        self.seed_history(&inner, changes);
         let mut update = f(&mut inner.session)?;
         hide_escapes(inner.session.vault(), &mut update);
+        self.remember(&inner, &update);
         self.publish(&mut inner, origin, &update);
         Ok(update)
+    }
+
+    /// Keeps the current content of the files at (or under) `paths` that have no version yet.
+    fn seed_history(&self, inner: &Inner, paths: &[&str]) {
+        let Some(history) = &self.history else { return };
+        let vault = inner.session.vault();
+        for path in paths {
+            let path = normalize_path(path);
+            let prefix = format!("{path}/");
+            let files: Vec<&FileEntry> = inner
+                .session
+                .index()
+                .entries()
+                .filter(|e| e.kind == EntryKind::File && (e.path == path || e.path.starts_with(&prefix)))
+                .collect();
+            let escapes = Escapes::find(vault, files.iter().map(|e| e.path.as_str()));
+            for entry in files {
+                if escapes.hides(&entry.path) || history.has_versions(&entry.path) {
+                    continue;
+                }
+                match vault.read_bytes(&entry.path) {
+                    Ok(data) => {
+                        if let Err(err) = history.seed(&entry.path, &data, entry.mtime) {
+                            tracing::warn!(vault = %self.id, path = %entry.path, "could not keep a version: {err}");
+                        }
+                    }
+                    Err(err) => tracing::debug!(vault = %self.id, path = %entry.path, "could not read for history: {err}"),
+                }
+            }
+        }
+    }
+
+    /// Records an update in the history: renames move versions, removals are
+    /// noted, and written files get a version of their new content.
+    fn remember(&self, inner: &Inner, update: &VaultUpdate) {
+        let Some(history) = &self.history else { return };
+        let now = history::now_ms();
+        let vault = inner.session.vault();
+        let warn = |path: &str, err: std::io::Error| tracing::warn!(vault = %self.id, %path, "could not update the history: {err}");
+        for (from, to) in &update.renamed {
+            if let Err(err) = history.rename(from, to) {
+                warn(from, err);
+            }
+        }
+        for path in &update.removed {
+            if let Err(err) = history.mark_deleted(path, now) {
+                warn(path, err);
+            }
+        }
+        for entry in update.upserted.iter().filter(|e| e.kind == EntryKind::File) {
+            match vault.read_bytes(&entry.path) {
+                Ok(data) => {
+                    if let Err(err) = history.record(&entry.path, &data, now) {
+                        warn(&entry.path, err);
+                    }
+                }
+                // Gone again already: the next update says so.
+                Err(err) => tracing::debug!(vault = %self.id, path = %entry.path, "could not read for history: {err}"),
+            }
+        }
+    }
+
+    fn history(&self) -> Result<&History, NoHistory> {
+        self.history.as_ref().ok_or(NoHistory)
+    }
+
+    /// A vault path to look up in the history: normalized, never hidden.
+    fn history_path(&self, path: &str) -> VaultResult<String> {
+        let inner = self.read_inner();
+        inner.session.vault().full_path(path)?;
+        let normalized = normalize_path(path);
+        if normalized.is_empty() || is_hidden(&normalized) {
+            return Err(VaultError::NotFound(normalized));
+        }
+        Ok(normalized)
+    }
+
+    /// A file's versions, newest first.
+    pub fn versions(&self, path: &str) -> Result<VaultResult<Vec<VersionInfo>>, NoHistory> {
+        let history = self.history()?;
+        Ok(self.history_path(path).map(|path| history.versions(&path)))
+    }
+
+    /// The content of one version of a file.
+    pub fn read_version(&self, path: &str, time: u64) -> Result<VaultResult<Vec<u8>>, NoHistory> {
+        let history = self.history()?;
+        Ok(self.history_path(path).and_then(|path| history.read(&path, time).map_err(VaultError::from)))
+    }
+
+    /// Deleted files that still have versions, most recently deleted first.
+    pub fn deleted_files(&self) -> Result<Vec<DeletedFile>, NoHistory> {
+        let history = self.history()?;
+        let inner = self.read_inner();
+        let index = inner.session.index();
+        Ok(history.deleted(|path| index.entry(path).is_some()))
     }
 
     /// Applies a change reported by the file watcher.
@@ -230,6 +353,7 @@ impl SharedVault {
         match inner.session.sync_path(&path) {
             Ok(mut update) => {
                 hide_escapes(inner.session.vault(), &mut update);
+                self.remember(&inner, &update);
                 self.publish(&mut inner, None, &update);
             }
             Err(err) => tracing::warn!(vault = %self.id, %path, "could not sync: {err}"),
