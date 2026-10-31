@@ -535,6 +535,11 @@ export class InternalPlugins {
 		}
 	}
 
+	/** @internal Turns every core plugin off without saving (the vault closes). */
+	unload(): void {
+		for (const [id, plugin] of Object.entries(this.plugins)) if (plugin.enabled) this.disable(id);
+	}
+
 	/** Turns a core plugin on or off and saves the choice in core-plugins.json. */
 	async setEnabled(id: string, on: boolean): Promise<void> {
 		if (!this.plugins[id] || !this.app) return;

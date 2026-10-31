@@ -250,6 +250,7 @@ export class App {
 	destroy(): void {
 		for (const cleanup of this.cleanups.splice(0)) cleanup();
 		for (const modal of [...this.openModals]) modal.close();
+		this.internalPlugins.unload();
 		this.appearance.unload();
 		this.customCss.unload();
 	}

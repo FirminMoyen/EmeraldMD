@@ -119,6 +119,13 @@ function dates(values: Value[]): Date[] {
 	return values.filter((v): v is DateValue => v instanceof DateValue).map((v) => v.date);
 }
 
+/** The earliest (`-1`) or latest (`1`) date, as it was (with or without a time). */
+function extreme(values: Value[], sign: 1 | -1): Value {
+	let best: DateValue | null = null;
+	for (const v of values) if (v instanceof DateValue && (!best || sign * (v.date.getTime() - best.date.getTime()) > 0)) best = v;
+	return best ?? NullValue.value;
+}
+
 const isEmpty = (v: Value) => v instanceof NullValue || (v instanceof StringValue && v.value === '') || (v instanceof ListValue && v.length() === 0);
 
 /** The built-in summaries, by the name stored in the base. */
@@ -154,14 +161,8 @@ export const SUMMARIES: Record<string, (values: Value[]) => Value> = {
 		const mean = n.reduce((a, b) => a + b, 0) / n.length;
 		return new NumberValue(Math.sqrt(n.reduce((a, b) => a + (b - mean) ** 2, 0) / n.length));
 	},
-	Earliest: (values) => {
-		const d = dates(values);
-		return d.length ? new DateValue(new Date(Math.min(...d.map(Number)))) : NullValue.value;
-	},
-	Latest: (values) => {
-		const d = dates(values);
-		return d.length ? new DateValue(new Date(Math.max(...d.map(Number)))) : NullValue.value;
-	},
+	Earliest: (values) => extreme(values, -1),
+	Latest: (values) => extreme(values, 1),
 	Checked: (values) => new NumberValue(values.filter((v) => v instanceof BooleanValue && v.value).length),
 	Unchecked: (values) => new NumberValue(values.filter((v) => v instanceof BooleanValue && !v.value).length),
 	Empty: (values) => new NumberValue(values.filter(isEmpty).length),

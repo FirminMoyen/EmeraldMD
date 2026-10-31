@@ -11,7 +11,7 @@ import { normalizePath, TFolder, type TAbstractFile, type TFile } from '@emerald
 import type { App } from '../app';
 import { InternalPluginInstance } from '../core-plugins';
 import type { Editor } from '../editor';
-import { MarkdownPreviewRenderer, MarkdownRenderChild } from '../markdown';
+import { MarkdownPreviewRenderer, MarkdownRenderChild, type MarkdownPostProcessor } from '../markdown';
 import type { Menu } from '../menu';
 import { Component } from '../component';
 import { Notice } from '../notice';
@@ -34,6 +34,27 @@ function load(controller: QueryController, text: string): void {
 	} catch (err) {
 		controller.setConfig({}, `This base could not be read: ${(err as Error).message}`);
 	}
+}
+
+/**
+ * Post-processors are global, so one draws `base` code blocks for the vault
+ * open now: the Bases plugin enabled last (a vault opened after another
+ * gets its own).
+ */
+let activeBases: { plugin: Bases; app: App } | null = null;
+let codeBlocks: MarkdownPostProcessor | null = null;
+
+function installCodeBlocks(): void {
+	if (codeBlocks) return;
+	codeBlocks = MarkdownPreviewRenderer.createCodeBlockPostProcessor('base', (source, el, ctx) => {
+		if (activeBases) ctx.addChild(new BaseCodeBlock(activeBases.plugin, activeBases.app, el, source, ctx.sourcePath));
+	});
+	MarkdownPreviewRenderer.registerPostProcessor(codeBlocks, -100);
+}
+
+function uninstallCodeBlocks(): void {
+	if (codeBlocks) MarkdownPreviewRenderer.unregisterPostProcessor(codeBlocks);
+	codeBlocks = null;
 }
 
 export class Bases extends InternalPluginInstance {
@@ -63,11 +84,13 @@ export class Bases extends InternalPluginInstance {
 			app.embedRegistry.registerExtension('base', (ctx, file, subpath) => new BaseEmbed(this, app, ctx.containerEl, file, ctx.sourcePath, subpath));
 			this.cleanups.push(() => app.embedRegistry.unregisterExtension('base'));
 		}
-		const processor = MarkdownPreviewRenderer.createCodeBlockPostProcessor('base', (source, el, ctx) => {
-			ctx.addChild(new BaseCodeBlock(this, app, el, source, ctx.sourcePath));
+		activeBases = { plugin: this, app };
+		installCodeBlocks();
+		this.cleanups.push(() => {
+			if (activeBases?.plugin !== this) return;
+			activeBases = null;
+			uninstallCodeBlocks();
 		});
-		MarkdownPreviewRenderer.registerPostProcessor(processor, -100);
-		this.cleanups.push(() => MarkdownPreviewRenderer.unregisterPostProcessor(processor));
 
 		this.addCommand({ id: 'bases:new-file', name: 'Bases: Create new base', callback: () => void this.createBase() });
 		this.addCommand({
