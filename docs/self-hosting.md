@@ -48,6 +48,15 @@ id = "work"
 path = "/srv/vaults/work"
 
 # [[tokens]] entries are added by `emeraldmd-server token add`; see section 2.
+
+# Version history (section 6): earlier versions of files and deleted files,
+# kept outside the vaults. On by default.
+[history]
+# enabled = true
+# dir = "/srv/emeraldmd/history"   # default: a `history` folder next to this file
+# keep_days = 30                    # versions older than this are removed
+# interval_minutes = 5              # changes closer together update one version
+# max_file_mb = 10                  # larger files get no versions
 ```
 
 Environment variables add to the file, or replace it entirely:
@@ -60,6 +69,7 @@ Environment variables add to the file, or replace it entirely:
 | `EMERALDMD_TOKEN_HASHES` | Extra token hashes separated by whitespace; each may open every vault |
 | `EMERALDMD_ALLOWED_ORIGINS` | Extra CORS origins, comma-separated |
 | `EMERALDMD_TRUSTED_PROXIES` | Extra trusted proxies, comma-separated |
+| `EMERALDMD_HISTORY_DIR` | Where version history is kept (replaces `[history] dir`) |
 | `RUST_LOG` | Log level, e.g. `info` (default) or `emerald_server=debug,tower_http=debug` |
 
 The server refuses to start without at least one vault and one token, or if a
@@ -278,6 +288,31 @@ If the new config does not load (a syntax error, a vault folder that does
 not exist), the log says why and the server keeps the previous config.
 Check the log after a reload, especially after revoking a token.
 
+### Version history
+
+Like Obsidian Sync, the server keeps earlier versions of every file and the
+files that were deleted, for `keep_days` (30 by default). In the app, use
+"Server: Show version history" on a note, or "Server: Show deleted files", to
+look at a version, compare it with the current text, and restore it.
+
+- A version is a file's content after a change. Changes less than
+  `interval_minutes` apart (5 by default) update the same version, so a burst
+  of typing keeps one version: its last state.
+- Before the server first changes or deletes a file, it keeps the content
+  the file had, so the state before the first change can be restored too.
+- Changes made outside the server (another program, a sync tool) get
+  versions as well; renames move a file's versions with it.
+- Files larger than `max_file_mb` (10 by default) get no versions. The
+  `.obsidian` folder has none either.
+
+Versions are kept in `[history] dir`, outside the vaults: by default a
+`history` folder next to the config file (with the Docker example,
+`/srv/emeraldmd/config/history`), or `EMERALDMD_HISTORY_DIR`. Without a
+config file or that variable, or with `enabled = false`, there is no history.
+The folder holds the notes' contents: it is created readable by the server's
+user only, and belongs in your backups. Changing `[history]` takes effect on
+a reload (the vaults are reopened).
+
 ### Health check
 
 `GET /healthz` answers `{"status": "ok"}` without a token and tells nothing
@@ -346,6 +381,9 @@ streams), 503 (server busy) or 500. Every response carries
 | `POST /api/vaults/{id}/folders` | `{"path"}` | `VaultUpdate` |
 | `POST /api/vaults/{id}/rename` | `{"from", "to"}` | `VaultUpdate` |
 | `POST /api/vaults/{id}/trash` | `{"path"}` | `VaultUpdate` (moved to `.trash`) |
+| `GET /api/vaults/{id}/history?path=` | | `{"versions": [{"time", "size"}]}`, newest first (`time` in ms); `404` when version history is off |
+| `GET /api/vaults/{id}/history/raw?path=&time=` | | The bytes of that version |
+| `GET /api/vaults/{id}/history/deleted` | | `[{"path", "deletedAt", "size"}]`: deleted files that have versions, most recent first |
 | `GET /api/vaults/{id}/config/list?path=` | | `{"files", "folders"}` of a folder in `.obsidian` |
 | `GET /api/vaults/{id}/config/stat?path=` | | The entry of a path in `.obsidian`, or `null` |
 | `PUT /api/vaults/{id}/config/file?path=` | The new content (text or bytes) | 204; writes a file in `.obsidian` (read it with `GET /files` or `GET /raw`). Not announced on the event stream |

@@ -6,6 +6,7 @@ pub mod api;
 pub mod auth;
 pub mod config;
 mod events;
+pub mod history;
 pub mod limits;
 pub mod net;
 pub mod paths;
@@ -101,11 +102,12 @@ impl AppState {
         let current = self.live();
         let mut summary = ReloadSummary { tokens: config.tokens.len(), ..ReloadSummary::default() };
         let mut vaults = HashMap::new();
+        let history = config.history.settings();
         for vault in &config.vaults {
             let shared = match current.vaults.get(&vault.id) {
-                Some(existing) if existing.config == *vault => existing.clone(),
+                Some(existing) if existing.config == *vault && existing.history_settings == history => existing.clone(),
                 existing => {
-                    let opened = SharedVault::open(vault)?;
+                    let opened = SharedVault::open(vault, history.as_ref())?;
                     if existing.is_some() {
                         summary.vaults_reopened.push(vault.id.clone());
                     } else {
@@ -157,7 +159,7 @@ impl Server {
         config.validate().map_err(|e| e.to_string())?;
         let mut vaults = HashMap::new();
         for vault in &config.vaults {
-            let shared = SharedVault::open(vault)?;
+            let shared = SharedVault::open(vault, config.history.settings().as_ref())?;
             tracing::info!(id = %vault.id, path = %vault.path.display(), "serving vault");
             vaults.insert(vault.id.clone(), shared);
         }
