@@ -5,8 +5,12 @@
 
 use std::sync::Mutex;
 
-use tauri::{AppHandle, Emitter, Manager, State};
+use tauri::State;
+#[cfg(any(target_os = "macos", target_os = "ios"))]
+use tauri::{AppHandle, Emitter, Manager};
 
+// macOS and iOS hand links to the app with `RunEvent::Opened`; other systems need a plugin, still to come.
+#[cfg(any(target_os = "macos", target_os = "ios"))]
 pub const SCHEME: &str = "emeraldmd";
 
 /// Links received and not yet taken by the page.
@@ -14,6 +18,7 @@ pub const SCHEME: &str = "emeraldmd";
 pub struct OpenUrls(Mutex<Vec<String>>);
 
 /// Keeps the `emeraldmd://` links among `urls` for the page, and shows the window.
+#[cfg(any(target_os = "macos", target_os = "ios"))]
 pub fn received<'a>(app: &AppHandle, urls: impl IntoIterator<Item = &'a str>) {
     let links: Vec<String> = urls.into_iter().filter(|u| u.starts_with(&format!("{SCHEME}:"))).map(str::to_owned).collect();
     if links.is_empty() {
