@@ -2030,6 +2030,57 @@ a.tag {
 	padding-bottom: 3px;
 }
 
+/* Nested headings indent; their folding arrow sits in the indent. */
+.outline-tree .tree-item-children {
+	padding-inline-start: 14px;
+	margin-inline-start: 7px;
+	border-inline-start: 1px solid var(--background-modifier-border);
+}
+
+.outline-tree .tree-item.is-collapsed > .tree-item-children {
+	display: none;
+}
+
+.outline-item .collapse-icon {
+	display: flex;
+	margin-inline-start: -16px;
+	width: 16px;
+	color: var(--nav-collapse-icon-color);
+	transition: transform 0.1s;
+	transform: rotate(90deg);
+}
+
+.outline-tree .tree-item.is-collapsed > .outline-item .collapse-icon {
+	transform: none;
+}
+
+.outline-item .collapse-icon .svg-icon {
+	width: 10px;
+	height: 10px;
+}
+
+.outline-item.mod-collapsible,
+.outline-tree > .tree-item > .outline-item {
+	padding-inline-start: 20px;
+}
+
+.outline-item.is-active {
+	color: var(--text-accent);
+	font-weight: var(--font-semibold);
+}
+
+.outline-item.is-drop-before {
+	box-shadow: inset 0 2px 0 var(--interactive-accent);
+}
+
+.outline-view .search-input-container {
+	padding: 0 var(--size-4-2) var(--size-4-2);
+}
+
+.outline-view .search-input-container input {
+	width: 100%;
+}
+
 .tag-pane-tag-text {
 	color: var(--text-accent);
 }

@@ -160,6 +160,10 @@ export class NotePane {
 		this.editor = new MarkdownEditor({
 			parent: parts.editor,
 			onChange: () => this.onEdit(),
+			// For views that follow the cursor (the outline's current heading).
+			onCursor: (offset) => {
+				if (this.activeFile) app.workspace.trigger('emerald:cursor', this.activeFile, offset);
+			},
 			onOpenLink: (link, newTab) => void this.openLink(link, newTab),
 			onOpenUrl: (url) => void host.openExternal(url),
 			onHoverLink: (event, linktext, targetEl) => {

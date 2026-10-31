@@ -167,6 +167,8 @@ function settingsExtensions(settings: EditorSettings): Extension {
 export interface MarkdownEditorOptions {
 	parent: HTMLElement;
 	onChange?: (text: string) => void;
+	/** The cursor moved (or the text changed under it): its offset. */
+	onCursor?: (offset: number) => void;
 	/** A wikilink to follow: a click in Live Preview, or Cmd/Ctrl-click (then `newTab`). */
 	onOpenLink?: (linktext: string, newTab: boolean) => void;
 	/** Files pasted or dropped into the editor, with the document position to insert at. */
@@ -219,6 +221,7 @@ export class MarkdownEditor {
 			]),
 			EditorView.updateListener.of((update) => {
 				if (update.docChanged) options.onChange?.(update.state.doc.toString());
+				if (update.selectionSet || update.docChanged) options.onCursor?.(update.state.selection.main.head);
 			}),
 			EditorView.domEventHandlers({
 				paste: (event, view) => {
