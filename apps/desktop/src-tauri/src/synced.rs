@@ -10,11 +10,11 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, RecvTimeoutError, Sender};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use emerald_sync::{Action, HttpRemote, SyncOptions, is_config, sync_once_with};
+use emerald_sync::{Action, HttpRemote, SyncFilter, SyncOptions, is_config, sync_once_with};
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Emitter, Manager, State};
 
@@ -37,6 +37,9 @@ pub struct SyncedVault {
     /// Also sync `.obsidian` (settings, themes, snippets, plugins); off unless the user turns it on.
     #[serde(default)]
     pub sync_config: bool,
+    /// Folders and file types this device leaves out (selective sync).
+    #[serde(default)]
+    pub filter: SyncFilter,
 }
 
 #[derive(Serialize, Clone, Debug)]
@@ -97,6 +100,8 @@ pub struct Syncer {
     stop: Arc<AtomicBool>,
     /// Whether passes include `.obsidian` (the vault's `sync_config`, changed while open by `set_sync_config`).
     sync_config: Arc<AtomicBool>,
+    /// What passes leave out (the vault's `filter`, changed while open by `set_sync_filter`).
+    filter: Arc<Mutex<SyncFilter>>,
 }
 
 impl Drop for Syncer {
@@ -111,8 +116,10 @@ impl Syncer {
         let device = device_name();
         let stop = Arc::new(AtomicBool::new(false));
         let sync_config = Arc::new(AtomicBool::new(config.sync_config));
+        let filter = Arc::new(Mutex::new(config.filter.clone()));
         Self::watch_server(&config, &device, trigger.clone(), stop.clone());
         let pass_config = sync_config.clone();
+        let pass_filter = filter.clone();
         thread::spawn(move || {
             loop {
                 // A nudge (opening, edits, "Sync now") or the poll interval starts a pass.
@@ -131,11 +138,15 @@ impl Syncer {
                         }
                     }
                 }
-                let status = run_pass(&app, &config, &root, &device, pass_config.load(Ordering::SeqCst));
+                let options = SyncOptions {
+                    config: pass_config.load(Ordering::SeqCst),
+                    filter: pass_filter.lock().map(|f| f.clone()).unwrap_or_default(),
+                };
+                let status = run_pass(&app, &config, &root, &device, options);
                 let _ = app.emit("sync-status", &status);
             }
         });
-        Self { trigger, stop, sync_config }
+        Self { trigger, stop, sync_config, filter }
     }
 
     /// Syncs as soon as the server vault changes, through its event stream.
@@ -181,7 +192,7 @@ fn token(config: &SyncedVault) -> Result<String, keyring::Error> {
     keyring::Entry::new(KEYCHAIN_SERVICE, &config.server_url)?.get_password()
 }
 
-fn run_pass(app: &AppHandle, config: &SyncedVault, root: &Path, device: &str, sync_config: bool) -> SyncStatus {
+fn run_pass(app: &AppHandle, config: &SyncedVault, root: &Path, device: &str, options: SyncOptions) -> SyncStatus {
     let _ = app.emit("sync-status", &SyncStatus::Syncing);
     let token = match token(config) {
         Ok(token) => token,
@@ -189,7 +200,7 @@ fn run_pass(app: &AppHandle, config: &SyncedVault, root: &Path, device: &str, sy
         Err(err) => return SyncStatus::Error { message: format!("keychain: {err}") },
     };
     let mut remote = match HttpRemote::new(&config.server_url, &config.vault_id, &token, &format!("sync-{device}")) {
-        Ok(remote) => remote.with_config(sync_config),
+        Ok(remote) => remote.with_config(options.config),
         Err(err) => return SyncStatus::Error { message: err.to_string() },
     };
     let state = app.state::<AppState>();
@@ -198,7 +209,7 @@ fn run_pass(app: &AppHandle, config: &SyncedVault, root: &Path, device: &str, sy
     if open.session.vault().root() != root {
         return SyncStatus::Error { message: "another vault is open".into() };
     }
-    match sync_once_with(&mut open.session, &mut remote, device, SyncOptions { config: sync_config }) {
+    match sync_once_with(&mut open.session, &mut remote, device, options) {
         Ok(report) => {
             if !report.update.is_empty() {
                 let _ = app.emit("vault-changed", &report.update);
@@ -249,7 +260,7 @@ pub async fn create_synced_vault(
         .map_err(|e| format!("keychain: {e}"))?;
     let mut vaults = load(&app);
     vaults.retain(|v| v.local_path != canonical);
-    vaults.push(SyncedVault { local_path: canonical.clone(), server_url, vault_id, name, sync_config: false });
+    vaults.push(SyncedVault { local_path: canonical.clone(), server_url, vault_id, name, sync_config: false, filter: SyncFilter::default() });
     save(&app, &vaults)?;
     Ok(canonical)
 }
@@ -288,6 +299,23 @@ pub async fn set_sync_config(app: AppHandle, state: State<'_, AppState>, enabled
     save(&app, &vaults)?;
     if let Some(syncer) = open.syncer.as_ref() {
         syncer.sync_config.store(enabled, Ordering::SeqCst);
+        syncer.nudge();
+    }
+    Ok(())
+}
+
+/// Sets the folders and file types the open synced vault leaves out, then syncs.
+#[tauri::command]
+pub async fn set_sync_filter(app: AppHandle, state: State<'_, AppState>, filter: SyncFilter) -> CmdResult<()> {
+    let guard = state.vault.lock().map_err(|_| "vault state is poisoned".to_owned())?;
+    let open = guard.as_ref().ok_or("no vault is open")?;
+    let root = open.session.vault().root().display().to_string();
+    let mut vaults = load(&app);
+    let entry = vaults.iter_mut().find(|v| v.local_path == root).ok_or("this vault is not synced")?;
+    entry.filter = filter.clone();
+    save(&app, &vaults)?;
+    if let Some(syncer) = open.syncer.as_ref() {
+        *syncer.filter.lock().map_err(|_| "sync filter is poisoned".to_owned())? = filter;
         syncer.nudge();
     }
     Ok(())

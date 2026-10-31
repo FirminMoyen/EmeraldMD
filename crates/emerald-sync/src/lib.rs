@@ -10,6 +10,7 @@
 pub mod engine;
 #[cfg(feature = "http")]
 pub mod events;
+pub mod filter;
 #[cfg(feature = "http")]
 pub mod http;
 pub mod manifest;
@@ -17,6 +18,7 @@ pub mod merge;
 pub mod plan;
 
 pub use engine::{Remote, SyncError, SyncOptions, SyncReport, SyncState, sync_once, sync_once_with};
+pub use filter::{FileType, SyncFilter};
 pub use manifest::{FileState, HashCache, MANIFEST_CONFIG_HEADER, Manifest, hash_bytes, is_config};
 pub use plan::Action;
 #[cfg(feature = "http")]

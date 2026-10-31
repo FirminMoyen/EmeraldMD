@@ -6,9 +6,18 @@
  * another device and rejected tokens.
  */
 
-import { Notice, Setting, SettingTab, setIcon, setTooltip, type App } from '@emeraldmd/api';
+import { FuzzySuggestModal, Notice, Setting, SettingTab, setIcon, setTooltip, TFolder, type App } from '@emeraldmd/api';
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
+
+/** Attachment types a device can leave out of sync (notes, canvases and bases always sync). */
+type FileType = 'image' | 'audio' | 'video' | 'pdf' | 'other';
+
+/** Selective sync: what this device leaves out. */
+export interface SyncFilter {
+	excludedFolders: string[];
+	excludedTypes: FileType[];
+}
 
 export interface SyncedVault {
 	localPath: string;
@@ -16,6 +25,39 @@ export interface SyncedVault {
 	vaultId: string;
 	name: string;
 	syncConfig: boolean;
+	filter?: SyncFilter;
+}
+
+const FILE_TYPES: { type: FileType; name: string; desc: string }[] = [
+	{ type: 'image', name: 'Sync images', desc: 'PNG, JPEG, GIF, SVG, WebP, HEIC…' },
+	{ type: 'audio', name: 'Sync audio', desc: 'MP3, WAV, M4A, FLAC, OGG…' },
+	{ type: 'video', name: 'Sync videos', desc: 'MP4, WebM, MOV, MKV…' },
+	{ type: 'pdf', name: 'Sync PDFs', desc: '' },
+	{ type: 'other', name: 'Sync other types', desc: 'Any other attachment.' },
+];
+
+/** Picks a vault folder to leave out of sync. */
+class FolderChoice extends FuzzySuggestModal<TFolder> {
+	constructor(
+		app: App,
+		private readonly excluded: string[],
+		private readonly choose: (folder: TFolder) => void,
+	) {
+		super(app);
+		this.setPlaceholder('Folder to leave out of sync…');
+	}
+
+	getItems(): TFolder[] {
+		return this.app.vault.getAllFolders().filter((f) => !this.excluded.includes(f.path));
+	}
+
+	getItemText(folder: TFolder): string {
+		return folder.path;
+	}
+
+	onChooseItem(folder: TFolder): void {
+		this.choose(folder);
+	}
 }
 
 type SyncStatus =
@@ -70,6 +112,66 @@ class SyncTab extends SettingTab {
 					}
 				}),
 			);
+		this.selectiveSync();
+	}
+
+	/** Folders and file types this device leaves out: neither sent, fetched nor deleted. */
+	private selectiveSync(): void {
+		const { containerEl, config } = this;
+		// Read at each change: another setting may have changed it since this tab was drawn.
+		const current = (): SyncFilter => config.filter ?? { excludedFolders: [], excludedTypes: [] };
+		const filter = current();
+		const save = async (next: SyncFilter): Promise<boolean> => {
+			try {
+				await invoke('set_sync_filter', { filter: next });
+				config.filter = next;
+				return true;
+			} catch (err) {
+				new Notice(`Could not change selective sync: ${err}`);
+				return false;
+			}
+		};
+		new Setting(containerEl)
+			.setName('Selective sync')
+			.setDesc('What this device leaves out. Left-out files stay on the server and on this device, and are not deleted on either side.')
+			.setHeading();
+		new Setting(containerEl)
+			.setName('Excluded folders')
+			.setDesc(filter.excludedFolders.length ? '' : 'None: every folder is synced.')
+			.addButton((b) =>
+				b.setButtonText('Add folder').onClick(() =>
+					new FolderChoice(this.app, current().excludedFolders, (folder) => {
+						const now = current();
+						void save({ ...now, excludedFolders: [...now.excludedFolders, folder.path].sort() }).then(() => this.display());
+					}).open(),
+				),
+			);
+		for (const folder of filter.excludedFolders) {
+			new Setting(containerEl)
+				.setClass('emerald-sync-excluded-folder')
+				.setName(folder)
+				.addExtraButton((b) =>
+					b
+						.setIcon('x')
+						.setTooltip('Sync this folder again')
+						.onClick(() => {
+							const now = current();
+							void save({ ...now, excludedFolders: now.excludedFolders.filter((f) => f !== folder) }).then(() => this.display());
+						}),
+				);
+		}
+		for (const { type, name, desc } of FILE_TYPES) {
+			new Setting(containerEl)
+				.setName(name)
+				.setDesc(desc)
+				.addToggle((t) =>
+					t.setValue(!filter.excludedTypes.includes(type)).onChange(async (synced) => {
+						const now = current();
+						const excludedTypes = synced ? now.excludedTypes.filter((x) => x !== type) : [...now.excludedTypes, type];
+						if (!(await save({ ...now, excludedTypes }))) t.setValue(!synced);
+					}),
+				);
+		}
 	}
 }
 
