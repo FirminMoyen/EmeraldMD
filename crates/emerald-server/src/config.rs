@@ -53,6 +53,9 @@ pub struct TokenConfig {
     pub hash: String,
     /// Vault ids this token may open. Omitted: every vault.
     pub vaults: Option<Vec<String>>,
+    /// Only reads: notes, settings, search, history and the event stream.
+    #[serde(default)]
+    pub read_only: bool,
 }
 
 /// Version history (`[history]`): earlier versions of files and deleted files.
@@ -216,7 +219,7 @@ impl Config {
         }
         if let Some(hashes) = env("EMERALDMD_TOKEN_HASHES") {
             for (i, hash) in hashes.split_whitespace().enumerate() {
-                self.tokens.push(TokenConfig { name: format!("env-{}", i + 1), hash: hash.to_owned(), vaults: None });
+                self.tokens.push(TokenConfig { name: format!("env-{}", i + 1), hash: hash.to_owned(), vaults: None, read_only: false });
             }
         }
         let list = |value: String| value.split(',').map(str::trim).filter(|s| !s.is_empty()).map(str::to_owned).collect::<Vec<_>>();
@@ -396,7 +399,7 @@ mod tests {
     #[test]
     fn rejects_unsafe_or_incomplete_configs() {
         let vault = VaultConfig { id: "notes".into(), path: "/srv".into(), name: None };
-        let token = TokenConfig { name: "t".into(), hash: HASH.into(), vaults: None };
+        let token = TokenConfig { name: "t".into(), hash: HASH.into(), vaults: None, read_only: false };
         let base = Config { vaults: vec![vault.clone()], tokens: vec![token.clone()], ..Config::default() };
         base.validate().unwrap();
 

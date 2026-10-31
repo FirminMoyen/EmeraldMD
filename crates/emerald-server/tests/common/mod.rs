@@ -74,9 +74,9 @@ impl TestServer {
                 VaultConfig { id: "other".into(), path: other.path().to_owned(), name: None },
             ],
             tokens: vec![
-                TokenConfig { name: "all".into(), hash: quick_hash(ALL), vaults: None },
-                TokenConfig { name: "notes".into(), hash: quick_hash(NOTES_ONLY), vaults: Some(vec!["notes".into()]) },
-                TokenConfig { name: "spare".into(), hash: quick_hash(SPARE), vaults: None },
+                TokenConfig { name: "all".into(), hash: quick_hash(ALL), vaults: None, read_only: false },
+                TokenConfig { name: "notes".into(), hash: quick_hash(NOTES_ONLY), vaults: Some(vec!["notes".into()]), read_only: false },
+                TokenConfig { name: "spare".into(), hash: quick_hash(SPARE), vaults: None, read_only: false },
             ],
             ..Config::default()
         };

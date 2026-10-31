@@ -93,8 +93,13 @@ async fn bodies_are_limited_on_every_route() {
         server.http.put(server.url("/api/vaults/notes/raw?path=Big.bin")).bearer_auth(ALL).body(vec![b'x'; size]).send()
     };
     assert_eq!(put(512 * 1024).await.unwrap().status(), StatusCode::OK);
-    let (status, _) = error_of(put(1024 * 1024 + 1).await.unwrap()).await;
-    assert_eq!(status, StatusCode::PAYLOAD_TOO_LARGE);
+    // The server answers 413 without reading the body; under load it may close the
+    // connection while the client is still sending, which also means refused.
+    match put(1024 * 1024 + 1).await {
+        Ok(response) => assert_eq!(error_of(response).await.0, StatusCode::PAYLOAD_TOO_LARGE),
+        Err(err) => assert!(err.is_request() || err.is_body(), "{err}"),
+    }
+    assert!(!server.notes.path().join("Big.bin").metadata().is_ok_and(|m| m.len() > 1024 * 1024));
     let note = json!({ "path": "Long.md", "data": "y".repeat(512 * 1024) });
     assert_eq!(server.post("/api/vaults/notes/files", note).await.0, StatusCode::OK);
     // Routes that only carry paths take small bodies.

@@ -38,6 +38,8 @@ pub struct Principal {
     pub(crate) key: Arc<str>,
     /// `None`: every vault.
     vaults: Option<HashSet<String>>,
+    /// Can read but not change anything.
+    pub read_only: bool,
 }
 
 impl Principal {
@@ -81,7 +83,7 @@ impl Authenticator {
             .filter_map(|t| {
                 let hash = PasswordHash::new(&t.hash).ok()?;
                 let vaults = t.vaults.as_ref().map(|ids| ids.iter().cloned().collect());
-                let principal = Principal { name: t.name.clone(), key: Arc::from(t.hash.as_str()), vaults };
+                let principal = Principal { name: t.name.clone(), key: Arc::from(t.hash.as_str()), vaults, read_only: t.read_only };
                 Some(Token { hash, principal: Arc::new(principal) })
             })
             .collect();
@@ -204,6 +206,7 @@ impl Tickets {
             name: principal.name.clone(),
             key: principal.key.clone(),
             vaults: Some(HashSet::from([vault.to_owned()])),
+            read_only: principal.read_only,
         });
         tickets.insert(ticket.clone(), Ticket { principal, vault: vault.to_owned(), expires: now + TICKET_TTL });
         Some(ticket)
@@ -245,8 +248,8 @@ mod tests {
 
     fn authenticator() -> Arc<Authenticator> {
         Arc::new(Authenticator::new(&[
-            TokenConfig { name: "all".into(), hash: quick_hash("secret-1"), vaults: None },
-            TokenConfig { name: "one".into(), hash: quick_hash("secret-2"), vaults: Some(vec!["a".into()]) },
+            TokenConfig { name: "all".into(), hash: quick_hash("secret-1"), vaults: None, read_only: false },
+            TokenConfig { name: "one".into(), hash: quick_hash("secret-2"), vaults: Some(vec!["a".into()]), read_only: false },
         ]))
     }
 
@@ -281,8 +284,8 @@ mod tests {
         valid(&old, "secret-2").await.unwrap();
         let tokens = [
             // Same hash, new position and a narrower scope.
-            TokenConfig { name: "new".into(), hash: quick_hash("secret-9"), vaults: None },
-            TokenConfig { name: "all".into(), hash: old.tokens[0].principal.key.to_string(), vaults: Some(vec!["b".into()]) },
+            TokenConfig { name: "new".into(), hash: quick_hash("secret-9"), vaults: None, read_only: false },
+            TokenConfig { name: "all".into(), hash: old.tokens[0].principal.key.to_string(), vaults: Some(vec!["b".into()]), read_only: false },
         ];
         let new = Arc::new(Authenticator::new(&tokens));
         new.keep_verified(&old);

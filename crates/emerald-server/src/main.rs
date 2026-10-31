@@ -17,10 +17,10 @@ emeraldmd-server: serve EmeraldMD vaults to the EmeraldMD app
 
 Usage:
   emeraldmd-server [serve]                       Serve the configured vaults
-  emeraldmd-server token add NAME [--vault ID]...
+  emeraldmd-server token add NAME [--vault ID]... [--read-only]
                                                  Create a token, print it once, and add its
                                                  hash to the config file (all vaults unless
-                                                 --vault is given)
+                                                 --vault is given; --read-only: it can only read)
   emeraldmd-server token list                    List tokens: names and vaults, never hashes
   emeraldmd-server token revoke NAME             Remove a token from the config file
   emeraldmd-server token new                     Print a new random token and its hash
@@ -39,11 +39,12 @@ proxies when it receives SIGHUP (`kill -HUP <pid>`, `docker kill -s HUP <name>`)
 struct Args {
     config: Option<PathBuf>,
     vaults: Vec<String>,
+    read_only: bool,
     words: Vec<String>,
 }
 
 fn parse_args(raw: impl Iterator<Item = String>) -> Result<Args, String> {
-    let mut args = Args { config: None, vaults: Vec::new(), words: Vec::new() };
+    let mut args = Args { config: None, vaults: Vec::new(), read_only: false, words: Vec::new() };
     let mut raw = raw.peekable();
     while let Some(arg) = raw.next() {
         let mut value = |flag: &str| match arg.strip_prefix(&format!("{flag}=")) {
@@ -54,6 +55,8 @@ fn parse_args(raw: impl Iterator<Item = String>) -> Result<Args, String> {
             args.config = Some(PathBuf::from(value("--config")?));
         } else if arg == "--vault" || arg.starts_with("--vault=") {
             args.vaults.push(value("--vault")?);
+        } else if arg == "--read-only" {
+            args.read_only = true;
         } else {
             args.words.push(arg);
         }
@@ -79,8 +82,8 @@ fn main() -> ExitCode {
 
 fn run(args: Args) -> Result<(), String> {
     let words: Vec<&str> = args.words.iter().map(String::as_str).collect();
-    if !args.vaults.is_empty() && !matches!(words.as_slice(), ["token", "add", _]) {
-        return Err("--vault only applies to `token add`".into());
+    if (!args.vaults.is_empty() || args.read_only) && !matches!(words.as_slice(), ["token", "add", _]) {
+        return Err("--vault and --read-only only apply to `token add`".into());
     }
     let config = args.config.as_deref();
     match words.as_slice() {
@@ -93,7 +96,7 @@ fn run(args: Args) -> Result<(), String> {
             Ok(())
         }
         [] | ["serve"] => serve(args.config),
-        ["token", "add", name] => token_add(need_file(config)?, name, &args.vaults),
+        ["token", "add", name] => token_add(need_file(config)?, name, &args.vaults, args.read_only),
         ["token", "list"] => token_list(config),
         ["token", "revoke", name] => token_revoke(need_file(config)?, name),
         ["token", "new"] => {
@@ -116,9 +119,10 @@ fn need_file(config: Option<&Path>) -> Result<&Path, String> {
 const RELOAD_HINT: &str = "The running server picks this up when it receives SIGHUP (`kill -HUP <pid>`, \
                            `docker kill -s HUP <container>`) or restarts.";
 
-fn token_add(file: &Path, name: &str, vaults: &[String]) -> Result<(), String> {
-    let token = tokens::add(file, name, vaults, env)?;
+fn token_add(file: &Path, name: &str, vaults: &[String], read_only: bool) -> Result<(), String> {
+    let token = tokens::add(file, name, vaults, read_only, env)?;
     let scope = if vaults.is_empty() { "every vault".to_owned() } else { format!("vaults {}", vaults.join(", ")) };
+    let scope = if read_only { format!("{scope}, read-only") } else { scope };
     // The token alone on stdout, so `token add laptop > laptop.token` works.
     eprintln!("New token {name:?} for {scope}. It is shown only this once:\n");
     println!("{token}");
@@ -137,7 +141,8 @@ fn token_list(config: Option<&Path>) -> Result<(), String> {
     for token in tokens {
         let vaults = token.vaults.map_or_else(|| "all".to_owned(), |ids| ids.join(", "));
         let source = if token.from_env { "  (EMERALDMD_TOKEN_HASHES)" } else { "" };
-        println!("{:width$}  {vaults}{source}", token.name);
+        let access = if token.read_only { "  (read-only)" } else { "" };
+        println!("{:width$}  {vaults}{access}{source}", token.name);
     }
     Ok(())
 }

@@ -28,7 +28,7 @@ async fn reload_swaps_tokens_and_vaults_without_a_restart() {
     config.vaults.retain(|v| v.id != "other");
     config.vaults.push(VaultConfig { id: "extra".into(), path: extra.path().to_owned(), name: None });
     config.tokens.retain(|t| t.name != "notes");
-    config.tokens.push(TokenConfig { name: "new".into(), hash: quick_hash(NEW), vaults: Some(vec!["extra".into()]) });
+    config.tokens.push(TokenConfig { name: "new".into(), hash: quick_hash(NEW), vaults: Some(vec!["extra".into()]), read_only: false });
     let summary = server.reload(config).await.unwrap();
     assert_eq!((summary.vaults_added, summary.vaults_removed, summary.tokens), (vec!["extra".to_owned()], vec!["other".to_owned()], 3));
     assert!(summary.needs_restart.is_empty());

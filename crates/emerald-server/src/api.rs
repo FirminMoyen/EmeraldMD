@@ -255,6 +255,10 @@ async fn authenticate(State(state): State<AppState>, mut request: Request, next:
     };
     match principal {
         Ok(principal) => {
+            // Read-only tokens may read (GET) and ask for an event stream ticket, nothing else.
+            if principal.read_only && request.method() != Method::GET && !request.uri().path().ends_with("/events/ticket") {
+                return ApiError::new(StatusCode::FORBIDDEN, "this token can only read").into_response();
+            }
             request.extensions_mut().insert(principal);
             next.run(request).await
         }
@@ -340,9 +344,13 @@ async fn mutate(
 }
 
 #[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
 struct VaultInfo {
     id: String,
     name: String,
+    /// The token can only read this vault.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    read_only: bool,
 }
 
 async fn list_vaults(State(state): State<AppState>, Extension(principal): Extension<Arc<Principal>>) -> Json<Vec<VaultInfo>> {
@@ -351,7 +359,7 @@ async fn list_vaults(State(state): State<AppState>, Extension(principal): Extens
         .vaults
         .values()
         .filter(|v| principal.can_open(&v.id))
-        .map(|v| VaultInfo { id: v.id.clone(), name: v.name.clone() })
+        .map(|v| VaultInfo { id: v.id.clone(), name: v.name.clone(), read_only: principal.read_only })
         .collect();
     vaults.sort_by(|a, b| a.id.cmp(&b.id));
     Json(vaults)
@@ -364,7 +372,12 @@ async fn snapshot(
 ) -> ApiResult<Response> {
     let vault = state.vault(&principal, &id)?;
     let snapshot = blocking(move || Ok::<_, ApiError>(vault.snapshot())).await?;
-    Ok(Json(snapshot).into_response())
+    let mut json = serde_json::to_value(snapshot).map_err(|_| ApiError::internal())?;
+    // So the app opens the vault read-only.
+    if principal.read_only {
+        json["readOnly"] = serde_json::Value::Bool(true);
+    }
+    Ok(Json(json).into_response())
 }
 
 #[derive(Deserialize)]

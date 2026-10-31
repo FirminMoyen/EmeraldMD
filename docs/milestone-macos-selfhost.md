@@ -203,6 +203,9 @@ end-to-end tests; the rest is in priority order within each section.
       one goes to `.trash`; a notice offers to reload
 - [x] Server operations: health endpoint, token management CLI (list,
       revoke), Docker Compose example
+- [x] Read-only tokens (`token add --read-only`): they read everything,
+      changes are refused (403); the app opens the vault read-only, and
+      keeps no synced copy with them
 - [ ] Published server image (registry account: owner)
 - [x] End-to-end check in the real app against a local server: online
       vault reopened from the saved list, live edits from another client

@@ -40,7 +40,7 @@ fn sync_settings(base: &str, root: &Path, device: &str, config: bool) -> SyncRep
 async fn start(dir: &Path) -> (String, tokio::sync::oneshot::Sender<()>) {
     let config = Config {
         vaults: vec![VaultConfig { id: "notes".into(), path: dir.to_owned(), name: None }],
-        tokens: vec![TokenConfig { name: "test".into(), hash: quick_hash(TOKEN), vaults: None }],
+        tokens: vec![TokenConfig { name: "test".into(), hash: quick_hash(TOKEN), vaults: None, read_only: false }],
         ..Config::default()
     };
     let server = Server::new(&config).unwrap();
@@ -173,7 +173,7 @@ async fn the_event_stream_announces_other_devices_changes() {
     let server_dir = tempfile::tempdir().unwrap();
     let config = Config {
         vaults: vec![VaultConfig { id: "notes".into(), path: server_dir.path().to_owned(), name: None }],
-        tokens: vec![TokenConfig { name: "test".into(), hash: quick_hash(TOKEN), vaults: None }],
+        tokens: vec![TokenConfig { name: "test".into(), hash: quick_hash(TOKEN), vaults: None, read_only: false }],
         ..Config::default()
     };
     let server = Server::new(&config).unwrap();
