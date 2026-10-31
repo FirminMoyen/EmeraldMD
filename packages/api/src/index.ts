@@ -12,7 +12,7 @@ export * as obsidianModule from './obsidian';
 export { VaultAdapter, type ConfigStore } from './adapter';
 export { type AppOptions, type PluginsApi } from './app';
 export { applyTemplateVariables, Bookmarks, DailyNotes, InternalPlugins, InternalPluginInstance, PagePreview, Templates, type BookmarkItem, type InternalPlugin } from './core-plugins';
-export { diffLines, FileRecovery, IndexedDbSnapshotStore, MemorySnapshotStore, type Snapshot, type SnapshotStore } from './file-recovery';
+export { diffLines, FileRecovery, HistoryModal, IndexedDbSnapshotStore, MemorySnapshotStore, type HistoryModalText, type HistorySource, type Snapshot, type SnapshotStore } from './file-recovery';
 export { mergeProperties, NoteComposer } from './note-composer';
 export { RandomNote, SlashCommands, UniqueNoteCreator } from './small-core-plugins';
 export { Workspaces } from './workspaces';

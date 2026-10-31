@@ -183,6 +183,25 @@ describe('RemoteBackend requests', () => {
 		}
 	});
 
+	it("reads the server's version history", async () => {
+		const { backend, calls } = setup({
+			'GET /api/vaults/notes/history': json({ versions: [{ time: 20, size: 3 }, { time: 10, size: 1 }] }),
+			'GET /api/vaults/notes/history/raw': new Response('new'),
+			'GET /api/vaults/notes/history/deleted': json([{ path: 'Old.md', deletedAt: 30, size: 4 }]),
+		});
+		expect(await backend.versions('A/Note.md')).toEqual([
+			{ time: 20, size: 3 },
+			{ time: 10, size: 1 },
+		]);
+		expect(new TextDecoder().decode(await backend.readVersion('A/Note.md', 20))).toBe('new');
+		expect(await backend.deletedFiles()).toEqual([{ path: 'Old.md', deletedAt: 30, size: 4 }]);
+		expect(calls.map((c) => `${c.url.pathname}${c.url.search}`)).toEqual([
+			'/api/vaults/notes/history?path=A%2FNote.md',
+			'/api/vaults/notes/history/raw?path=A%2FNote.md&time=20',
+			'/api/vaults/notes/history/deleted',
+		]);
+	});
+
 	it('turns error responses into RemoteError', async () => {
 		const { backend } = setup({
 			'POST /api/vaults/notes/files': json({ error: 'already exists: A.md' }, 409),

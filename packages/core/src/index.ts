@@ -7,9 +7,11 @@ export {
 	RemoteBackend,
 	RemoteError,
 	normalizeServerUrl,
+	type DeletedServerFile,
 	type RemoteBackendOptions,
 	type RemoteStatus,
 	type RemoteVaultInfo,
+	type ServerVersion,
 	type WebSocketLike,
 } from './remote-backend';
 export * from './types';

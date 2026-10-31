@@ -220,8 +220,14 @@ export class FileRecovery extends InternalPluginInstance {
 
 	/** The local history of `file`, or a list of the notes that have one. */
 	openHistory(file: TFile | null): void {
-		if (!this.store) return;
-		new LocalHistoryModal(this.app, this.store, file?.path ?? null).open();
+		const store = this.store;
+		if (!store) return;
+		const source: HistorySource = {
+			list: (path) => store.list(path),
+			paths: () => store.paths(),
+			beforeRestore: (path, text) => store.add({ path, time: Date.now(), text }),
+		};
+		new HistoryModal(this.app, source, file?.path ?? null, LOCAL_HISTORY).open();
 	}
 }
 
@@ -254,15 +260,49 @@ export function diffLines(a: string, b: string): { kind: 'same' | 'removed' | 'a
 	return out;
 }
 
-/** The snapshots of one note (or the notes that have snapshots), with a preview, the changes since, Copy and Restore. */
-class LocalHistoryModal extends Modal {
+/** Where a history modal gets versions: the local snapshots, or a server's version history. */
+export interface HistorySource {
+	/** A file's versions, newest first. */
+	list(path: string): Promise<Snapshot[]>;
+	/** The files to choose from when the modal opens without one, most recent first. */
+	paths(): Promise<{ path: string; time: number }[]>;
+	/** Keeps the current text before a version replaces it, when the source does not do so itself. */
+	beforeRestore?(path: string, text: string): Promise<void>;
+}
+
+/** The words of a history modal. */
+export interface HistoryModalText {
+	/** Title of a file's versions, followed by its path. */
+	title: string;
+	/** Title of the list of files. */
+	listTitle: string;
+	/** Back from a file to the list. */
+	back: string;
+	noVersions: string;
+	noFiles: string;
+	/** Why restoring can be undone. */
+	undo: string;
+}
+
+const LOCAL_HISTORY: HistoryModalText = {
+	title: 'Local history',
+	listTitle: 'Local history',
+	back: '← All notes',
+	noVersions: 'No snapshots of this note yet.',
+	noFiles: 'No snapshots yet. Notes get one when they open or change.',
+	undo: 'Its current text gets a snapshot first, so this can be undone.',
+};
+
+/** The versions of one file (or a list of files that have some), with a preview, the changes since, Copy and Restore. */
+export class HistoryModal extends Modal {
 	private listEl!: HTMLElement;
 	private previewEl!: HTMLElement;
 
 	constructor(
 		app: App,
-		private readonly store: SnapshotStore,
+		private readonly source: HistorySource,
 		private path: string | null,
+		private readonly text: HistoryModalText,
 	) {
 		super(app);
 		this.modalEl.addClass('mod-file-recovery');
@@ -280,13 +320,19 @@ class LocalHistoryModal extends Modal {
 		this.previewEl.empty();
 		if (this.path === null) return this.renderNotes();
 		const path = this.path;
-		this.titleEl.setText(`Local history: ${path}`);
-		const snapshots = await this.store.list(path);
-		if (!snapshots.length) {
-			this.listEl.createDiv({ cls: 'file-recovery-empty', text: 'No snapshots of this note yet.' });
+		this.titleEl.setText(`${this.text.title}: ${path}`);
+		let snapshots: Snapshot[];
+		try {
+			snapshots = await this.source.list(path);
+		} catch (err) {
+			this.listEl.createDiv({ cls: 'file-recovery-empty', text: errorText(err) });
 			return;
 		}
-		const back = this.listEl.createDiv({ cls: 'file-recovery-back', text: '← All notes', attr: { tabindex: '0' } });
+		if (!snapshots.length) {
+			this.listEl.createDiv({ cls: 'file-recovery-empty', text: this.text.noVersions });
+			return;
+		}
+		const back = this.listEl.createDiv({ cls: 'file-recovery-back', text: this.text.back, attr: { tabindex: '0' } });
 		back.addEventListener('click', () => {
 			this.path = null;
 			void this.render();
@@ -306,10 +352,16 @@ class LocalHistoryModal extends Modal {
 	}
 
 	private async renderNotes(): Promise<void> {
-		this.titleEl.setText('Local history');
-		const notes = (await this.store.paths()).sort((a, b) => b.time - a.time);
+		this.titleEl.setText(this.text.listTitle);
+		let notes: { path: string; time: number }[];
+		try {
+			notes = (await this.source.paths()).sort((a, b) => b.time - a.time);
+		} catch (err) {
+			this.listEl.createDiv({ cls: 'file-recovery-empty', text: errorText(err) });
+			return;
+		}
 		if (!notes.length) {
-			this.listEl.createDiv({ cls: 'file-recovery-empty', text: 'No snapshots yet. Notes get one when they open or change.' });
+			this.listEl.createDiv({ cls: 'file-recovery-empty', text: this.text.noFiles });
 			return;
 		}
 		for (const note of notes) {
@@ -355,14 +407,14 @@ class LocalHistoryModal extends Modal {
 		restore.addEventListener('click', async () => {
 			const ok = await confirmAction(this.app, {
 				title: 'Restore this version?',
-				message: file ? `${path} goes back to this version. Its current text gets a snapshot first, so this can be undone.` : `${path} was deleted; it is created again with this text.`,
+				message: file ? `${path} goes back to this version. ${this.text.undo}` : `${path} was deleted; it is created again with this text.`,
 				confirm: 'Restore',
 			});
 			if (!ok) return;
 			try {
-				if (file && current !== null) await this.store.add({ path, time: Date.now(), text: current });
+				if (file && current !== null) await this.source.beforeRestore?.(path, current);
 				if (file) await this.app.vault.modify(file, snapshot.text);
-				else await this.app.vault.create(path, snapshot.text);
+				else await createWithFolders(this.app, path, snapshot.text);
 				new Notice(`Restored ${path}.`);
 				this.close();
 			} catch (err) {
@@ -370,4 +422,18 @@ class LocalHistoryModal extends Modal {
 			}
 		});
 	}
+}
+
+function errorText(err: unknown): string {
+	return err instanceof Error ? err.message : String(err);
+}
+
+/** Creates `path` with `text`, and the folders it needs (a deleted file's folder may be gone too). */
+async function createWithFolders(app: App, path: string, text: string): Promise<void> {
+	const parts = path.split('/').slice(0, -1);
+	for (let i = 1; i <= parts.length; i++) {
+		const folder = parts.slice(0, i).join('/');
+		if (!app.vault.getAbstractFileByPath(folder)) await app.vault.createFolder(folder);
+	}
+	await app.vault.create(path, text);
 }

@@ -50,7 +50,9 @@ import { CommandPalette, CommandPaletteTab, loadPinnedCommands } from './command
 import { registerCoreViews, revealSearch } from './core-views';
 import { RemoteVaults } from './remote';
 import { hostOf } from './remote/connect-modal';
-import { setupSyncStatus } from './synced';
+import { registerServerHistory } from './remote/history';
+import { savedToken } from './remote/store';
+import { setupSyncStatus, type SyncedVault } from './synced';
 import { NotePane, reasonOf, type PaneHost } from './pane';
 import { fromObsidianLayout, toObsidianLayout, type ObsidianLayout } from './obsidian-layout';
 import { SplitLayout, type SavedLayout, type SplitDirection } from './splits';
@@ -87,6 +89,13 @@ function countWords(text: string): number {
 }
 
 /** The config folder of a server vault, through the server's config endpoints. */
+/** A client for a synced vault's server (for its version history), with the token saved for it. */
+async function syncedServer(synced: SyncedVault): Promise<RemoteBackend> {
+	const token = await savedToken(synced.serverUrl);
+	if (!token) throw new Error(`There is no saved token for ${synced.serverUrl}.`);
+	return new RemoteBackend({ serverUrl: synced.serverUrl, vaultId: synced.vaultId, token });
+}
+
 async function remoteConfigStore(backend: VaultBackend): Promise<ConfigStore> {
 	if (!(backend instanceof RemoteBackend) || !(await backend.supportsConfig().catch(() => false))) return new MemoryConfigStore();
 	return {
@@ -406,7 +415,12 @@ class EmeraldApp {
 				notice: (message) => this.notice(message),
 				reconnect: () => this.remote.showDialog(),
 				reload: () => void this.flush().finally(() => window.location.reload()),
+			}).then((synced) => {
+				// The server's version history, read with the token the synced copy uses.
+				if (synced) registerServerHistory(app, () => syncedServer(synced));
 			});
+		} else if (backend instanceof RemoteBackend) {
+			registerServerHistory(app, async () => backend);
 		}
 		registerCoreViews(app, {
 			search: backend.search ? (query, options) => backend.search!(query, options) : undefined,
