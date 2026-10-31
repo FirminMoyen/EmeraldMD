@@ -90,6 +90,10 @@ end-to-end tests; the rest is in priority order within each section.
 
 ### Navigation and core panes
 
+- [x] Search options as Obsidian's: sort order (name, modified, created),
+      collapse all results, copy results (links, paths, with matching
+      lines); ```query blocks embed search results in notes (reading view
+      and Live Preview)
 - [x] Search pane (Obsidian query syntax), quick switcher (⌘O), command
       palette (⌘P) with pinned commands (`command-palette.json`), recent
       ones remembered, and the user's hotkeys
@@ -97,6 +101,9 @@ end-to-end tests; the rest is in priority order within each section.
 - [x] Local graph settings as Obsidian's: depth, incoming, outgoing and
       neighbor links, with the global graph's filters, groups, display and
       forces (kept per vault on this device)
+- [x] Outline as Obsidian's: a tree that folds (collapse/expand all), a
+      filter, the heading the cursor is under marked, and headings dragged
+      onto others to move their sections (one undo step)
 - [x] Graph settings as Obsidian's, in `.obsidian/graph.json`: filters
       (search with Obsidian's syntax, tags, attachments, existing files
       only, orphans), colour groups by query, display (arrows, text fade,

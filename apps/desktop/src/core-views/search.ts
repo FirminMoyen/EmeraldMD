@@ -1,22 +1,36 @@
 /**
  * The search pane: Obsidian's query syntax (docs/search.md), run by the Rust
  * core. Results are grouped by file with the matching lines; clicking a line
- * opens the note with the match selected.
+ * opens the note with the match selected. As in Obsidian, results can be
+ * sorted (name, modified or created time), folded all at once, and copied
+ * as links, paths or Markdown.
  */
 
-import { ItemView, setIcon, setTooltip, type WorkspaceLeaf } from '@emeraldmd/api';
-import type { SearchFileResult, SearchResults } from '@emeraldmd/core';
+import { ItemView, Menu, Notice, setIcon, setTooltip, type WorkspaceLeaf } from '@emeraldmd/api';
+import type { SearchFileResult, SearchResults, SearchSort } from '@emeraldmd/core';
 import { errorText, type CoreViewHost } from './host';
 
 export const SEARCH_VIEW = 'search';
 const MAX_FILES = 500;
 const DEBOUNCE_MS = 250;
 
+const SORTS: [SearchSort, string][] = [
+	['path-asc', 'File name (A to Z)'],
+	['path-desc', 'File name (Z to A)'],
+	['modified-newest', 'Modified time (new to old)'],
+	['modified-oldest', 'Modified time (old to new)'],
+	['created-newest', 'Created time (new to old)'],
+	['created-oldest', 'Created time (old to new)'],
+];
+
 export class SearchView extends ItemView {
 	private inputEl!: HTMLInputElement;
 	private summaryEl!: HTMLElement;
 	private resultsEl!: HTMLElement;
 	private matchCase = false;
+	private sort: SearchSort = 'path-asc';
+	private allCollapsed = false;
+	private results: SearchResults | null = null;
 	private timer: ReturnType<typeof setTimeout> | undefined;
 	private generation = 0;
 	private readonly collapsed = new Set<string>();
@@ -55,6 +69,35 @@ export class SearchView extends ItemView {
 			caseButton.toggleClass('is-active', this.matchCase);
 			void this.run();
 		});
+		const options = root.createDiv('search-options-container nav-buttons-container');
+		const option = (icon: string, label: string, onClick: (evt: MouseEvent) => void) => {
+			const el = options.createDiv({ cls: 'clickable-icon nav-action-button', attr: { 'aria-label': label } });
+			setIcon(el, icon);
+			el.addEventListener('click', onClick);
+			return el;
+		};
+		option('arrow-up-narrow-wide', 'Change sort order', (evt) => {
+			const menu = new Menu();
+			for (const [sort, name] of SORTS) {
+				menu.addItem((item) =>
+					item
+						.setTitle(name)
+						.setChecked(sort === this.sort)
+						.onClick(() => {
+							this.sort = sort;
+							void this.run();
+						}),
+				);
+			}
+			menu.showAtMouseEvent(evt);
+		});
+		const collapse = option('list-collapse', 'Collapse results', () => {
+			this.allCollapsed = !this.allCollapsed;
+			this.collapsed.clear();
+			collapse.toggleClass('is-active', this.allCollapsed);
+			for (const item of this.resultsEl.querySelectorAll('.search-result')) item.toggleClass('is-collapsed', this.allCollapsed);
+		});
+		option('copy', 'Copy search results', (evt) => this.copyMenu(evt));
 		this.summaryEl = root.createDiv('search-result-summary');
 		this.resultsEl = root.createDiv('search-results-container');
 
@@ -73,11 +116,12 @@ export class SearchView extends ItemView {
 	}
 
 	override getState(): Record<string, unknown> {
-		return { query: this.inputEl?.value ?? '', matchingCase: this.matchCase };
+		return { query: this.inputEl?.value ?? '', matchingCase: this.matchCase, sortOrder: this.sort, collapseAll: this.allCollapsed };
 	}
 
 	override async setState(state: unknown): Promise<void> {
-		const query = (state as { query?: unknown } | null)?.query;
+		const { query, sortOrder } = (state ?? {}) as { query?: unknown; sortOrder?: unknown };
+		if (SORTS.some(([sort]) => sort === sortOrder)) this.sort = sortOrder as SearchSort;
 		if (typeof query === 'string') this.setQuery(query);
 	}
 
@@ -113,7 +157,7 @@ export class SearchView extends ItemView {
 		}
 		this.summaryEl.removeClass('mod-error');
 		try {
-			const results = await this.host.search(query, { caseSensitive: this.matchCase, limit: MAX_FILES });
+			const results = await this.host.search(query, { caseSensitive: this.matchCase, sort: this.sort, limit: MAX_FILES });
 			if (generation !== this.generation) return;
 			this.render(results);
 		} catch (err) {
@@ -125,6 +169,7 @@ export class SearchView extends ItemView {
 	}
 
 	private render(results: SearchResults): void {
+		this.results = results;
 		const { files, totalFiles } = results;
 		const matches = files.reduce((sum, f) => sum + f.matchCount, 0);
 		this.summaryEl.setText(
@@ -141,7 +186,8 @@ export class SearchView extends ItemView {
 		const file = this.app.vault.getFileByPath(result.path);
 		if (!file) return;
 		const item = this.resultsEl.createDiv('tree-item search-result');
-		const collapsed = this.collapsed.has(result.path);
+		// "Collapse results" folds them all; each one can still be opened (or folded) on its own.
+		const collapsed = this.collapsed.has(result.path) !== this.allCollapsed;
 		item.toggleClass('is-collapsed', collapsed);
 		const title = item.createDiv('tree-item-self search-result-file-title is-clickable');
 		const toggle = title.createDiv('tree-item-icon collapse-icon');
@@ -150,7 +196,7 @@ export class SearchView extends ItemView {
 			e.stopPropagation();
 			if (this.collapsed.has(result.path)) this.collapsed.delete(result.path);
 			else this.collapsed.add(result.path);
-			item.toggleClass('is-collapsed', this.collapsed.has(result.path));
+			item.toggleClass('is-collapsed', this.collapsed.has(result.path) !== this.allCollapsed);
 		});
 		title.createDiv({ cls: 'tree-item-inner', text: file.extension === 'md' ? file.basename : file.name });
 		if (result.matchCount) title.createDiv({ cls: 'tree-item-flair', text: String(result.matchCount) });
@@ -172,5 +218,39 @@ export class SearchView extends ItemView {
 		if (result.matchCount > result.matches.length) {
 			matchesEl.createDiv({ cls: 'search-result-more', text: `and ${result.matchCount - result.matches.length} more` });
 		}
+	}
+
+	/** Copies the files found: as wikilinks, as paths, or as a Markdown list of links with the matching lines. */
+	private copyMenu(evt: MouseEvent): void {
+		const files = (this.results?.files ?? []).filter((r) => this.app.vault.getFileByPath(r.path));
+		const copy = async (text: string) => {
+			try {
+				await navigator.clipboard.writeText(text);
+				new Notice(`Copied ${files.length} result${files.length === 1 ? '' : 's'}.`);
+			} catch (err) {
+				new Notice(`Could not copy: ${err}`);
+			}
+		};
+		const link = (path: string) => this.app.fileManager.generateMarkdownLink(this.app.vault.getFileByPath(path)!, '');
+		const menu = new Menu();
+		menu.addItem((item) =>
+			item
+				.setTitle('Copy as list of links')
+				.setDisabled(!files.length)
+				.onClick(() => void copy(files.map((r) => `- ${link(r.path)}`).join('\n'))),
+		);
+		menu.addItem((item) =>
+			item
+				.setTitle('Copy as list of paths')
+				.setDisabled(!files.length)
+				.onClick(() => void copy(files.map((r) => r.path).join('\n'))),
+		);
+		menu.addItem((item) =>
+			item
+				.setTitle('Copy with matching lines')
+				.setDisabled(!files.length)
+				.onClick(() => void copy(files.map((r) => [`- ${link(r.path)}`, ...r.matches.map((m) => `\t- ${m.lineText.trim()}`)].join('\n')).join('\n'))),
+		);
+		menu.showAtMouseEvent(evt);
 	}
 }
