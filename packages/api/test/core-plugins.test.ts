@@ -43,7 +43,7 @@ describe('core plugins', () => {
 
 		const fresh = await createTestApp();
 		await fresh.app.internalPlugins.load(fresh.app);
-		expect(fresh.app.internalPlugins.getEnabledPlugins().map((p) => p.id)).toEqual(['daily-notes', 'templates', 'page-preview', 'bookmarks', 'file-recovery', 'note-composer']);
+		expect(fresh.app.internalPlugins.getEnabledPlugins().map((p) => p.id)).toEqual(['daily-notes', 'templates', 'page-preview', 'bookmarks', 'file-recovery', 'note-composer', 'bases']);
 	});
 
 	it('creates the daily note in its folder from the template', async () => {
@@ -67,7 +67,7 @@ describe('core plugins', () => {
 		await app.internalPlugins.load(app);
 		await app.internalPlugins.setEnabled('templates', false);
 		expect(app.commands.findCommand('insert-template')).toBeUndefined();
-		expect(JSON.parse(config.files.get('.obsidian/core-plugins.json')!)).toEqual({ 'daily-notes': true, templates: false, 'page-preview': true, bookmarks: true, 'file-recovery': true, 'note-composer': true, 'slash-command': false, 'random-note': false, 'zk-prefixer': false, workspaces: false });
+		expect(JSON.parse(config.files.get('.obsidian/core-plugins.json')!)).toEqual({ 'daily-notes': true, templates: false, 'page-preview': true, bookmarks: true, 'file-recovery': true, 'note-composer': true, 'slash-command': false, 'random-note': false, 'zk-prefixer': false, workspaces: false, bases: true });
 		expect(app.workspace.leftRibbon.items.map((i) => i.title)).not.toContain('Insert template');
 	});
 

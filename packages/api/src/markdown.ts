@@ -51,24 +51,46 @@ export class MarkdownRenderChild extends Component {
 }
 
 const postProcessors: MarkdownPostProcessor[] = [];
+/** The language of processors made by `createCodeBlockPostProcessor`. */
+const codeBlockLanguage = new WeakMap<MarkdownPostProcessor, string>();
+const codeBlockListeners = new Set<() => void>();
+
+/** Whether a registered processor draws code blocks of `language` (Live Preview renders those). */
+export function hasCodeBlockProcessor(language: string): boolean {
+	const lang = language.toLowerCase();
+	return postProcessors.some((pp) => codeBlockLanguage.get(pp) === lang);
+}
+
+/** Calls `listener` when code block processors are registered or removed; returns the way to stop. */
+export function onCodeBlockProcessorsChanged(listener: () => void): () => void {
+	codeBlockListeners.add(listener);
+	return () => codeBlockListeners.delete(listener);
+}
+
+function codeBlocksChanged(postProcessor: MarkdownPostProcessor): void {
+	if (!codeBlockLanguage.has(postProcessor)) return;
+	for (const listener of [...codeBlockListeners]) listener();
+}
 
 export class MarkdownPreviewRenderer {
 	static registerPostProcessor(postProcessor: MarkdownPostProcessor, sortOrder?: number): void {
 		if (sortOrder !== undefined) postProcessor.sortOrder = sortOrder;
 		postProcessors.push(postProcessor);
 		postProcessors.sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0));
+		codeBlocksChanged(postProcessor);
 	}
 
 	static unregisterPostProcessor(postProcessor: MarkdownPostProcessor): void {
 		const i = postProcessors.indexOf(postProcessor);
 		if (i !== -1) postProcessors.splice(i, 1);
+		codeBlocksChanged(postProcessor);
 	}
 
 	static createCodeBlockPostProcessor(
 		language: string,
 		handler: (source: string, el: HTMLElement, ctx: MarkdownPostProcessorContext) => Promise<unknown> | void,
 	): (el: HTMLElement, ctx: MarkdownPostProcessorContext) => void {
-		return (el, ctx) => {
+		const processor = (el: HTMLElement, ctx: MarkdownPostProcessorContext) => {
 			for (const code of el.querySelectorAll<HTMLElement>(`pre > code.language-${CSS.escape(language)}`)) {
 				const pre = code.parentElement!;
 				const container = createDiv(`block-language-${language}`);
@@ -82,6 +104,8 @@ export class MarkdownPreviewRenderer {
 				}
 			}
 		};
+		codeBlockLanguage.set(processor, language.toLowerCase());
+		return processor;
 	}
 }
 
@@ -670,7 +694,11 @@ async function renderEmbeds(app: App, el: HTMLElement, sourcePath: string, compo
 			void app.workspace.openLinkText(src, sourcePath);
 		};
 		try {
-			if (IMAGE_EXTENSIONS.has(file.extension.toLowerCase())) {
+			const creator = file.extension !== 'md' ? app.embedRegistry.getEmbedCreator(file) : null;
+			if (creator) {
+				span.addClass('internal-embed');
+				component.addChild(creator({ app, containerEl: span, linktext: src, sourcePath, displayText: alt, depth: embedDepth }, file, subpath));
+			} else if (IMAGE_EXTENSIONS.has(file.extension.toLowerCase())) {
 				span.addClass('image-embed', 'media-embed');
 				const img = span.createEl('img', { attr: { alt: alt && alt !== src ? alt : file.name } });
 				const size = /^(\d+)(?:x(\d+))?$/.exec(alt.trim());

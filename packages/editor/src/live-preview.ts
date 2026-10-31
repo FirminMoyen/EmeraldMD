@@ -41,6 +41,8 @@ export interface LivePreviewOptions {
 	validProperties?: (yaml: string) => boolean;
 	/** Obsidian's "Properties in document": `visible` (the default), `hidden` or `source` (YAML as text). */
 	propertiesInDocument?: () => 'visible' | 'hidden' | 'source';
+	/** Whether code blocks of `language` are drawn by a plugin (Bases, Dataview…): they are then rendered. */
+	isRenderedCodeBlock?: (language: string) => boolean;
 }
 
 export interface PropertiesHandle {
@@ -142,6 +144,9 @@ class RuleWidget extends WidgetType {
 	}
 }
 
+/** Code blocks a plugin draws: their content is interactive, and a button shows the source. */
+const CODE_BLOCK_WIDGET = 'cm-preview-code-block';
+
 /** Rendered Markdown: images, embeds, callouts and tables. */
 class MarkdownWidget extends WidgetType {
 	private static cleanups = new WeakMap<HTMLElement, () => void>();
@@ -159,7 +164,7 @@ class MarkdownWidget extends WidgetType {
 		return other.markdown === this.markdown && other.className === this.className;
 	}
 
-	toDOM(): HTMLElement {
+	toDOM(view: EditorView): HTMLElement {
 		const el = document.createElement(this.block ? 'div' : 'span');
 		el.className = `${this.className} markdown-rendered`;
 		try {
@@ -169,6 +174,23 @@ class MarkdownWidget extends WidgetType {
 			console.error(err);
 			el.textContent = this.markdown;
 		}
+		if (this.isCodeBlock) {
+			// After the content, which the renderer may replace.
+			const edit = el.appendChild(document.createElement('div'));
+			edit.className = 'edit-block-button clickable-icon';
+			edit.setAttribute('aria-label', 'Edit this block');
+			edit.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="svg-icon lucide-code-xml"><path d="m18 16 4-4-4-4"/><path d="m6 8-4 4 4 4"/><path d="m14.5 4-5 16"/></svg>';
+			edit.addEventListener('mousedown', (event) => event.preventDefault());
+			edit.addEventListener('click', (event) => {
+				event.preventDefault();
+				// Into the block's first line of code, which shows its source.
+				const pos = view.posAtDOM(el);
+				const line = view.state.doc.lineAt(pos);
+				const next = line.number < view.state.doc.lines ? view.state.doc.line(line.number + 1) : line;
+				view.dispatch({ selection: { anchor: next.from } });
+				view.focus();
+			});
+		}
 		return el;
 	}
 
@@ -177,8 +199,17 @@ class MarkdownWidget extends WidgetType {
 		MarkdownWidget.cleanups.delete(dom);
 	}
 
-	/** Links inside work; any other click goes to the editor, which moves the cursor into the source. */
+	private get isCodeBlock(): boolean {
+		return this.className.split(' ').includes(CODE_BLOCK_WIDGET);
+	}
+
+	/**
+	 * Links inside work; any other click goes to the editor, which moves the
+	 * cursor into the source. Plugins' code blocks keep every event (tables
+	 * to edit, buttons): their source is one click on the edit button away.
+	 */
 	override ignoreEvent(event: Event): boolean {
+		if (this.isCodeBlock) return true;
 		return event.target instanceof Element && Boolean(event.target.closest('a, input, button'));
 	}
 
@@ -369,8 +400,8 @@ function inlineDecorations(view: EditorView, options: LivePreviewOptions): Decor
 	return Decoration.set(ranges, true);
 }
 
-/** The widget class for blocks drawn rendered: callouts, tables, `$$` math and Mermaid diagrams. */
-function blockWidgetClass(state: EditorState, node: SyntaxNode): string | null {
+/** The widget class for blocks drawn rendered: callouts, tables, `$$` math, Mermaid diagrams and plugins' code blocks. */
+function blockWidgetClass(state: EditorState, node: SyntaxNode, options: LivePreviewOptions): string | null {
 	switch (node.name) {
 		case 'Table':
 			return 'cm-table-widget';
@@ -380,7 +411,9 @@ function blockWidgetClass(state: EditorState, node: SyntaxNode): string | null {
 			return CALLOUT_LINE.test(state.doc.lineAt(node.from).text) ? 'cm-callout' : null;
 		case 'FencedCode': {
 			const info = node.getChild('CodeInfo');
-			return info && state.doc.sliceString(info.from, info.to).trim().split(/\s/)[0] === 'mermaid' ? 'cm-mermaid' : null;
+			const language = info ? state.doc.sliceString(info.from, info.to).trim().split(/\s/)[0]! : '';
+			if (language === 'mermaid') return 'cm-mermaid';
+			return language && options.isRenderedCodeBlock?.(language) ? `${CODE_BLOCK_WIDGET} cm-lang-${language.replace(/[^\w-]/g, '')}` : null;
 		}
 		default:
 			return null;
@@ -404,7 +437,7 @@ function blockDecorations(state: EditorState, options: LivePreviewOptions): Deco
 		enter: (node) => {
 			if (node.name === 'Document') return undefined;
 			if (node.node.parent?.name !== 'Document') return false;
-			const className = blockWidgetClass(state, node.node);
+			const className = blockWidgetClass(state, node.node, options);
 			if (!className) return false;
 			const from = state.doc.lineAt(node.from).from;
 			const to = state.doc.lineAt(node.to).to;

@@ -6,8 +6,9 @@
  * Rust engine; everything else runs the app's own code.
  */
 
+import { getFrontMatterInfo, parseYaml } from '@emeraldmd/api';
 import { MemoryBackend, MemoryConfigStore } from '@emeraldmd/api/testing';
-import { LinkResolver, type CachedMetadata, type LinkSets, type SearchResults } from '@emeraldmd/core';
+import { LinkResolver, type CachedMetadata, type LinkSets, type SearchResults, type VaultUpdate } from '@emeraldmd/core';
 import { mockIPC, mockWindows } from '@tauri-apps/api/mocks';
 
 const files: Record<string, string> = {
@@ -18,6 +19,12 @@ const files: Record<string, string> = {
 	'Styles.md':
 		'# Styles\n\nA **bold** and *italic* line with ==a highlight==, `inline code`, a [[Welcome|link]], a [[Missing note]] and #tag.\n\n> A quote, with a [[Ideas|link]].\n\n> [!tip] Callouts\n> Follow the theme\'s `--callout-*` colours.\n\n> [!warning]- Folded\n> Hidden until opened.\n\n| Setting | Where |\n| --- | --- |\n| Theme | appearance.json |\n| Snippets | .obsidian/snippets |\n\n```js\nconsole.log("code block");\n```\n\n---\n\n- [ ] a task\n- [x] a done task\n',
 	'Journal/2026-10-16.md': '# 2026-10-16\n\nWorked on [[Projects/Plan]] with flour. #journal\n',
+	'Books/Dune.md': '---\nauthor: Frank Herbert\nrating: 5\nprice: 12.5\nread: true\ntags: [book, scifi]\n---\nA desert planet.\n',
+	'Books/Foundation.md': '---\nauthor: Isaac Asimov\nrating: 4\nprice: 8\nread: false\ntags: [book]\n---\nPsychohistory.\n',
+	'Books/Hyperion.md': '---\nauthor: Dan Simmons\nrating: 5\nprice: 10\ntags: [book]\n---\nPilgrims.\n',
+	'Library.base':
+		'filters:\n  and:\n    - file.hasTag("book")\nformulas:\n  cost: (price * 1.2).toFixed(2)\nviews:\n  - type: table\n    name: All books\n    order:\n      - file.name\n      - author\n      - rating\n      - read\n      - formula.cost\n    sort:\n      - property: rating\n        direction: DESC\n  - type: cards\n    name: Cards\n    order:\n      - file.name\n      - author\n',
+	'Reading.md': '---\nauthor: Isaac Asimov\n---\n# Reading\n\n![[Library.base#Cards]]\n\n```base\nfilters: author == this.author\nviews:\n  - type: list\n    name: Same author\n```\n',
 	'Board.canvas': JSON.stringify(
 		{
 			nodes: [
@@ -68,40 +75,62 @@ async function search(query: string): Promise<SearchResults> {
 }
 
 /**
- * A rough stand-in for the Rust index (links, headings, tags), so the
- * backlinks, outline, tags and graph panes have something to show.
+ * A rough stand-in for the Rust index (links, headings, tags, frontmatter),
+ * so the backlinks, outline, tags, graph and Bases have something to show.
  */
+function indexNote(path: string, text: string, resolver: LinkResolver): { cache: CachedMetadata; sets: LinkSets } {
+	const pos = (offset: number, length = 0) => ({ start: { line: 0, col: 0, offset }, end: { line: 0, col: 0, offset: offset + length } });
+	const sets: LinkSets = { resolved: {}, unresolved: {} };
+	const cache: CachedMetadata = { links: [], tags: [], headings: [] };
+	for (const m of text.matchAll(/!?\[\[([^\]|#]+)[^\]]*\]\]/g)) {
+		cache.links!.push({ link: m[1]!, original: m[0], displayText: m[1]!, position: pos(m.index, m[0].length) });
+		const target = resolver.resolve(m[1]!, path);
+		if (target) sets.resolved[target] = (sets.resolved[target] ?? 0) + 1;
+		else sets.unresolved[m[1]!] = (sets.unresolved[m[1]!] ?? 0) + 1;
+	}
+	for (const m of text.matchAll(/(^|\s)(#[\p{L}\p{N}_/-]*[\p{L}_/-][\p{L}\p{N}_/-]*)/gu)) {
+		cache.tags!.push({ tag: m[2]!, position: pos(m.index + m[1]!.length) });
+	}
+	let offset = 0;
+	for (const [line, lineText] of text.split('\n').entries()) {
+		const h = /^(#{1,6})\s+(.+)$/.exec(lineText);
+		if (h) cache.headings!.push({ heading: h[2]!, level: h[1]!.length, position: { start: { line, col: 0, offset }, end: { line, col: lineText.length, offset: offset + lineText.length } } });
+		offset += lineText.length + 1;
+	}
+	const fm = getFrontMatterInfo(text);
+	if (fm.exists) {
+		try {
+			cache.frontmatter = parseYaml(fm.frontmatter) as Record<string, unknown>;
+		} catch {
+			// Invalid YAML: no properties, as in the Rust index.
+		}
+	}
+	return { cache, sets };
+}
+
+function resolver(): LinkResolver {
+	return new LinkResolver(backend.entries().filter((e) => e.kind === 'file').map((e) => e.path));
+}
+
 function snapshotIndex(): { metadata: Record<string, CachedMetadata>; links: Record<string, LinkSets> } {
-	const paths = backend.entries().filter((e) => e.kind === 'file').map((e) => e.path);
-	const resolver = new LinkResolver(paths);
+	const linkResolver = resolver();
 	const metadata: Record<string, CachedMetadata> = {};
 	const links: Record<string, LinkSets> = {};
-	const pos = (offset: number, length = 0) => ({ start: { line: 0, col: 0, offset }, end: { line: 0, col: 0, offset: offset + length } });
-	for (const path of paths.filter((p) => p.endsWith('.md'))) {
-		const text = files[path] ?? '';
-		const sets: LinkSets = { resolved: {}, unresolved: {} };
-		const cache: CachedMetadata = { links: [], tags: [], headings: [] };
-		for (const m of text.matchAll(/!?\[\[([^\]|#]+)[^\]]*\]\]/g)) {
-			cache.links!.push({ link: m[1]!, original: m[0], displayText: m[1]!, position: pos(m.index, m[0].length) });
-			const target = resolver.resolve(m[1]!, path);
-			if (target) sets.resolved[target] = (sets.resolved[target] ?? 0) + 1;
-			else sets.unresolved[m[1]!] = (sets.unresolved[m[1]!] ?? 0) + 1;
-		}
-		for (const m of text.matchAll(/(^|\s)(#[\p{L}\p{N}_/-]*[\p{L}_/-][\p{L}\p{N}_/-]*)/gu)) {
-			cache.tags!.push({ tag: m[2]!, position: pos(m.index + m[1]!.length) });
-		}
-		let offset = 0;
-		for (const [line, lineText] of text.split('\n').entries()) {
-			const h = /^(#{1,6})\s+(.+)$/.exec(lineText);
-			if (h) cache.headings!.push({ heading: h[2]!, level: h[1]!.length, position: { start: { line, col: 0, offset }, end: { line, col: lineText.length, offset: offset + lineText.length } } });
-			offset += lineText.length + 1;
-		}
-		const fmTags = /^---\n[\s\S]*?^tags:\s*\[([^\]]*)\]/m.exec(text);
-		if (fmTags) cache.frontmatter = { tags: fmTags[1]!.split(',').map((t) => t.trim()) };
-		metadata[path] = cache;
-		links[path] = sets;
+	for (const entry of backend.entries()) {
+		if (entry.kind !== 'file' || !entry.path.endsWith('.md')) continue;
+		const { cache, sets } = indexNote(entry.path, backend.files.get(entry.path) ?? '', linkResolver);
+		metadata[entry.path] = cache;
+		links[entry.path] = sets;
 	}
 	return { metadata, links };
+}
+
+/** A write, with the note indexed again as the Rust backend does. */
+async function indexed(path: string, data: string, write: Promise<VaultUpdate>): Promise<VaultUpdate> {
+	const update = await write;
+	if (!path.endsWith('.md')) return update;
+	const { cache, sets } = indexNote(path, data, resolver());
+	return { ...update, metadata: { ...update.metadata, [path]: cache }, links: { ...update.links, [path]: sets } };
 }
 
 mockWindows('main');
@@ -116,9 +145,9 @@ mockIPC(
 			case 'read_file':
 				return backend.read(a.path!);
 			case 'write_file':
-				return backend.write(a.path!, a.data!);
+				return indexed(a.path!, a.data!, backend.write(a.path!, a.data!));
 			case 'create_file':
-				return backend.create(a.path!, a.data!);
+				return indexed(a.path!, a.data!, backend.create(a.path!, a.data!));
 			case 'create_folder':
 				return backend.createFolder(a.path!);
 			case 'rename_path':

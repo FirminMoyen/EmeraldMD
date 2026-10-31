@@ -1,6 +1,7 @@
 import type { Extension } from '@codemirror/state';
 import { normalizePath } from '@emeraldmd/core';
 import type { App } from './app';
+import type { BasesViewRegistration } from './bases/view';
 import type { Command } from './commands';
 import { Component } from './component';
 import { MarkdownPreviewRenderer, type MarkdownPostProcessor, type MarkdownPostProcessorContext } from './markdown';
@@ -113,9 +114,12 @@ export abstract class Plugin extends Component {
 		return this.registerMarkdownPostProcessor(processor, sortOrder ?? -100);
 	}
 
-	/** Bases views are not supported yet; returns false as the typings allow. */
-	registerBasesView(_viewId: string, _registration: unknown): boolean {
-		return false;
+	/** Adds a Bases view type; false if Bases is off or the id is taken. */
+	registerBasesView(viewId: string, registration: BasesViewRegistration): boolean {
+		const bases = this.app.internalPlugins.getEnabledPluginById('bases') as unknown as { registerView?(id: string, r: BasesViewRegistration): boolean; unregisterView?(id: string): void } | null;
+		if (!bases?.registerView?.(viewId, registration)) return false;
+		this.register(() => bases.unregisterView?.(viewId));
+		return true;
 	}
 
 	registerEditorExtension(extension: Extension): void {
