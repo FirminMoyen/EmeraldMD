@@ -15,7 +15,7 @@ const files: Record<string, string> = {
 	'Welcome.md':
 		'# Welcome\n\nThis is the browser preview of EmeraldMD. See [[Projects/Plan]] and [[Ideas]].\n\n## Getting started\n\nTry #inbox and #project/alpha, the quick switcher (⌘O) and the command palette (⌘P).\n\n## Search\n\nSearch for flour or plan.\n',
 	'Projects/Plan.md': '---\ntags: [project/alpha]\nstatus: draft\n---\n# Plan\n\nBack to [[Welcome]]. Buy flour.\n\n## Goals\n\n- [ ] ship [[Ideas]]\n- [x] write the plan\n',
-	'Ideas.md': '# Ideas\n\nLinked from [[Welcome]] #inbox\n\n- A canvas: [[Board.canvas]]\n',
+	'Ideas.md': '# Ideas\n\nLinked from [[Welcome]] #inbox\n\n- A canvas: [[Board.canvas]]\n- A claim that needs a source[^1], and an aside^[Written *inline*.]\n- The same source again[^1]\n\n[^1]: Obsidian Help, *Footnotes*.\n',
 	'Styles.md':
 		'# Styles\n\nA **bold** and *italic* line with ==a highlight==, `inline code`, a [[Welcome|link]], a [[Missing note]] and #tag.\n\n> A quote, with a [[Ideas|link]].\n\n> [!tip] Callouts\n> Follow the theme\'s `--callout-*` colours.\n\n> [!warning]- Folded\n> Hidden until opened.\n\n| Setting | Where |\n| --- | --- |\n| Theme | appearance.json |\n| Snippets | .obsidian/snippets |\n\n```js\nconsole.log("code block");\n```\n\n---\n\n- [ ] a task\n- [x] a done task\n',
 	'Journal/2026-10-16.md': '# 2026-10-16\n\nWorked on [[Projects/Plan]] with flour. #journal\n',
