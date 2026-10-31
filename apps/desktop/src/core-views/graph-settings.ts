@@ -2,7 +2,9 @@
  * The graph view's settings, kept in `.obsidian/graph.json` with Obsidian's
  * keys (so a vault's existing settings apply here, and back): filters,
  * colour groups, display and forces, and the controls panel that edits them
- * (`.graph-controls`, collapsible sections as in Obsidian).
+ * (`.graph-controls`, collapsible sections as in Obsidian). The local graph
+ * has the same settings plus its own (`localJumps`, `localBacklinks`,
+ * `localForelinks`, `localInterlinks`), in a first section.
  */
 
 import { debounce, Setting, setIcon, type App } from '@emeraldmd/api';
@@ -36,7 +38,16 @@ export interface GraphSettings {
 	scale: number;
 	/** Whether the controls panel is closed. */
 	close: boolean;
+	/** Local graph: how many links away, and which links to follow or show. */
+	localJumps?: number;
+	localBacklinks?: boolean;
+	localForelinks?: boolean;
+	localInterlinks?: boolean;
+	'collapse-local'?: boolean;
 }
+
+/** The local graph's own settings, as Obsidian's defaults. */
+export const DEFAULT_LOCAL_SETTINGS = { localJumps: 1, localBacklinks: true, localForelinks: true, localInterlinks: false, 'collapse-local': false };
 
 export const DEFAULT_GRAPH_SETTINGS: GraphSettings = {
 	'collapse-filter': false,
@@ -111,7 +122,7 @@ export function graphSettingsSaver(app: App): (settings: GraphSettings) => void 
 	}, 500);
 }
 
-export type GraphChange = 'filter' | 'groups' | 'display' | 'forces' | 'panel';
+export type GraphChange = 'filter' | 'groups' | 'display' | 'forces' | 'panel' | 'local';
 
 /** The controls panel at the top right of the graph view. */
 export class GraphControls {
@@ -121,6 +132,8 @@ export class GraphControls {
 		parent: HTMLElement,
 		private readonly settings: GraphSettings,
 		private readonly onChange: (change: GraphChange) => void,
+		/** The local graph's controls: its own section first. */
+		private readonly local = false,
 	) {
 		this.containerEl = parent.createDiv('graph-controls');
 		this.render();
@@ -139,6 +152,14 @@ export class GraphControls {
 		open.addEventListener('click', () => this.setOpen(true));
 		if (s.close) return;
 
+		if (this.local) {
+			this.section('Local graph', 'collapse-local', (el) => {
+				this.slider(el, 'Depth', 'localJumps', 1, 5, 1, 'local');
+				this.toggle(el, 'Incoming links', 'localBacklinks', 'local');
+				this.toggle(el, 'Outgoing links', 'localForelinks', 'local');
+				this.toggle(el, 'Neighbor links', 'localInterlinks', 'local');
+			});
+		}
 		this.section('Filters', 'collapse-filter', (el) => {
 			const search = el.createEl('input', { cls: 'graph-search', attr: { type: 'search', placeholder: 'Search files…', spellcheck: 'false' } });
 			search.value = s.search;
@@ -203,7 +224,7 @@ export class GraphControls {
 		this.onChange('panel');
 	}
 
-	private section(title: string, key: 'collapse-filter' | 'collapse-color-groups' | 'collapse-display' | 'collapse-forces', build: (el: HTMLElement) => void): void {
+	private section(title: string, key: 'collapse-filter' | 'collapse-color-groups' | 'collapse-display' | 'collapse-forces' | 'collapse-local', build: (el: HTMLElement) => void): void {
 		const s = this.settings;
 		const section = this.containerEl.createDiv({ cls: ['graph-control-section', ...(s[key] ? ['is-collapsed'] : [])] });
 		const header = section.createDiv('tree-item-self is-clickable graph-control-section-header');
@@ -217,12 +238,17 @@ export class GraphControls {
 		if (!s[key]) build(section.createDiv('tree-item-children graph-control-section-content'));
 	}
 
-	private toggle(el: HTMLElement, name: string, key: 'showTags' | 'showAttachments' | 'hideUnresolved' | 'showOrphans' | 'showArrow', change: GraphChange): void {
+	private toggle(
+		el: HTMLElement,
+		name: string,
+		key: 'showTags' | 'showAttachments' | 'hideUnresolved' | 'showOrphans' | 'showArrow' | 'localBacklinks' | 'localForelinks' | 'localInterlinks',
+		change: GraphChange,
+	): void {
 		new Setting(el)
 			.setName(name)
 			.setClass('mod-toggle')
 			.addToggle((t) =>
-				t.setValue(this.settings[key]).onChange((on) => {
+				t.setValue(this.settings[key] === true).onChange((on) => {
 					this.settings[key] = on;
 					this.onChange(change);
 				}),
@@ -232,7 +258,7 @@ export class GraphControls {
 	private slider(
 		el: HTMLElement,
 		name: string,
-		key: 'textFadeMultiplier' | 'nodeSizeMultiplier' | 'lineSizeMultiplier' | 'centerStrength' | 'repelStrength' | 'linkStrength' | 'linkDistance',
+		key: 'textFadeMultiplier' | 'nodeSizeMultiplier' | 'lineSizeMultiplier' | 'centerStrength' | 'repelStrength' | 'linkStrength' | 'linkDistance' | 'localJumps',
 		min: number,
 		max: number,
 		step: number,
@@ -244,7 +270,7 @@ export class GraphControls {
 			.addSlider((slider) =>
 				slider
 					.setLimits(min, max, step)
-					.setValue(this.settings[key])
+					.setValue(this.settings[key] ?? min)
 					.setDynamicTooltip()
 					.onChange((value) => {
 						this.settings[key] = value;

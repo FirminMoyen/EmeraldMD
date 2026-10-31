@@ -37,8 +37,13 @@ export interface GraphFilters {
 	showUnresolved?: boolean;
 	/** Nodes with no links at all. */
 	showOrphans?: boolean;
-	/** Local graph: only nodes within `depth` links of `center`. */
-	local?: { center: string; depth: number };
+	/**
+	 * Local graph: only nodes within `depth` links of `center`, following
+	 * links to it (`incoming`) and from it (`outgoing`), both by default;
+	 * without `neighbors`, links between nodes the same number of links away
+	 * are left out.
+	 */
+	local?: { center: string; depth: number; incoming?: boolean; outgoing?: boolean; neighbors?: boolean };
 }
 
 /** What the graph needs from a vault, decoupled from the live objects. */
@@ -131,13 +136,18 @@ export function buildGraph(input: GraphInput, filters: GraphFilters = {}): Graph
 	}
 
 	let keep = new Set(nodes.keys());
-	if (filters.local) keep = neighbourhood(filters.local.center, filters.local.depth, links, keep);
+	let depths: Map<string, number> | null = null;
+	if (filters.local) {
+		depths = neighbourhood(filters.local, links, keep);
+		keep = new Set(depths.keys());
+	}
 	const search = filters.search?.trim().toLowerCase();
 	if (search) keep = new Set([...keep].filter((id) => id.toLowerCase().includes(search)));
 	const only = filters.files;
 	if (only) keep = new Set([...keep].filter((id) => nodes.get(id)!.kind !== 'note' || only.has(id)));
 
-	const kept = dedupe(links.filter((l) => keep.has(l.source) && keep.has(l.target)));
+	const between = (l: GraphLink) => filters.local?.neighbors !== false || !depths || depths.get(l.source) !== depths.get(l.target);
+	const kept = dedupe(links.filter((l) => keep.has(l.source) && keep.has(l.target) && between(l)));
 	for (const l of kept) {
 		nodes.get(l.source)!.degree++;
 		nodes.get(l.target)!.degree++;
@@ -152,29 +162,31 @@ export function buildGraph(input: GraphInput, filters: GraphFilters = {}): Graph
 	return { nodes: result, links: kept };
 }
 
-/** Nodes within `depth` links of `center`, following links both ways. */
-function neighbourhood(center: string, depth: number, links: GraphLink[], within: Set<string>): Set<string> {
-	if (!within.has(center)) return new Set();
+/** Nodes within `depth` links of `center` (in the directions asked for), with how many links away each is. */
+function neighbourhood(local: NonNullable<GraphFilters['local']>, links: GraphLink[], within: Set<string>): Map<string, number> {
+	const depths = new Map<string, number>();
+	if (!within.has(local.center)) return depths;
 	const adjacent = new Map<string, string[]>();
+	const connect = (from: string, to: string) => (adjacent.get(from) ?? adjacent.set(from, []).get(from)!).push(to);
 	for (const { source, target } of links) {
-		(adjacent.get(source) ?? adjacent.set(source, []).get(source)!).push(target);
-		(adjacent.get(target) ?? adjacent.set(target, []).get(target)!).push(source);
+		if (local.outgoing !== false) connect(source, target);
+		if (local.incoming !== false) connect(target, source);
 	}
-	const seen = new Set([center]);
-	let frontier = [center];
-	for (let d = 0; d < depth && frontier.length; d++) {
+	depths.set(local.center, 0);
+	let frontier = [local.center];
+	for (let d = 1; d <= local.depth && frontier.length; d++) {
 		const next: string[] = [];
 		for (const id of frontier) {
 			for (const n of adjacent.get(id) ?? []) {
-				if (!seen.has(n) && within.has(n)) {
-					seen.add(n);
+				if (!depths.has(n) && within.has(n)) {
+					depths.set(n, d);
 					next.push(n);
 				}
 			}
 		}
 		frontier = next;
 	}
-	return seen;
+	return depths;
 }
 
 /** One link per unordered pair, so A→B and B→A draw one line. */
