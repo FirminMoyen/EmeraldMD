@@ -43,6 +43,9 @@ struct Entry {
     /// The file was deleted at `time`; there is no blob.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     deleted: bool,
+    /// The content from before the server first changed the file: later changes never overwrite it.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    sealed: bool,
 }
 
 #[derive(Debug, Default, Serialize, Deserialize)]
@@ -165,6 +168,10 @@ impl History {
 
     /// Keeps `data` as the file's content after a change at `now`.
     pub fn record(&self, path: &str, data: &[u8], now: u64) -> io::Result<()> {
+        self.keep(path, data, now, false)
+    }
+
+    fn keep(&self, path: &str, data: &[u8], now: u64, sealed: bool) -> io::Result<()> {
         if data.len() as u64 > self.settings.max_file_bytes {
             return Ok(());
         }
@@ -176,7 +183,7 @@ impl History {
         let interval = self.settings.interval.as_millis() as u64;
         match index.versions.last_mut() {
             Some(last) if !last.deleted && last.hash == digest => return self.save(&index),
-            Some(last) if !last.deleted && now.saturating_sub(last.time) < interval => {
+            Some(last) if !last.deleted && !last.sealed && !sealed && now.saturating_sub(last.time) < interval => {
                 create_private_dir(&dir)?;
                 fs::write(dir.join(last.time.to_string()), data)?;
                 last.size = data.len() as u64;
@@ -186,7 +193,7 @@ impl History {
                 let time = last.map_or(now, |e| now.max(e.time + 1));
                 create_private_dir(&dir)?;
                 fs::write(dir.join(time.to_string()), data)?;
-                index.versions.push(Entry { time, size: data.len() as u64, hash: digest, deleted: false });
+                index.versions.push(Entry { time, size: data.len() as u64, hash: digest, deleted: false, sealed });
             }
         }
         self.save(&index)
@@ -198,8 +205,7 @@ impl History {
         if data.len() as u64 > self.settings.max_file_bytes || self.load(path).last_content().is_some() {
             return Ok(());
         }
-        // An old mtime starts a version of its own, which the coming change will not overwrite.
-        self.record(path, data, mtime.min(now_ms().saturating_sub(self.settings.interval.as_millis() as u64)))
+        self.keep(path, data, mtime.min(now_ms()), true)
     }
 
     /// Whether the file has a version: a seed is only needed when it has none.
@@ -214,7 +220,7 @@ impl History {
         match index.versions.last() {
             Some(last) if !last.deleted => {
                 let time = now.max(last.time + 1);
-                index.versions.push(Entry { time, size: 0, hash: String::new(), deleted: true });
+                index.versions.push(Entry { time, size: 0, hash: String::new(), deleted: true, sealed: false });
                 self.save(&index)
             }
             _ => Ok(()),
@@ -353,13 +359,16 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let h = history(dir.path());
         let t = now_ms();
-        h.seed("A.md", b"before", t - 3_600_000).unwrap();
+        // Changed a minute ago, before the server changes it: that state stays, with its time.
+        h.seed("A.md", b"before", t - MIN).unwrap();
         h.record("A.md", b"after", t).unwrap();
         // A second seed does nothing: there are versions now.
         h.seed("A.md", b"ignored", t).unwrap();
         let versions = h.versions("A.md");
         assert_eq!(versions.len(), 2);
+        assert_eq!(versions[1].time, t - MIN);
         assert_eq!(h.read("A.md", versions[1].time).unwrap(), b"before");
+        assert_eq!(h.read("A.md", versions[0].time).unwrap(), b"after");
     }
 
     #[test]
