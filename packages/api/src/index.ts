@@ -15,6 +15,7 @@ export { applyTemplateVariables, Bookmarks, DailyNotes, InternalPlugins, Interna
 export { diffLines, FileRecovery, IndexedDbSnapshotStore, MemorySnapshotStore, type Snapshot, type SnapshotStore } from './file-recovery';
 export { mergeProperties, NoteComposer } from './note-composer';
 export { RandomNote, SlashCommands, UniqueNoteCreator } from './small-core-plugins';
+export { Slides, splitSlides } from './slides';
 export { Workspaces } from './workspaces';
 export { Appearance, hexToHsl, MAX_FONT_SIZE, MIN_FONT_SIZE, type BaseTheme, type ThemeSetting } from './appearance';
 export { addPluginStyle, CustomCss, type ThemeManifest } from './custom-css';

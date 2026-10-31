@@ -13,6 +13,7 @@ import { defaultCorePlugins, InternalPlugins } from './core-plugins';
 import { FileRecovery } from './file-recovery';
 import { NoteComposer } from './note-composer';
 import { RandomNote, SlashCommands, UniqueNoteCreator } from './small-core-plugins';
+import { Slides } from './slides';
 import { Workspaces } from './workspaces';
 import { CustomCss } from './custom-css';
 import { EmbedRegistry } from './embed-registry';
@@ -139,7 +140,7 @@ export class App {
 	/** @internal */
 	plugins: PluginsApi = noPlugins;
 	/** @internal */
-	internalPlugins = new InternalPlugins([...defaultCorePlugins(), new FileRecovery(), new NoteComposer(), new SlashCommands(), new RandomNote(), new UniqueNoteCreator(), new Workspaces(), new Bases()]);
+	internalPlugins = new InternalPlugins([...defaultCorePlugins(), new FileRecovery(), new NoteComposer(), new SlashCommands(), new RandomNote(), new UniqueNoteCreator(), new Workspaces(), new Bases(), new Slides()]);
 	/** @internal How embeds of other file types are drawn. */
 	embedRegistry = new EmbedRegistry();
 	/** @internal */
