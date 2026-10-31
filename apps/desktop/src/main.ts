@@ -376,6 +376,7 @@ class EmeraldApp {
 			newNote: (folder) => this.newNote(folder),
 			newFolder: (folder) => this.newFolder(folder),
 			trash: (file) => this.trash(file),
+			trashAll: (files) => this.trashAll(files),
 			reveal: local ? (file) => invoke('reveal_path', { path: file.path }) : undefined,
 			notice: (message) => this.notice(message),
 		});
@@ -1249,6 +1250,25 @@ class EmeraldApp {
 			await this.vault.trash(file);
 		} catch (err) {
 			this.notice(`Could not move to trash: ${err}`);
+		}
+	}
+
+	/** Moves several items to the trash, asking once. Items inside a folder also being moved go with it. */
+	private async trashAll(files: TAbstractFile[]): Promise<void> {
+		if (!this.vault) return;
+		const top = files.filter((file) => !files.some((other) => other !== file && other instanceof TFolder && isInside(file, other)));
+		if (!top.length) return;
+		if (this.app?.vault.getConfig('promptDelete') !== false) {
+			const ok = await ask(`Move ${top.length} items to the vault's .trash folder?`, { title: 'Move to trash', kind: 'warning' });
+			if (!ok) return;
+		}
+		if (this.panes().some((pane) => pane.activeFile && top.some((file) => isInside(pane.activeFile!, file)))) await this.flush();
+		for (const file of top) {
+			try {
+				await this.vault.trash(file);
+			} catch (err) {
+				this.notice(`Could not move ${file.name} to trash: ${err}`);
+			}
 		}
 	}
 

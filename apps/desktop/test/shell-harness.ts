@@ -84,6 +84,9 @@ export async function startShell(files: Record<string, string>, config: Record<s
 					return { status: 503, headers: {}, body: '' };
 				case 'plugin:dialog|ask':
 					return true;
+				// The dialog plugin's ask() and confirm() are message boxes; answer yes.
+				case 'plugin:dialog|message':
+					return 'Yes';
 				default:
 					// Window title and other window-plugin calls.
 					return null;
