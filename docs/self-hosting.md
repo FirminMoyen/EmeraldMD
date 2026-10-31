@@ -111,6 +111,18 @@ token is refused and a revoked one still works.
 The token goes to standard output and the messages to standard error, so
 `token add laptop > laptop.token` saves just the token.
 
+To share a vault without letting anyone change it, make a read-only token:
+
+```bash
+emeraldmd-server token add family --vault notes --read-only
+```
+
+It adds `read_only = true` to the entry. Such a token reads everything a
+vault holds (notes, settings, search, version history, live changes), and
+every request that would change something is refused with `403`. The app
+opens the vault read-only: notes can be read, not edited. It cannot keep a
+synced copy, which needs to send changes, so it opens the vault online.
+
 Without a config file, put hashes in `EMERALDMD_TOKEN_HASHES` instead:
 `emeraldmd-server token new` prints a token and its hash, and
 `emeraldmd-server token hash` hashes a token read from standard input.
@@ -369,8 +381,8 @@ streams), 503 (server busy) or 500. Every response carries
 | Request | Body | Response |
 |---|---|---|
 | `GET /healthz` | | `{"status": "ok"}`, no token needed |
-| `GET /api/vaults` | | `[{"id", "name"}]` the token may open |
-| `GET /api/vaults/{id}/snapshot` | | Files, metadata and links (the app's `VaultSnapshot`), plus `epoch` and `version` |
+| `GET /api/vaults` | | `[{"id", "name"}]` the token may open, with `"readOnly": true` for a read-only token |
+| `GET /api/vaults/{id}/snapshot` | | Files, metadata and links (the app's `VaultSnapshot`), plus `epoch` and `version` (and `readOnly` for a read-only token) |
 | `GET /api/vaults/{id}/files?path=` | | The file's text |
 | `PUT /api/vaults/{id}/files?path=` | The new text | `VaultUpdate` |
 | `POST /api/vaults/{id}/files` | `{"path", "data"}` | `VaultUpdate`; 409 if it exists |

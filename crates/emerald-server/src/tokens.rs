@@ -20,6 +20,8 @@ pub struct TokenInfo {
     pub name: String,
     /// `None`: every vault.
     pub vaults: Option<Vec<String>>,
+    /// The token can only read.
+    pub read_only: bool,
     /// From `EMERALDMD_TOKEN_HASHES` rather than the config file.
     pub from_env: bool,
 }
@@ -28,13 +30,13 @@ pub struct TokenInfo {
 pub fn list(file: Option<&Path>, env: impl Fn(&str) -> Option<String>) -> Result<Vec<TokenInfo>, String> {
     let from_file = Config::read(file, |_| None).map_err(|e| e.to_string())?;
     let from_env = Config::read(None, env).map_err(|e| e.to_string())?;
-    let info = |t: crate::config::TokenConfig, from_env| TokenInfo { name: t.name, vaults: t.vaults, from_env };
+    let info = |t: crate::config::TokenConfig, from_env| TokenInfo { name: t.name, vaults: t.vaults, read_only: t.read_only, from_env };
     Ok(from_file.tokens.into_iter().map(|t| info(t, false)).chain(from_env.tokens.into_iter().map(|t| info(t, true))).collect())
 }
 
 /// Creates a token named `name` for `vaults` (empty: every vault), adds its
 /// hash to `file`, and returns the token.
-pub fn add(file: &Path, name: &str, vaults: &[String], env: impl Fn(&str) -> Option<String>) -> Result<String, String> {
+pub fn add(file: &Path, name: &str, vaults: &[String], read_only: bool, env: impl Fn(&str) -> Option<String>) -> Result<String, String> {
     if name.is_empty() || name.len() > 64 || !name.chars().all(|c| c.is_ascii_alphanumeric() || "._-@".contains(c)) {
         return Err(format!("token name {name:?} may only contain letters, digits, '.', '_', '-' and '@' (at most 64)"));
     }
@@ -59,6 +61,9 @@ pub fn add(file: &Path, name: &str, vaults: &[String], env: impl Fn(&str) -> Opt
     table["hash"] = value(hash_token(&token));
     if !ids.is_empty() {
         table["vaults"] = value(Array::from_iter(ids));
+    }
+    if read_only {
+        table["read_only"] = value(true);
     }
     let mut doc = document(&text, &file)?;
     match doc.get_mut("tokens") {
@@ -188,9 +193,19 @@ path = "/srv/work"
     }
 
     #[test]
+    fn add_can_make_a_read_only_token() {
+        let (_dir, file) = config_file(CONFIG);
+        add(&file, "reader", &[], true, no_env).unwrap();
+        assert!(fs::read_to_string(&file).unwrap().contains("read_only = true"));
+        let config = Config::load(Some(&file), no_env).unwrap();
+        assert!(config.tokens.iter().find(|t| t.name == "reader").unwrap().read_only);
+        assert!(list(Some(&file), no_env).unwrap().iter().any(|t| t.name == "reader" && t.read_only));
+    }
+
+    #[test]
     fn add_appends_a_hash_after_the_last_token_and_keeps_the_rest() {
         let (_dir, file) = config_file(CONFIG);
-        let token = add(&file, "phone", &["work".into(), "work".into()], no_env).unwrap();
+        let token = add(&file, "phone", &["work".into(), "work".into()], false, no_env).unwrap();
         assert!(token.starts_with("emd_"));
         let text = fs::read_to_string(&file).unwrap();
         assert!(!text.contains(&token), "only the hash is written");
@@ -212,26 +227,26 @@ path = "/srv/work"
     #[test]
     fn add_refuses_bad_names_duplicates_and_unknown_vaults() {
         let (_dir, file) = config_file(CONFIG);
-        assert!(add(&file, "laptop", &[], no_env).unwrap_err().contains("already exists"));
-        assert!(add(&file, "my phone", &[], no_env).is_err());
-        assert!(add(&file, "", &[], no_env).is_err());
-        assert!(add(&file, "phone", &["nope".into()], no_env).unwrap_err().contains("notes, work"));
+        assert!(add(&file, "laptop", &[], false, no_env).unwrap_err().contains("already exists"));
+        assert!(add(&file, "my phone", &[], false, no_env).is_err());
+        assert!(add(&file, "", &[], false, no_env).is_err());
+        assert!(add(&file, "phone", &["nope".into()], false, no_env).unwrap_err().contains("notes, work"));
         let env = |key: &str| (key == "EMERALDMD_TOKEN_HASHES").then(|| crate::auth::hash_token("x"));
-        assert!(add(&file, "env-1", &[], env).unwrap_err().contains("already exists"));
+        assert!(add(&file, "env-1", &[], false, env).unwrap_err().contains("already exists"));
         assert_eq!(fs::read_to_string(&file).unwrap(), CONFIG, "nothing written on errors");
-        assert!(add(&file.with_extension("missing"), "phone", &[], no_env).is_err());
+        assert!(add(&file.with_extension("missing"), "phone", &[], false, no_env).is_err());
     }
 
     #[test]
     fn add_creates_the_first_token_and_handles_inline_lists() {
         let (_dir, file) = config_file("[[vaults]]\nid = \"notes\"\npath = \"/srv/notes\"\n");
-        add(&file, "first", &[], no_env).unwrap();
+        add(&file, "first", &[], false, no_env).unwrap();
         let config = Config::load(Some(&file), no_env).unwrap();
         assert_eq!(config.tokens[0].name, "first");
         assert_eq!(config.tokens[0].vaults, None);
 
         let (_dir, file) = config_file("tokens = []\n\n[[vaults]]\nid = \"notes\"\npath = \"/srv/notes\"\n");
-        add(&file, "inline", &["notes".into()], no_env).unwrap();
+        add(&file, "inline", &["notes".into()], false, no_env).unwrap();
         assert_eq!(Config::load(Some(&file), no_env).unwrap().tokens[0].name, "inline");
         assert!(fs::read_to_string(&file).unwrap().starts_with("tokens = [{"));
     }
@@ -239,15 +254,15 @@ path = "/srv/work"
     #[test]
     fn list_shows_names_and_scopes_never_hashes() {
         let (_dir, file) = config_file(CONFIG);
-        add(&file, "phone", &["notes".into()], no_env).unwrap();
+        add(&file, "phone", &["notes".into()], false, no_env).unwrap();
         let env = |key: &str| (key == "EMERALDMD_TOKEN_HASHES").then(|| crate::auth::hash_token("x"));
         let tokens = list(Some(&file), env).unwrap();
         assert_eq!(
             tokens,
             [
-                TokenInfo { name: "laptop".into(), vaults: None, from_env: false },
-                TokenInfo { name: "phone".into(), vaults: Some(vec!["notes".into()]), from_env: false },
-                TokenInfo { name: "env-1".into(), vaults: None, from_env: true },
+                TokenInfo { name: "laptop".into(), vaults: None, read_only: false, from_env: false },
+                TokenInfo { name: "phone".into(), vaults: Some(vec!["notes".into()]), read_only: false, from_env: false },
+                TokenInfo { name: "env-1".into(), vaults: None, read_only: false, from_env: true },
             ]
         );
     }
@@ -255,7 +270,7 @@ path = "/srv/work"
     #[test]
     fn revoke_removes_one_token_and_keeps_the_rest() {
         let (_dir, file) = config_file(CONFIG);
-        add(&file, "phone", &[], no_env).unwrap();
+        add(&file, "phone", &[], false, no_env).unwrap();
         assert_eq!(revoke(&file, "phone", no_env).unwrap(), 1);
         assert_eq!(fs::read_to_string(&file).unwrap(), CONFIG, "back to the original text");
         assert!(revoke(&file, "phone", no_env).unwrap_err().contains("no token named"));
@@ -275,7 +290,7 @@ path = "/srv/work"
         fs::set_permissions(&file, fs::Permissions::from_mode(0o600)).unwrap();
         let link = dir.path().join("link.toml");
         symlink(&file, &link).unwrap();
-        add(&link, "phone", &[], no_env).unwrap();
+        add(&link, "phone", &[], false, no_env).unwrap();
         assert!(fs::symlink_metadata(&link).unwrap().file_type().is_symlink());
         assert_eq!(fs::metadata(&file).unwrap().permissions().mode() & 0o777, 0o600);
         assert!(fs::read_to_string(&file).unwrap().contains("phone"));

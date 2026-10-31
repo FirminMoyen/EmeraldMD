@@ -18,6 +18,8 @@ import type { FileEntry, VaultBackend, VaultSnapshot, VaultUpdate } from './type
 export interface RemoteVaultInfo {
 	id: string;
 	name: string;
+	/** The token can only read this vault. */
+	readOnly?: boolean;
 }
 
 export type RemoteStatus = 'connecting' | 'connected' | 'reconnecting' | 'unauthorized' | 'closed';
@@ -128,6 +130,8 @@ export class RemoteBackend implements VaultBackend {
 	readonly vaultId: string;
 	/** Sent with every request, so the server does not echo our own changes back. */
 	readonly clientId = randomId();
+	/** The token can only read this vault (known once the snapshot is loaded). */
+	readOnly = false;
 
 	private readonly token: string;
 	private readonly options: RemoteBackendOptions;
@@ -166,8 +170,9 @@ export class RemoteBackend implements VaultBackend {
 	/** Loads the vault's files and metadata; `connect()` streams changes from this point on. */
 	async snapshot(): Promise<VaultSnapshot> {
 		const response = await this.request('GET', '/snapshot');
-		const { epoch, version, ...snapshot } = (await response.json()) as VaultSnapshot & StreamPosition;
+		const { epoch, version, readOnly, ...snapshot } = (await response.json()) as VaultSnapshot & StreamPosition & { readOnly?: boolean };
 		this.position = { epoch, version };
+		this.readOnly = readOnly === true;
 		return { ...snapshot, basePath: `${this.serverUrl}/api/vaults/${encodeURIComponent(this.vaultId)}` };
 	}
 

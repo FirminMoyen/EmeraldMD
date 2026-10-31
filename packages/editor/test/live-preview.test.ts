@@ -153,6 +153,18 @@ describe("plugins' code blocks in Live Preview", () => {
 	});
 });
 
+describe('read-only notes', () => {
+	it('can be read but not edited', async () => {
+		const { DEFAULT_EDITOR_SETTINGS } = await import('../src');
+		const editor = open('hello', 0);
+		editor.configure({ ...DEFAULT_EDITOR_SETTINGS, readOnly: true });
+		expect(editor.view.state.readOnly).toBe(true);
+		expect(editor.view.contentDOM.getAttribute('contenteditable')).toBe('false');
+		editor.configure({ ...DEFAULT_EDITOR_SETTINGS });
+		expect(editor.view.state.readOnly).toBe(false);
+	});
+});
+
 describe('Vim key bindings', () => {
 	it('turns on with the setting and edits with Vim keys', async () => {
 		const { DEFAULT_EDITOR_SETTINGS } = await import('../src');

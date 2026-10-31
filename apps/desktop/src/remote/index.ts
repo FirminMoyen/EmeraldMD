@@ -158,6 +158,9 @@ export class RemoteVaults {
 	 * local vault (the first sync fills it).
 	 */
 	private async openSynced(vault: RemoteVault, token: string): Promise<void> {
+		// A synced copy sends this device's changes: a token that can only read cannot keep one.
+		const info = (await RemoteBackend.listVaults(vault.serverUrl, token)).find((v) => v.id === vault.vaultId);
+		if (info?.readOnly) throw new Error('This token can only read the vault: open it online rather than as a synced copy.');
 		const parent = await openDialog({ directory: true, title: `Choose where to keep "${vault.name}" on this Mac` });
 		if (typeof parent !== 'string') throw new Error('Choose a folder for the synced copy.');
 		const name = vault.name.replace(/[\\/:]/g, '-').trim() || vault.vaultId;
