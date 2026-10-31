@@ -26,25 +26,28 @@ restricted mode, as in Obsidian), and the tabs and splits Obsidian left in
 **Editing.** Live Preview, source mode and the reading view; properties;
 callouts, embeds, math, Mermaid and footnotes; Obsidian's editing commands
 (⌘B, ⌘K, ⌘L…), folding, search and replace in the note, the editor menu, Vim
-keys, attachments by paste or drop, Export to PDF.
+keys, attachments by paste or drop, Export to PDF. Images, audio, video and
+PDFs open in tabs and embed as players and frames; code blocks that plugins
+draw (Dataview, `base`…) render in Live Preview.
 
-**Finding your way.** Tabs and splits (drag tabs between panes), back and
-forward, hover previews, the quick switcher and command palette, search with
+**Finding your way.** Tabs (pinned or not) and splits (drag tabs between
+panes), back and forward, hover previews, the quick switcher and command palette, search with
 Obsidian's query syntax, backlinks with unlinked mentions, outgoing links,
-outline, tags, bookmarks, properties views, the graph with Obsidian's graph
+outline, footnotes, tags, bookmarks, properties views, the graph with Obsidian's graph
 settings, canvas files, and Bases (`.base` files as tables, cards and lists of
 notes, with Obsidian's formulas and filters).
 
 **Core plugins.** Daily notes, templates, page preview, bookmarks, file
-recovery, note composer, workspaces, slash commands, random note and unique
-note creator.
+recovery, note composer, workspaces, Bases, slides, audio recorder, slash
+commands, random note and unique note creator.
 
 **Plugins and themes.** Browse, install, update and uninstall community
 plugins and themes from the community lists.
 
 **macOS.** Native menus with the usual shortcuts, a hidden title bar as in
-Obsidian, window and workspace restored, large vaults (10,000 notes open in
-about half a second).
+Obsidian, window and workspace restored, `emeraldmd://` links (like
+`obsidian://`: open, new, search, daily, and plugins' actions), large vaults
+(10,000 notes open in about half a second).
 
 **Self-hosting.** `emeraldmd-server` serves vault folders over HTTP with a
 live WebSocket, tokens scoped to vaults, rate and size limits, a Docker image
@@ -54,8 +57,11 @@ and an HTTPS guide ([docs/self-hosting.md](docs/self-hosting.md)). In the app:
   is unreachable, edits are kept and saved when it is back. Settings,
   themes and community plugins are stored on the server.
 - **Synced copies**: a full offline copy, synced on changes with a
-  three-way merge and conflict copies, optionally with `.obsidian`
-  ([docs/sync.md](docs/sync.md)).
+  three-way merge and conflict copies, optionally with `.obsidian`, and
+  selective sync of folders and file types ([docs/sync.md](docs/sync.md)).
+- **Version history**: like Obsidian Sync, the server keeps earlier versions
+  of files and deleted files for 30 days; compare and restore them from the
+  app.
 
 **Not yet.** A signed and notarized DMG and a published server image (they
 need the owner's accounts), mobile apps, Windows and Linux packages.
