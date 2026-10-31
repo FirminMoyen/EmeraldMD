@@ -144,6 +144,14 @@ describe('RemoteBackend requests', () => {
 		expect(calls[0]!.headers.Authorization).toBe('Bearer secret');
 	});
 
+	it('knows from the snapshot when the token can only read', async () => {
+		const { backend } = setup({ 'GET /api/vaults/notes/snapshot': json({ ...snapshotBody('e1', 3), readOnly: true }) });
+		expect(backend.readOnly).toBe(false);
+		const snapshot = await backend.snapshot();
+		expect(backend.readOnly).toBe(true);
+		expect('readOnly' in snapshot).toBe(false);
+	});
+
 	it('maps vault operations to the HTTP API', async () => {
 		const changed = update({ upserted: [file('A/Note.md', 2)] });
 		const { backend, calls } = setup({

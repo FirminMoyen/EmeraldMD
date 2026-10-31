@@ -143,6 +143,8 @@ class EmeraldApp {
 	private layout: SplitLayout | null = null;
 	private pane: NotePane | null = null;
 	private paneHost: PaneHost | null = null;
+	/** The open vault is on a server whose token can only read it: nothing is edited or saved. */
+	private readOnly = false;
 	/** Closed tabs, where they were, most recent last, for "Undo close tab". */
 	private readonly closedTabs: { pane: NotePane; tab: Tab; index: number }[] = [];
 	private tabClock = 0;
@@ -347,6 +349,9 @@ class EmeraldApp {
 		sessionStorage.removeItem(REOPEN_FILE_KEY);
 		const local = backend instanceof TauriBackend;
 		this.backend = backend;
+		this.readOnly = backend instanceof RemoteBackend && backend.readOnly;
+		document.body.toggleClass('is-read-only', this.readOnly);
+		if (this.readOnly) this.notice('This vault is read-only: the token you connected with can read it, not change it.', 8000);
 		// Remote vaults keep `.obsidian` on the server; servers from before the config endpoints get it in memory.
 		const config = local ? new TauriConfigStore() : await remoteConfigStore(backend);
 		const vault = new Vault(backend, snapshot.name, snapshot.files, config);
@@ -506,6 +511,7 @@ class EmeraldApp {
 
 		this.paneHost = {
 			app,
+			readOnly: () => this.readOnly,
 			notice: (message, duration) => this.notice(message, duration),
 			saveText: (file, text) => this.saveText(file, text),
 			saved: () => this.pendingSave,
@@ -1136,6 +1142,8 @@ class EmeraldApp {
 	 * run in order, so the last one for a file decides whether it is saved.
 	 */
 	private saveText(file: TFile, text: string | null): Promise<boolean> {
+		// A read-only vault keeps its notes as they are on the server.
+		if (this.readOnly) return Promise.resolve(true);
 		const vault = this.vault;
 		const save = this.pendingSave.then(async () => {
 			const data = text ?? this.unsaved.get(file);

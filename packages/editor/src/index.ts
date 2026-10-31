@@ -129,6 +129,8 @@ export interface EditorSettings {
 	vim: boolean;
 	/** `foldHeading` / `foldIndent`: fold indicators next to headings and lists. */
 	folding: boolean;
+	/** The note can be read but not changed (a server vault opened with a read-only token). */
+	readOnly?: boolean;
 }
 
 export const DEFAULT_EDITOR_SETTINGS: EditorSettings = {
@@ -161,6 +163,7 @@ function settingsExtensions(settings: EditorSettings): Extension {
 		EditorState.tabSize.of(settings.tabSize),
 		indentUnit.of(settings.useTab ? '\t' : ' '.repeat(settings.tabSize)),
 		EditorView.contentAttributes.of({ spellcheck: String(settings.spellcheck), autocorrect: settings.spellcheck ? 'on' : 'off' }),
+		settings.readOnly ? [EditorState.readOnly.of(true), EditorView.editable.of(false)] : [],
 	];
 }
 

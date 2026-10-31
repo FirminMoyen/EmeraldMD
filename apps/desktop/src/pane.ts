@@ -45,6 +45,8 @@ export interface SavedTabs {
 /** What a pane needs from the app. */
 export interface PaneHost {
 	readonly app: App;
+	/** The vault can only be read (a server vault opened with a read-only token). */
+	readOnly?(): boolean;
 	notice(message: string, duration?: number): void;
 	/**
 	 * Saves `text` to `file` after the saves already queued (of every pane),
@@ -341,6 +343,7 @@ export class NotePane {
 			readableLineLength: readable,
 			vim: get('vimMode') === true,
 			folding: get('foldHeading') !== false || get('foldIndent') !== false,
+			readOnly: this.host.readOnly?.() ?? false,
 		});
 		this.view.previewMode.containerEl.toggleClass('is-readable-line-width', readable);
 	}
