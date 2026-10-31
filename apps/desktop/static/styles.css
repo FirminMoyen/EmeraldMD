@@ -4520,4 +4520,27 @@ div.bases-group-heading {
 	height: 600px;
 	border: 1px solid var(--background-modifier-border);
 	border-radius: var(--radius-m);
+
+/* Pinned tabs: a pin in place of the close button */
+.workspace-tab-header-status-container {
+	display: flex;
+	align-items: center;
+}
+
+.workspace-tab-header-status-icon.mod-pinned {
+	display: flex;
+	padding: 2px;
+	border-radius: var(--radius-s);
+	color: var(--icon-color);
+	cursor: var(--cursor);
+}
+
+.workspace-tab-header-status-icon.mod-pinned:hover {
+	background: var(--background-modifier-hover);
+	color: var(--icon-color-hover);
+}
+
+.workspace-tab-header-status-icon .svg-icon {
+	width: 14px;
+	height: 14px;
 }
