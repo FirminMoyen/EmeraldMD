@@ -68,6 +68,21 @@ describe('MarkdownRenderer extras', () => {
 		expect(app).toBeTruthy();
 	});
 
+	it('embeds audio and video players and PDFs', async () => {
+		const t = await createTestApp({ 'song.mp3': 'MP3', 'clip.mp4': 'MP4', 'paper.pdf': 'PDF' });
+		t.app.vault.adapter.resourcePath = (path) => `asset://localhost/vault/${path}`;
+		const el = document.createElement('div');
+		await MarkdownRenderer.render(t.app, '![[song.mp3]]\n\n![[clip.mp4|320x180]]\n\n![[paper.pdf#page=3&height=400]]', el, 'Note.md', new Component());
+		const audio = el.querySelector<HTMLAudioElement>('.media-embed.audio-embed audio');
+		expect(audio?.getAttribute('src')).toMatch(/song\.mp3/);
+		expect(audio?.hasAttribute('controls')).toBe(true);
+		const video = el.querySelector<HTMLVideoElement>('.media-embed.video-embed video');
+		expect([video?.getAttribute('width'), video?.getAttribute('height')]).toEqual(['320', '180']);
+		const pdf = el.querySelector<HTMLIFrameElement>('.pdf-embed iframe.pdf-frame');
+		expect(pdf?.getAttribute('src')).toMatch(/paper\.pdf\?\d+#page=3$/);
+		expect(pdf?.style.height).toBe('400px');
+	});
+
 	it('embeds a note section and marks missing embeds', async () => {
 		const other = '# Other\n\nIntro\n\n## Part\n\nPart text\n\n## Next\n\nNot this';
 		const { el } = await render('![[Other#Part]]\n\n![[Nope]]', { 'Other.md': other });

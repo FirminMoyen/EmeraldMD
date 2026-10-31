@@ -15,6 +15,7 @@ import type { HoverPopover } from './hover-popover';
 import { getIcon, setIcon } from './icons';
 import { Keymap } from './keymap';
 import { renderMath } from './math';
+import { mediaKind, renderMedia, resourceUrl } from './media';
 import { getFrontMatterInfo, parseYaml, sanitizeHTMLToDom } from './util';
 
 const parser = baseParser.configure([GFM, ...obsidianMarkdown]);
@@ -630,19 +631,9 @@ export abstract class MarkdownRenderer extends MarkdownRenderChild {
 	}
 }
 
-const IMAGE_EXTENSIONS = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp', 'avif']);
 /** Embedded notes may embed notes, up to this depth (guards against cycles). */
 const MAX_EMBED_DEPTH = 3;
 let embedDepth = 0;
-
-/** A URL for an attachment: the vault's resource path, or a blob URL for remote vaults. */
-async function attachmentUrl(app: App, file: TFile, component: Component): Promise<string> {
-	const url = app.vault.getResourcePath(file);
-	if (/^[a-z][a-z0-9+.-]*:/i.test(url)) return url;
-	const blobUrl = URL.createObjectURL(new Blob([await app.vault.readBinary(file)]));
-	component.register(() => URL.revokeObjectURL(blobUrl));
-	return blobUrl;
-}
 
 /** The part of a note a `#Heading` or `#^block` subpath points at, or all of it. */
 export function sectionText(app: App, file: TFile, text: string, subpath: string): string {
@@ -698,15 +689,15 @@ async function renderEmbeds(app: App, el: HTMLElement, sourcePath: string, compo
 			if (creator) {
 				span.addClass('internal-embed');
 				component.addChild(creator({ app, containerEl: span, linktext: src, sourcePath, displayText: alt, depth: embedDepth }, file, subpath));
-			} else if (IMAGE_EXTENSIONS.has(file.extension.toLowerCase())) {
-				span.addClass('image-embed', 'media-embed');
-				const img = span.createEl('img', { attr: { alt: alt && alt !== src ? alt : file.name } });
-				const size = /^(\d+)(?:x(\d+))?$/.exec(alt.trim());
-				if (size) {
-					img.setAttr('width', size[1]!);
-					if (size[2]) img.setAttr('height', size[2]);
-				}
-				img.src = await attachmentUrl(app, file, component);
+			} else if (mediaKind(file.extension)) {
+				// Images, audio and video players, and PDFs (`#page=3`, `#height=400`).
+				const kind = mediaKind(file.extension)!;
+				span.addClass(kind === 'pdf' ? 'pdf-embed' : `${kind}-embed`, 'media-embed');
+				const url = await resourceUrl(app, file, component);
+				const page = /[#&]page=(\d+)/.exec(subpath)?.[1];
+				const media = renderMedia(span, kind, url, { alt: alt && alt !== src ? alt : file.name, size: alt, page: page ? Number(page) : undefined });
+				const height = /[#&]height=(\d+)/.exec(subpath)?.[1];
+				if (kind === 'pdf' && height) media.style.height = `${height}px`;
 			} else if (file.extension === 'md') {
 				span.addClass('markdown-embed', 'inline-embed');
 				const link = span.createDiv({ cls: 'markdown-embed-link', attr: { 'aria-label': 'Open link' } });

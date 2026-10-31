@@ -15,6 +15,7 @@ export { applyTemplateVariables, Bookmarks, DailyNotes, InternalPlugins, Interna
 export { diffLines, FileRecovery, HistoryModal, IndexedDbSnapshotStore, MemorySnapshotStore, type HistoryModalText, type HistorySource, type Snapshot, type SnapshotStore } from './file-recovery';
 export { mergeProperties, NoteComposer } from './note-composer';
 export { RandomNote, SlashCommands, UniqueNoteCreator } from './small-core-plugins';
+export { AudioRecorder } from './audio-recorder';
 export { Slides, splitSlides } from './slides';
 export { Workspaces } from './workspaces';
 export { Appearance, hexToHsl, MAX_FONT_SIZE, MIN_FONT_SIZE, type BaseTheme, type ThemeSetting } from './appearance';
@@ -28,6 +29,7 @@ export { CodeMirrorEditor, editorInfoExtensions, setLivePreviewEffect } from './
 export { editorCommands, registerEditorCommands, setHeading, toggleBullet, toggleChecklist, toggleNumbered, toggleQuote, toggleWrap } from './editor-commands';
 export { eventKey, eventModifiers, formatHotkey, isMacOS } from './keymap';
 export { hasCodeBlockProcessor, onCodeBlockProcessorsChanged, renderMarkdownToDom } from './markdown';
+export { MEDIA_EXTENSIONS, mediaKind, renderMedia, resourceUrl, type MediaKind } from './media';
 export { setRequestBackend, type RawResponse, type RequestBackend } from './request';
 export { AppSetting } from './setting-tab';
 export { compareVersions, isDangerousUrl, sanitizeSvg } from './util';
