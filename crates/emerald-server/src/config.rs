@@ -5,15 +5,20 @@
 use std::collections::HashSet;
 use std::net::SocketAddr;
 use std::path::{Path, PathBuf};
+use std::time::Duration;
 
 use argon2::password_hash::phc::PasswordHash;
 use serde::Deserialize;
 
+use crate::history::HistorySettings;
 use crate::net::IpNet;
 
 pub const DEFAULT_BIND: &str = "127.0.0.1:8484";
 pub const DEFAULT_MAX_BODY_MB: usize = 64;
 pub const DEFAULT_MAX_STREAMS_PER_TOKEN: usize = 16;
+pub const DEFAULT_HISTORY_KEEP_DAYS: u32 = 30;
+pub const DEFAULT_HISTORY_INTERVAL_MINUTES: u32 = 5;
+pub const DEFAULT_HISTORY_MAX_FILE_MB: u32 = 10;
 
 /// Origins of the EmeraldMD app's webview: `tauri://localhost` on macOS, iOS
 /// and Linux, `http(s)://tauri.localhost` on Windows and Android.
@@ -50,6 +55,67 @@ pub struct TokenConfig {
     pub vaults: Option<Vec<String>>,
 }
 
+/// Version history (`[history]`): earlier versions of files and deleted files.
+#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct HistoryConfig {
+    #[serde(default = "yes")]
+    pub enabled: bool,
+    /// Where versions are kept, outside the vaults. Defaults to a `history`
+    /// folder next to the config file (or `EMERALDMD_HISTORY_DIR`); without
+    /// either, there is no history.
+    pub dir: Option<PathBuf>,
+    #[serde(default = "default_keep_days")]
+    pub keep_days: u32,
+    /// Changes closer together than this update one version.
+    #[serde(default = "default_interval_minutes")]
+    pub interval_minutes: u32,
+    /// Larger files get no versions.
+    #[serde(default = "default_max_file_mb")]
+    pub max_file_mb: u32,
+}
+
+fn yes() -> bool {
+    true
+}
+
+fn default_keep_days() -> u32 {
+    DEFAULT_HISTORY_KEEP_DAYS
+}
+
+fn default_interval_minutes() -> u32 {
+    DEFAULT_HISTORY_INTERVAL_MINUTES
+}
+
+fn default_max_file_mb() -> u32 {
+    DEFAULT_HISTORY_MAX_FILE_MB
+}
+
+impl Default for HistoryConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            dir: None,
+            keep_days: DEFAULT_HISTORY_KEEP_DAYS,
+            interval_minutes: DEFAULT_HISTORY_INTERVAL_MINUTES,
+            max_file_mb: DEFAULT_HISTORY_MAX_FILE_MB,
+        }
+    }
+}
+
+impl HistoryConfig {
+    /// The settings vaults use, or `None` when history is off or has no folder.
+    pub fn settings(&self) -> Option<HistorySettings> {
+        let dir = self.dir.clone().filter(|_| self.enabled)?;
+        Some(HistorySettings {
+            dir,
+            keep: Duration::from_secs(u64::from(self.keep_days) * 86_400),
+            interval: Duration::from_secs(u64::from(self.interval_minutes) * 60),
+            max_file_bytes: u64::from(self.max_file_mb) * 1024 * 1024,
+        })
+    }
+}
+
 #[derive(Debug, Clone, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Config {
@@ -72,6 +138,8 @@ pub struct Config {
     pub vaults: Vec<VaultConfig>,
     #[serde(default)]
     pub tokens: Vec<TokenConfig>,
+    #[serde(default)]
+    pub history: HistoryConfig,
 }
 
 fn default_bind() -> SocketAddr {
@@ -96,6 +164,7 @@ impl Default for Config {
             max_streams_per_token: DEFAULT_MAX_STREAMS_PER_TOKEN,
             vaults: Vec::new(),
             tokens: Vec::new(),
+            history: HistoryConfig::default(),
         }
     }
 }
@@ -117,7 +186,11 @@ impl Config {
         let mut config = match file {
             Some(path) => {
                 let text = std::fs::read_to_string(path).map_err(|source| ConfigError::Read { path: path.to_owned(), source })?;
-                Self::from_toml(&text, path)?
+                let mut config = Self::from_toml(&text, path)?;
+                if config.history.dir.is_none() {
+                    config.history.dir = path.parent().map(|dir| dir.join("history"));
+                }
+                config
             }
             None => Self::default(),
         };
@@ -128,7 +201,7 @@ impl Config {
     /// `EMERALDMD_BIND`, `EMERALDMD_VAULTS` (`id=path` pairs separated by `;`),
     /// `EMERALDMD_TOKEN_HASHES` (whitespace-separated hashes, each allowed every
     /// vault), `EMERALDMD_ALLOWED_ORIGINS` and `EMERALDMD_TRUSTED_PROXIES`
-    /// (both comma-separated).
+    /// (both comma-separated), and `EMERALDMD_HISTORY_DIR`.
     pub fn apply_env(&mut self, env: impl Fn(&str) -> Option<String>) -> Result<(), ConfigError> {
         if let Some(bind) = env("EMERALDMD_BIND").filter(|s| !s.trim().is_empty()) {
             self.bind = bind.trim().parse().map_err(|_| ConfigError::Invalid(format!("EMERALDMD_BIND is not an address: {bind}")))?;
@@ -152,6 +225,9 @@ impl Config {
         }
         if let Some(proxies) = env("EMERALDMD_TRUSTED_PROXIES") {
             self.trusted_proxies.extend(list(proxies));
+        }
+        if let Some(dir) = env("EMERALDMD_HISTORY_DIR").filter(|s| !s.trim().is_empty()) {
+            self.history.dir = Some(PathBuf::from(dir.trim()));
         }
         Ok(())
     }
@@ -213,6 +289,9 @@ impl Config {
         if self.max_streams_per_token == 0 {
             return invalid("max_streams_per_token must be at least 1".into());
         }
+        if self.history.keep_days == 0 {
+            return invalid("history.keep_days must be at least 1 (set history.enabled = false to keep no versions)".into());
+        }
         for proxy in &self.trusted_proxies {
             proxy.parse::<IpNet>().map_err(|e| ConfigError::Invalid(format!("trusted_proxies: {e}")))?;
         }
@@ -245,6 +324,26 @@ mod tests {
 
     fn no_env(_: &str) -> Option<String> {
         None
+    }
+
+    #[test]
+    fn keeps_history_next_to_the_config_file_unless_told_otherwise() {
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join("server.toml");
+        std::fs::write(&file, format!("[[vaults]]\nid = \"n\"\npath = \"/srv/n\"\n[[tokens]]\nname = \"t\"\nhash = \"{HASH}\"\n")).unwrap();
+        let config = Config::load(Some(&file), no_env).unwrap();
+        let settings = config.history.settings().unwrap();
+        assert_eq!(settings.dir, dir.path().join("history"));
+        assert_eq!(settings.keep, Duration::from_secs(30 * 86_400));
+        assert_eq!(settings.interval, Duration::from_secs(300));
+
+        let env = |key: &str| (key == "EMERALDMD_HISTORY_DIR").then(|| "/data/history".to_owned());
+        assert_eq!(Config::load(Some(&file), env).unwrap().history.dir, Some(PathBuf::from("/data/history")));
+
+        std::fs::write(&file, format!("[history]\nenabled = false\n[[vaults]]\nid = \"n\"\npath = \"/srv/n\"\n[[tokens]]\nname = \"t\"\nhash = \"{HASH}\"\n")).unwrap();
+        assert!(Config::load(Some(&file), no_env).unwrap().history.settings().is_none());
+        // Without a config file or EMERALDMD_HISTORY_DIR there is nowhere to keep it.
+        assert!(Config::default().history.settings().is_none());
     }
 
     #[test]

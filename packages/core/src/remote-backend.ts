@@ -99,6 +99,20 @@ async function errorFrom(response: Response): Promise<RemoteError> {
 	return new RemoteError(message, response.status);
 }
 
+/** A version of a file kept by the server's version history. */
+export interface ServerVersion {
+	/** Milliseconds since the epoch. */
+	time: number;
+	size: number;
+}
+
+export interface DeletedServerFile {
+	path: string;
+	deletedAt: number;
+	/** The size of its last version. */
+	size: number;
+}
+
 function randomId(): string {
 	const bytes = new Uint8Array(16);
 	crypto.getRandomValues(bytes);
@@ -246,6 +260,22 @@ export class RemoteBackend implements VaultBackend {
 	/** Moves a plugin's or theme's folder to the vault's `.trash` (uninstalling). */
 	async trashConfig(path: string): Promise<void> {
 		await this.request('POST', '/config/trash', { json: { path } });
+	}
+
+	/** A file's versions on the server, newest first. `RemoteError` 404 when the server keeps no history. */
+	async versions(path: string): Promise<ServerVersion[]> {
+		const body = (await (await this.request('GET', '/history', { query: { path } })).json()) as { versions: ServerVersion[] };
+		return body.versions;
+	}
+
+	/** The content of a file's version made at `time`. */
+	async readVersion(path: string, time: number): Promise<ArrayBuffer> {
+		return (await this.request('GET', '/history/raw', { query: { path, time: String(time) } })).arrayBuffer();
+	}
+
+	/** Deleted files the server still has versions of, most recently deleted first. */
+	async deletedFiles(): Promise<DeletedServerFile[]> {
+		return (await (await this.request('GET', '/history/deleted')).json()) as DeletedServerFile[];
 	}
 
 	async search(query: string, options: SearchOptions = {}): Promise<SearchResults> {

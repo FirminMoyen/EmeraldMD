@@ -89,6 +89,10 @@ end-to-end tests; the rest is in priority order within each section.
 - [x] Canvas files (`.canvas`): view and edit
 - [x] Backlinks with the line of each link; unlinked mentions (name and
       aliases, whole words, outside links) turned into links in one click
+- [x] Footnotes view ("Footnotes view: Show footnotes"): the open note's
+      footnotes in the order they are referenced, rendered, with undefined
+      and unreferenced ones marked; a click shows the definition, arrows
+      show each reference
 - [x] Outgoing links pane: the note's links, those not created yet, and
       unlinked mentions of other notes in its text
 - [x] Properties view: all properties of the vault with their counts (a
@@ -174,6 +178,13 @@ end-to-end tests; the rest is in priority order within each section.
       and saved about 8 s after the server came back (the Connect dialog
       itself, with a token typed and saved to the Keychain, is still to be
       tried by the owner)
+- [x] Version history, as Obsidian Sync's: the server keeps earlier
+      versions of files (one per 5-minute burst of changes, and the content
+      from before the first change) and deleted files, for 30 days, outside
+      the vaults (`[history]`); in the app, "Server: Show version history"
+      and "Server: Show deleted files" (online and synced vaults) show a
+      version, the changes since, and restore it (checked against a local
+      server)
 - [x] Hardening: rate limits, request size limits, trusted-proxy client
       addresses, symlink-safe path handling
 - [x] Security review of the desktop app (docs/security-desktop.md: inert

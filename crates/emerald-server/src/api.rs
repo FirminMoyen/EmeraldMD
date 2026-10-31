@@ -82,6 +82,9 @@ pub fn router(state: AppState) -> Router {
         .route("/api/vaults/{id}/config/file", axum::routing::put(config_write))
         .route("/api/vaults/{id}/config/folders", post(config_folder).layer(small()))
         .route("/api/vaults/{id}/config/trash", post(config_trash).layer(small()))
+        .route("/api/vaults/{id}/history", get(history_versions))
+        .route("/api/vaults/{id}/history/raw", get(history_raw))
+        .route("/api/vaults/{id}/history/deleted", get(history_deleted))
         .route("/api/vaults/{id}/events/ticket", post(events_ticket).layer(small()))
         .route("/api/vaults/{id}/events", get(events::stream))
         // Applies to every route and to unknown paths alike.
@@ -320,13 +323,20 @@ fn origin(headers: &HeaderMap) -> Option<String> {
     headers.get(CLIENT_HEADER).and_then(|v| v.to_str().ok()).map(str::to_owned)
 }
 
+/// Runs a change; `changes` are the paths it changes or deletes (see [`SharedVault::mutate`]).
 async fn mutate(
     vault: Arc<SharedVault>,
     headers: &HeaderMap,
+    changes: Vec<String>,
     f: impl FnOnce(&mut VaultSession) -> emerald_core::vault::Result<VaultUpdate> + Send + 'static,
 ) -> ApiResult<Json<VaultUpdate>> {
     let origin = origin(headers);
-    blocking(move || vault.mutate(origin, f)).await.map(Json)
+    blocking(move || {
+        let changes: Vec<&str> = changes.iter().map(String::as_str).collect();
+        vault.mutate(origin, &changes, f)
+    })
+    .await
+    .map(Json)
 }
 
 #[derive(Serialize)]
@@ -383,7 +393,7 @@ async fn write_file(
     data: String,
 ) -> ApiResult<Json<VaultUpdate>> {
     let vault = state.vault(&principal, &id)?;
-    mutate(vault, &headers, move |s| {
+    mutate(vault, &headers, vec![query.path.clone()], move |s| {
         paths::check_writable(s.vault(), &[&query.path])?;
         s.write(&query.path, &data)
     })
@@ -412,11 +422,57 @@ async fn write_raw(
     data: Bytes,
 ) -> ApiResult<Json<VaultUpdate>> {
     let vault = state.vault(&principal, &id)?;
-    mutate(vault, &headers, move |s| {
+    mutate(vault, &headers, vec![query.path.clone()], move |s| {
         paths::check_writable(s.vault(), &[&query.path])?;
         s.write_bytes(&query.path, &data)
     })
     .await
+}
+
+impl From<crate::vaults::NoHistory> for ApiError {
+    fn from(_: crate::vaults::NoHistory) -> Self {
+        Self::new(StatusCode::NOT_FOUND, "version history is off on this server")
+    }
+}
+
+/// A file's earlier versions, newest first: `{"versions": [{"time", "size"}]}`.
+async fn history_versions(
+    State(state): State<AppState>,
+    Extension(principal): Extension<Arc<Principal>>,
+    Path(id): Path<String>,
+    Query(query): Query<PathQuery>,
+) -> ApiResult<Json<serde_json::Value>> {
+    let vault = state.vault(&principal, &id)?;
+    let versions = blocking(move || vault.versions(&query.path).map_err(ApiError::from)?.map_err(ApiError::from)).await?;
+    Ok(Json(json!({ "versions": versions })))
+}
+
+#[derive(Deserialize)]
+struct VersionQuery {
+    path: String,
+    time: u64,
+}
+
+/// The bytes of one version of a file.
+async fn history_raw(
+    State(state): State<AppState>,
+    Extension(principal): Extension<Arc<Principal>>,
+    Path(id): Path<String>,
+    Query(query): Query<VersionQuery>,
+) -> ApiResult<Response> {
+    let vault = state.vault(&principal, &id)?;
+    let data = blocking(move || vault.read_version(&query.path, query.time).map_err(ApiError::from)?.map_err(ApiError::from)).await?;
+    Ok(([(CONTENT_TYPE, "application/octet-stream")], data).into_response())
+}
+
+/// Deleted files that still have versions: `[{"path", "deletedAt", "size"}]`.
+async fn history_deleted(
+    State(state): State<AppState>,
+    Extension(principal): Extension<Arc<Principal>>,
+    Path(id): Path<String>,
+) -> ApiResult<Json<Vec<crate::history::DeletedFile>>> {
+    let vault = state.vault(&principal, &id)?;
+    blocking(move || vault.deleted_files().map_err(ApiError::from)).await.map(Json)
 }
 
 #[derive(Deserialize)]
@@ -488,7 +544,7 @@ async fn create_file(
     Json(body): Json<CreateFile>,
 ) -> ApiResult<Json<VaultUpdate>> {
     let vault = state.vault(&principal, &id)?;
-    mutate(vault, &headers, move |s| {
+    mutate(vault, &headers, Vec::new(), move |s| {
         paths::check_writable(s.vault(), &[&body.path])?;
         s.create(&body.path, &body.data)
     })
@@ -570,7 +626,7 @@ async fn create_folder(
     Json(body): Json<PathBody>,
 ) -> ApiResult<Json<VaultUpdate>> {
     let vault = state.vault(&principal, &id)?;
-    mutate(vault, &headers, move |s| {
+    mutate(vault, &headers, Vec::new(), move |s| {
         paths::check_writable(s.vault(), &[&body.path])?;
         s.create_folder(&body.path)
     })
@@ -591,7 +647,7 @@ async fn rename(
     Json(body): Json<RenameBody>,
 ) -> ApiResult<Json<VaultUpdate>> {
     let vault = state.vault(&principal, &id)?;
-    mutate(vault, &headers, move |s| {
+    mutate(vault, &headers, vec![body.from.clone(), body.to.clone()], move |s| {
         paths::check_writable(s.vault(), &[&body.from, &body.to])?;
         s.rename(&body.from, &body.to)
     })
@@ -607,7 +663,7 @@ async fn trash(
     Json(body): Json<PathBody>,
 ) -> ApiResult<Json<VaultUpdate>> {
     let vault = state.vault(&principal, &id)?;
-    mutate(vault, &headers, move |s| {
+    mutate(vault, &headers, vec![body.path.clone()], move |s| {
         paths::check_trashable(s.vault(), &body.path)?;
         s.trash(&body.path)
     })

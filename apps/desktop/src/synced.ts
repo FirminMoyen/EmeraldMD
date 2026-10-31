@@ -10,7 +10,7 @@ import { Notice, Setting, SettingTab, setIcon, setTooltip, type App } from '@eme
 import { invoke } from '@tauri-apps/api/core';
 import { listen } from '@tauri-apps/api/event';
 
-interface SyncedVault {
+export interface SyncedVault {
 	localPath: string;
 	serverUrl: string;
 	vaultId: string;
@@ -90,9 +90,10 @@ function hostOf(url: string): string {
 	}
 }
 
-export async function setupSyncStatus(app: App, host: SyncStatusHost): Promise<void> {
+/** Sets up a synced vault's status and settings; its server and vault, or null if the vault is not synced. */
+export async function setupSyncStatus(app: App, host: SyncStatusHost): Promise<SyncedVault | null> {
 	const config = await invoke<SyncedVault | null>('open_vault_sync').catch(() => null);
-	if (!config) return;
+	if (!config) return null;
 
 	const item = app.statusBar.containerEl.createDiv({ cls: 'status-bar-item mod-clickable emerald-sync-status', attr: { role: 'button' } });
 	app.statusBar.containerEl.prepend(item);
@@ -176,4 +177,5 @@ export async function setupSyncStatus(app: App, host: SyncStatusHost): Promise<v
 	// Statuses sent before this listener existed are lost: ask for a fresh pass.
 	await invoke('sync_now').catch(() => {});
 	window.addEventListener('beforeunload', unlisten);
+	return config;
 }
