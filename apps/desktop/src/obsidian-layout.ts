@@ -16,6 +16,7 @@ export interface ObsidianLeaf {
 	id?: string;
 	type: 'leaf';
 	state?: { type?: string; state?: { file?: unknown; mode?: unknown } & Record<string, unknown>; title?: string; icon?: string };
+	pinned?: boolean;
 	dimension?: number;
 }
 
@@ -60,8 +61,9 @@ export function toObsidianLayout(saved: SavedLayout, sidebars: { left: boolean; 
 				if (node.current && i === node.active) active = id;
 				if (!tab.file) return { id, type: 'leaf', state: { type: 'empty', state: {} } };
 				const markdown = tab.file.endsWith('.md');
-				const type = markdown ? 'markdown' : tab.file.endsWith('.canvas') ? 'canvas' : 'file';
-				return { id, type: 'leaf', state: { type, state: markdown ? { file: tab.file, mode: tab.mode, source: false } : { file: tab.file } } };
+				const type = markdown ? 'markdown' : tab.file.endsWith('.canvas') ? 'canvas' : tab.file.endsWith('.base') ? 'bases' : 'file';
+				const state = { type, state: markdown ? { file: tab.file, mode: tab.mode, source: false } : { file: tab.file } };
+				return { id, type: 'leaf', ...(tab.pinned ? { pinned: true } : {}), state };
 			});
 			return { id: newId(), type: 'tabs', children, currentTab: node.active, ...(dimension !== undefined ? { dimension } : {}) };
 		}
@@ -96,7 +98,7 @@ export function fromObsidianLayout(layout: unknown): { saved: SavedLayout; sideb
 			const tabs = leaves.map((leaf) => {
 				const file = leaf.state?.state?.file;
 				const mode = leaf.state?.state?.mode === 'preview' ? ('preview' as const) : ('source' as const);
-				return { file: typeof file === 'string' ? file : null, mode };
+				return { file: typeof file === 'string' ? file : null, mode, ...(leaf.pinned === true ? { pinned: true } : {}) };
 			});
 			const current = Math.min(Math.max(0, Number(node.currentTab) || 0), tabs.length - 1);
 			const holdsActive = active !== null && leaves.some((leaf) => leaf.id === active);

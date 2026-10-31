@@ -28,11 +28,15 @@ export interface Tab {
 	icon?: string;
 	/** When the tab was last current; closing the current tab goes back to the most recent other one. */
 	lastActive: number;
+	/** Pinned: links followed from it open in a new tab, and it is not closed by ⌘W or "Close others". */
+	pinned?: boolean;
 }
 
 export interface TabBarHost {
 	activate(tab: Tab): void;
 	close(tab: Tab): void;
+	/** The pin of a pinned tab was clicked. */
+	unpin?(tab: Tab): void;
 	newTab(): void;
 	/** The header's context menu. */
 	menu?(tab: Tab, event: MouseEvent): void;
@@ -124,15 +128,27 @@ export class TabBar {
 			const title = tab.file ? (tab.file.extension === 'md' ? tab.file.basename : tab.file.name) : (tab.title ?? 'New tab');
 			inner.createDiv({ cls: 'workspace-tab-header-inner-title', text: title });
 			header.setAttribute('aria-label', tab.file?.path ?? title);
-			const close = inner.createDiv({ cls: 'workspace-tab-header-inner-close-button', attr: { 'aria-label': 'Close' } });
-			setIcon(close, 'x');
-			close.addEventListener('click', (event) => {
-				event.stopPropagation();
-				this.host.close(tab);
-			});
+			if (tab.pinned) {
+				// A pin in place of the close button; clicking it unpins.
+				header.addClass('is-pinned');
+				const status = inner.createDiv('workspace-tab-header-status-container');
+				const pin = status.createDiv({ cls: 'workspace-tab-header-status-icon mod-pinned', attr: { 'aria-label': 'Unpin' } });
+				setIcon(pin, 'pin');
+				pin.addEventListener('click', (event) => {
+					event.stopPropagation();
+					this.host.unpin?.(tab);
+				});
+			} else {
+				const close = inner.createDiv({ cls: 'workspace-tab-header-inner-close-button', attr: { 'aria-label': 'Close' } });
+				setIcon(close, 'x');
+				close.addEventListener('click', (event) => {
+					event.stopPropagation();
+					this.host.close(tab);
+				});
+			}
 			header.addEventListener('mousedown', (event) => {
-				// Middle click closes, as in browsers and Obsidian.
-				if (event.button === 1) {
+				// Middle click closes, as in browsers and Obsidian (not pinned tabs).
+				if (event.button === 1 && !tab.pinned) {
 					event.preventDefault();
 					this.host.close(tab);
 				}

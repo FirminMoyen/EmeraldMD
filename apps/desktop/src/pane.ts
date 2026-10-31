@@ -38,7 +38,7 @@ const HISTORY_LIMIT = 50;
 
 /** A pane's tabs as they are saved: each tab's note and mode, and which one is current. */
 export interface SavedTabs {
-	tabs: { file: string | null; mode: MarkdownViewModeType }[];
+	tabs: { file: string | null; mode: MarkdownViewModeType; pinned?: boolean }[];
 	active: number;
 }
 
@@ -151,6 +151,10 @@ export class NotePane {
 	) {
 		const app = host.app;
 		this.leaf = leaf;
+		// A plugin pinning the leaf (`leaf.setPinned`) pins the current tab.
+		leaf.on('pinned-change', (pinned: boolean) => {
+			if (this.tab) this.setPinned(this.tab, pinned);
+		});
 		this.el = parts;
 		this.noFileText = parts.noFile.textContent ?? '';
 		this.editor = new MarkdownEditor({
@@ -220,6 +224,7 @@ export class NotePane {
 		this.tabBar = new TabBar({
 			activate: (tab) => this.activateTab(tab),
 			close: (tab) => this.closeTab(tab),
+			unpin: (tab) => this.setPinned(tab, false),
 			newTab: () => this.newTab(),
 			menu: (tab, event) => host.tabMenu(this, tab, event),
 			drop: (tab, from, index) => host.moveTab(tab, from, this, index),
@@ -359,7 +364,9 @@ export class NotePane {
 			this.host.notice(`${file.name}: there is no viewer for this kind of file.`);
 			return;
 		}
-		if (options.newTab) this.newTab();
+		// A pinned tab keeps its note: other notes open next to it.
+		const pinned = this.tab?.pinned && this.tab.file && this.tab.file !== file && !this.navigating;
+		if (options.newTab || pinned) this.newTab();
 		const tab = this.tab!;
 		const shown = this.leaf.view as { file?: unknown };
 		// Already open here: keep the cursor and undo history.
@@ -404,6 +411,17 @@ export class NotePane {
 	private setActiveTab(tab: Tab): void {
 		this.tabBar.active = tab;
 		tab.lastActive = this.host.nextTabClock();
+		// The leaf is the current tab, for plugins (`leaf.pinned`); set without its event.
+		this.leaf.pinned = Boolean(tab.pinned);
+		this.tabBar.render();
+		this.host.saveLayout();
+	}
+
+	/** Pins or unpins a tab. */
+	setPinned(tab: Tab, pinned: boolean): void {
+		if (Boolean(tab.pinned) === pinned) return;
+		tab.pinned = pinned || undefined;
+		if (tab === this.tab && this.leaf.pinned !== pinned) this.leaf.setPinned(pinned);
 		this.tabBar.render();
 		this.host.saveLayout();
 	}
@@ -674,7 +692,7 @@ export class NotePane {
 	serialize(): SavedTabs {
 		const bar = this.tabBar;
 		return {
-			tabs: bar.tabs.map((tab) => ({ file: tab.file?.path ?? null, mode: tab.mode })),
+			tabs: bar.tabs.map((tab) => ({ file: tab.file?.path ?? null, mode: tab.mode, ...(tab.pinned ? { pinned: true } : {}) })),
 			active: bar.active ? bar.tabs.indexOf(bar.active) : 0,
 		};
 	}
@@ -691,12 +709,13 @@ export class NotePane {
 		let active: Tab | null = null;
 		const entries: unknown[] = Array.isArray(data?.tabs) ? data.tabs : [];
 		for (const [i, entry] of entries.entries()) {
-			const { file: path, mode } = (entry ?? {}) as { file?: unknown; mode?: unknown };
+			const { file: path, mode, pinned } = (entry ?? {}) as { file?: unknown; mode?: unknown; pinned?: unknown };
 			const file = typeof path === 'string' ? vault.getFileByPath(path) : null;
 			// A note deleted or renamed outside the app since: its tab goes.
 			if (typeof path === 'string' && !file) continue;
 			const tab = emptyTab(mode === 'preview' ? 'preview' : 'source');
 			tab.file = file;
+			if (pinned === true) tab.pinned = true;
 			bar.tabs.push(tab);
 			if (i === data?.active) active = tab;
 		}

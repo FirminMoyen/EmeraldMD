@@ -35,6 +35,10 @@ end-to-end tests; the rest is in priority order within each section.
       scroll, reading/editing mode and back/forward history; ⌘T, ⌘W, ⇧⌘T,
       ⌃Tab, ⌘1–9, ⌘-click or middle click for a new tab; canvas and plugin
       views in tabs (`getLeaf('tab')`); open tabs restored with the vault
+- [x] Pinned tabs (tab menu, "Toggle pin", `leaf.setPinned`): a pin in
+      place of the close button; notes opened from a pinned tab open next to
+      it; ⌘W and "Close others" leave it; kept with the layout and in
+      Obsidian's `workspace.json` format
 - [x] Splits in the main area: split right or down (commands, tab menu,
       View menu, or by dropping a tab on a pane's edge), nested, resizable
       by dragging, each pane with its own tabs and editor; tabs dragged to

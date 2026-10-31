@@ -796,15 +796,22 @@ class EmeraldApp {
 			pane.activateTab(tab);
 			this.splitPane(pane, direction, { duplicate: true });
 		};
+		menu.addItem((item) =>
+			item
+				.setTitle(tab.pinned ? 'Unpin' : 'Pin')
+				.setIcon(tab.pinned ? 'pin-off' : 'pin')
+				.setSection('pin')
+				.onClick(() => pane.setPinned(tab, !tab.pinned)),
+		);
 		menu.addItem((item) => item.setTitle('Close').setIcon('x').setSection('close').onClick(() => pane.closeTab(tab)));
 		menu.addItem((item) =>
 			item
 				.setTitle('Close others')
 				.setIcon('x-circle')
 				.setSection('close')
-				.setDisabled(pane.tabBar.tabs.length < 2)
+				.setDisabled(!pane.tabBar.tabs.some((other) => other !== tab && !other.pinned))
 				.onClick(() => {
-					for (const other of [...pane.tabBar.tabs]) if (other !== tab) pane.closeTab(other);
+					for (const other of [...pane.tabBar.tabs]) if (other !== tab && !other.pinned) pane.closeTab(other);
 				}),
 		);
 		menu.addItem((item) => item.setTitle('Split right').setIcon('separator-vertical').setSection('split').onClick(() => split('vertical')));
@@ -870,8 +877,8 @@ class EmeraldApp {
 			checkCallback: (checking) => {
 				const pane = this.pane;
 				const tab = pane?.tab;
-				// The only tab of the only pane, already empty: nothing to close.
-				if (!pane || !tab || (isEmptyTab(tab) && pane.tabBar.tabs.length === 1 && this.panes().length === 1)) return false;
+				// The only tab of the only pane, already empty: nothing to close. Pinned tabs close from their menu.
+				if (!pane || !tab || tab.pinned || (isEmptyTab(tab) && pane.tabBar.tabs.length === 1 && this.panes().length === 1)) return false;
 				if (!checking) pane.closeTab(tab);
 				return true;
 			},
@@ -882,8 +889,20 @@ class EmeraldApp {
 			checkCallback: (checking) => {
 				const pane = this.pane;
 				const tab = pane?.tab;
-				if (!pane || !tab || pane.tabBar.tabs.length < 2) return false;
-				if (!checking) for (const other of [...pane.tabBar.tabs]) if (other !== tab) pane.closeTab(other);
+				const others = pane?.tabBar.tabs.filter((other) => other !== tab && !other.pinned) ?? [];
+				if (!pane || !tab || !others.length) return false;
+				if (!checking) for (const other of others) pane.closeTab(other);
+				return true;
+			},
+		});
+		add({
+			id: 'workspace:toggle-pin',
+			name: 'Toggle pin',
+			checkCallback: (checking) => {
+				const pane = this.pane;
+				const tab = pane?.tab;
+				if (!pane || !tab || isEmptyTab(tab)) return false;
+				if (!checking) pane.setPinned(tab, !tab.pinned);
 				return true;
 			},
 		});
