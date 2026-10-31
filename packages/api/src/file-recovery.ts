@@ -12,8 +12,10 @@
 
 import { TFile, type TAbstractFile } from '@emeraldmd/core';
 import type { App } from './app';
+import { Component } from './component';
 import { confirmAction } from './confirm';
 import { InternalPluginInstance } from './core-plugins';
+import { mediaKind, renderMedia } from './media';
 import { Modal } from './modal';
 import { moment } from './moment';
 import { Notice } from './notice';
@@ -24,6 +26,8 @@ export interface Snapshot {
 	/** Milliseconds since the epoch. */
 	time: number;
 	text: string;
+	/** The content of a version of an attachment (an image, a PDF…); `text` is then empty. */
+	bytes?: ArrayBuffer;
 }
 
 /** Where snapshots are kept. */
@@ -340,7 +344,7 @@ export class HistoryModal extends Modal {
 		snapshots.forEach((snapshot, i) => {
 			const item = this.listEl.createDiv({ cls: 'file-recovery-item', attr: { tabindex: '0' } });
 			item.createDiv({ cls: 'file-recovery-time', text: moment(snapshot.time).calendar() });
-			item.createDiv({ cls: 'file-recovery-size', text: `${snapshot.text.length} characters` });
+			item.createDiv({ cls: 'file-recovery-size', text: snapshot.bytes ? sizeText(snapshot.bytes.byteLength) : `${snapshot.text.length} characters` });
 			const select = () => {
 				for (const el of this.listEl.querySelectorAll('.file-recovery-item.is-selected')) el.removeClass('is-selected');
 				item.addClass('is-selected');
@@ -375,7 +379,53 @@ export class HistoryModal extends Modal {
 		}
 	}
 
+	/** What the previewed attachment's blob URL lives with. */
+	private preview = new Component();
+
+	override onClose(): void {
+		this.preview.unload();
+	}
+
+	/** A version of an attachment: a preview where there can be one, and Restore. */
+	private showAttachment(path: string, snapshot: Snapshot, bytes: ArrayBuffer): void {
+		const preview = this.previewEl;
+		preview.empty();
+		this.preview.unload();
+		this.preview = new Component();
+		this.preview.load();
+		const file = this.app.vault.getFileByPath(path);
+		const actions = preview.createDiv('file-recovery-actions');
+		const restore = actions.createEl('button', { cls: 'mod-cta', text: 'Restore' });
+		const content = preview.createDiv('file-recovery-content mod-attachment');
+		const extension = path.slice(path.lastIndexOf('.') + 1);
+		const kind = mediaKind(extension);
+		if (kind) {
+			const url = URL.createObjectURL(new Blob([bytes], { type: kind === 'pdf' ? 'application/pdf' : '' }));
+			this.preview.register(() => URL.revokeObjectURL(url));
+			renderMedia(content, kind, url, { alt: path });
+		} else {
+			content.createDiv({ cls: 'file-recovery-empty', text: `No preview for .${extension} files (${sizeText(bytes.byteLength)}).` });
+		}
+		restore.addEventListener('click', async () => {
+			const ok = await confirmAction(this.app, {
+				title: 'Restore this version?',
+				message: file ? `${path} goes back to this version. ${this.text.undo}` : `${path} was deleted; it is created again from this version.`,
+				confirm: 'Restore',
+			});
+			if (!ok) return;
+			try {
+				if (file) await this.app.vault.modifyBinary(file, bytes);
+				else await createWithFolders(this.app, path, bytes);
+				new Notice(`Restored ${path}.`);
+				this.close();
+			} catch (err) {
+				new Notice(`Could not restore ${path}: ${err}`);
+			}
+		});
+	}
+
 	private async showSnapshot(path: string, snapshot: Snapshot): Promise<void> {
+		if (snapshot.bytes) return this.showAttachment(path, snapshot, snapshot.bytes);
 		const preview = this.previewEl;
 		preview.empty();
 		const file = this.app.vault.getFileByPath(path);
@@ -428,12 +478,19 @@ function errorText(err: unknown): string {
 	return err instanceof Error ? err.message : String(err);
 }
 
-/** Creates `path` with `text`, and the folders it needs (a deleted file's folder may be gone too). */
-async function createWithFolders(app: App, path: string, text: string): Promise<void> {
+/** Creates `path` with `content`, and the folders it needs (a deleted file's folder may be gone too). */
+async function createWithFolders(app: App, path: string, content: string | ArrayBuffer): Promise<void> {
 	const parts = path.split('/').slice(0, -1);
 	for (let i = 1; i <= parts.length; i++) {
 		const folder = parts.slice(0, i).join('/');
 		if (!app.vault.getAbstractFileByPath(folder)) await app.vault.createFolder(folder);
 	}
-	await app.vault.create(path, text);
+	if (typeof content === 'string') await app.vault.create(path, content);
+	else await app.vault.createBinary(path, content);
+}
+
+function sizeText(bytes: number): string {
+	if (bytes < 1024) return `${bytes} bytes`;
+	if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+	return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 }

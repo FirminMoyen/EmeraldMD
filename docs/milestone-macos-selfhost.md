@@ -211,7 +211,8 @@ end-to-end tests; the rest is in priority order within each section.
       the vaults (`[history]`); in the app, "Server: Show version history"
       and "Server: Show deleted files" (online and synced vaults) show a
       version, the changes since, and restore it (checked against a local
-      server)
+      server); attachments (images, audio, video, PDFs, others) too, with a
+      preview
 - [x] Hardening: rate limits, request size limits, trusted-proxy client
       addresses, symlink-safe path handling
 - [x] Security review of the desktop app (docs/security-desktop.md: inert
