@@ -4658,3 +4658,11 @@ div.bases-group-heading {
 	justify-content: flex-end;
 	padding: 0 var(--size-4-2) var(--size-4-1);
 }
+
+/* File explorer: items selected with ⌥-click and ⇧-click */
+.nav-files-container .tree-item-self.is-selected,
+.nav-file-title.is-selected,
+.nav-folder-title.is-selected {
+	background: hsla(var(--interactive-accent-hsl), 0.15);
+	color: var(--text-normal);
+}

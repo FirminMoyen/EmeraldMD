@@ -11,6 +11,11 @@
  * `file-menu` workspace event. Items can be renamed in place and dragged onto
  * folders to move them; files dragged in from Finder are copied into the
  * folder they are dropped on; a file dragged into a note inserts a link.
+ *
+ * As in Obsidian, ⌥-click adds an item to the selection (or takes it out)
+ * and ⇧-click selects the items in between; the selection is moved by
+ * dragging it, and its menu (`files-menu` for plugins) moves or deletes it
+ * all at once.
  */
 
 import { FuzzySuggestModal, Keymap, Menu, setIcon, type App } from '@emeraldmd/api';
@@ -29,6 +34,8 @@ export interface FileExplorerHost {
 	newFolder(folder: TFolder): Promise<void>;
 	/** Moves to the vault's trash, after asking. */
 	trash(file: TAbstractFile): Promise<void>;
+	/** Moves several items to the vault's trash, after asking once. */
+	trashAll(files: TAbstractFile[]): Promise<void>;
 	/** Shows the item in Finder; absent for remote vaults. */
 	reveal?(file: TAbstractFile): Promise<void>;
 	notice(message: string): void;
@@ -48,7 +55,11 @@ export class FileExplorer {
 	/** Folders shown open; the others start closed, so large vaults draw only their top level. */
 	readonly expanded: Set<string>;
 	private renaming: TAbstractFile | null = null;
-	private dragged: TAbstractFile | null = null;
+	/** What is being dragged: one item, or the selection. */
+	private dragged: TAbstractFile[] | null = null;
+	/** Items selected with ⌥-click and ⇧-click; ⇧-click selects from `anchor`. */
+	private selected: TAbstractFile[] = [];
+	private anchor: TAbstractFile | null = null;
 	/** The title element of each drawn file, to move the highlight without redrawing. */
 	private readonly titles = new Map<string, HTMLElement>();
 	private activeTitle: HTMLElement | null = null;
@@ -73,6 +84,57 @@ export class FileExplorer {
 		this.activeTitle = null;
 		this.el.replaceChildren(this.renderChildren(this.app.vault.getRoot(), 0));
 		this.el.scrollTop = scroll;
+		this.markSelection();
+	}
+
+	/** The selected items, as they are now (deleted ones left out). */
+	getSelection(): TAbstractFile[] {
+		this.selected = this.selected.filter((file) => this.app.vault.getAbstractFileByPath(file.path) === file);
+		return [...this.selected];
+	}
+
+	private markSelection(): void {
+		const paths = new Set(this.getSelection().map((file) => file.path));
+		for (const title of this.el.querySelectorAll<HTMLElement>('.nav-file-title, .nav-folder-title')) title.toggleClass('is-selected', paths.has(title.dataset.path ?? ''));
+	}
+
+	private clearSelection(): void {
+		if (!this.selected.length) return;
+		this.selected = [];
+		this.markSelection();
+	}
+
+	/** ⌥-click toggles an item, ⇧-click selects a range; true when the click was for the selection. */
+	private select(event: MouseEvent, file: TAbstractFile): boolean {
+		if (event.altKey) {
+			// The first ⌥-click also keeps the open note, as the item already chosen.
+			if (!this.selected.length) {
+				const active = this.host.activeFile();
+				if (active && active !== file) this.selected.push(active);
+			}
+			const i = this.selected.indexOf(file);
+			if (i === -1) this.selected.push(file);
+			else this.selected.splice(i, 1);
+			this.anchor = file;
+			this.markSelection();
+			return true;
+		}
+		if (event.shiftKey) {
+			const titles = [...this.el.querySelectorAll<HTMLElement>('.nav-file-title, .nav-folder-title')].map((t) => t.dataset.path ?? '');
+			const from = titles.indexOf((this.anchor ?? this.host.activeFile() ?? file).path);
+			const to = titles.indexOf(file.path);
+			if (from === -1 || to === -1) return false;
+			const [a, b] = from < to ? [from, to] : [to, from];
+			this.selected = titles
+				.slice(a, b + 1)
+				.map((path) => this.app.vault.getAbstractFileByPath(path))
+				.filter((f): f is TAbstractFile => f !== null);
+			this.markSelection();
+			return true;
+		}
+		this.clearSelection();
+		this.anchor = file;
+		return false;
 	}
 
 	/** Moves the highlight to the open note without redrawing the tree. */
@@ -129,8 +191,8 @@ export class FileExplorer {
 		const indicator = title.createDiv('tree-item-icon collapse-icon nav-folder-collapse-indicator');
 		setIcon(indicator, 'chevron-down');
 		const content = title.createDiv({ cls: 'tree-item-inner nav-folder-title-content', text: folder.name });
-		title.addEventListener('click', () => {
-			if (this.renaming === folder) return;
+		title.addEventListener('click', (event) => {
+			if (this.renaming === folder || this.select(event, folder)) return;
 			this.setExpanded(folder, collapsed);
 			this.render();
 		});
@@ -153,7 +215,8 @@ export class FileExplorer {
 		const content = title.createDiv({ cls: 'tree-item-inner nav-file-title-content', text: file.extension === 'md' ? file.basename : file.name });
 		if (file.extension !== 'md') title.createDiv({ cls: 'nav-file-tag', text: file.extension });
 		title.addEventListener('click', (event) => {
-			if (this.renaming !== file) void this.host.openFile(file, Boolean(Keymap.isModEvent(event)));
+			if (this.renaming === file || this.select(event, file)) return;
+			void this.host.openFile(file, Boolean(Keymap.isModEvent(event)));
 		});
 		title.addEventListener('auxclick', (event) => {
 			if (event.button === 1 && this.renaming !== file) void this.host.openFile(file, true);
@@ -169,16 +232,22 @@ export class FileExplorer {
 		title.title = file.path;
 		title.addEventListener('contextmenu', (event) => {
 			event.stopPropagation();
-			this.showMenu(event, file);
+			const selection = this.getSelection();
+			if (selection.length > 1 && selection.includes(file)) this.showSelectionMenu(event, selection);
+			else this.showMenu(event, file);
 		});
 		title.addEventListener('dragstart', (event) => {
 			const transfer = event.dataTransfer;
 			if (!transfer) return;
-			this.dragged = file;
+			// A selected item drags the whole selection.
+			const selection = this.getSelection();
+			const items = selection.length > 1 && selection.includes(file) ? selection : [file];
+			this.dragged = items;
 			transfer.effectAllowed = 'copyMove';
-			transfer.setData(PATH_TYPE, file.path);
-			// Dropped into a note, a file becomes a link to it.
-			if (file instanceof TFile) transfer.setData('text/plain', this.app.fileManager.generateMarkdownLink(file, this.host.activeFile()?.path ?? ''));
+			transfer.setData(PATH_TYPE, items.map((f) => f.path).join('\n'));
+			// Dropped into a note, files become links to them.
+			const links = items.filter((f): f is TFile => f instanceof TFile).map((f) => this.app.fileManager.generateMarkdownLink(f, this.host.activeFile()?.path ?? ''));
+			if (links.length) transfer.setData('text/plain', links.join('\n'));
 			title.addClass('is-being-dragged');
 		});
 		title.addEventListener('dragend', () => {
@@ -226,12 +295,50 @@ export class FileExplorer {
 		menu.showAtMouseEvent(event);
 	}
 
+	/** The menu of a selection of several items: move or delete them all, and plugins' items (`files-menu`). */
+	private showSelectionMenu(event: MouseEvent, files: TAbstractFile[]): void {
+		event.preventDefault();
+		const menu = new Menu();
+		const movable = files.filter((f) => !(f instanceof TFolder && f.isRoot()));
+		menu.addItem((item) =>
+			item
+				.setTitle(`Move ${movable.length} items to…`)
+				.setIcon('folder-input')
+				.setSection('action')
+				.onClick(() =>
+					new FolderPicker(this.app, movable, (target) => {
+						void (async () => {
+							for (const file of movable) await this.move(file, target);
+							this.clearSelection();
+						})();
+					}).open(),
+				),
+		);
+		menu.addItem((item) =>
+			item
+				.setTitle('Copy paths')
+				.setIcon('copy')
+				.setSection('info')
+				.onClick(() => void navigator.clipboard.writeText(files.map((f) => f.path).join('\n')).catch((err: unknown) => this.host.notice(`Could not copy: ${err}`))),
+		);
+		menu.addItem((item) =>
+			item
+				.setTitle(`Delete ${movable.length} items`)
+				.setIcon('trash-2')
+				.setSection('danger')
+				.setWarning(true)
+				.onClick(() => void this.host.trashAll(movable).then(() => this.clearSelection())),
+		);
+		this.app.workspace.trigger('files-menu', menu, files, 'file-explorer-context-menu', this.app.workspace.getLeavesOfType('file-explorer')[0]);
+		menu.showAtMouseEvent(event);
+	}
+
 	/** Makes `el` accept dragged tree items (moved into the folder) and files from Finder (copied in). */
 	private dropTarget(el: HTMLElement, folder: () => TFolder): void {
 		const accepts = (event: DragEvent): boolean => {
 			const types = event.dataTransfer?.types ?? [];
 			if (types.includes('Files')) return true;
-			return types.includes(PATH_TYPE) && this.dragged !== null && this.canMove(this.dragged, folder());
+			return types.includes(PATH_TYPE) && this.dragged !== null && this.dragged.some((file) => this.canMove(file, folder()));
 		};
 		el.addEventListener('dragover', (event) => {
 			if (!accepts(event)) return;
@@ -252,7 +359,13 @@ export class FileExplorer {
 			const target = folder();
 			const files = [...(event.dataTransfer?.files ?? [])];
 			if (files.length) void this.importFiles(files, target);
-			else if (this.dragged) void this.move(this.dragged, target);
+			else if (this.dragged) {
+				const moving = this.dragged;
+				void (async () => {
+					for (const file of moving) await this.move(file, target);
+					if (moving.length > 1) this.clearSelection();
+				})();
+			}
 		});
 	}
 
@@ -350,19 +463,23 @@ export class FileExplorer {
 
 /** "Move to…": pick a folder by name. */
 class FolderPicker extends FuzzySuggestModal<TFolder> {
+	private readonly files: TAbstractFile[];
+
 	constructor(
 		app: App,
-		private readonly file: TAbstractFile,
+		file: TAbstractFile | TAbstractFile[],
 		private readonly choose: (folder: TFolder) => void,
 	) {
 		super(app);
-		this.setPlaceholder(`Move ${file.name} to…`);
+		this.files = Array.isArray(file) ? file : [file];
+		this.setPlaceholder(this.files.length === 1 ? `Move ${this.files[0]!.name} to…` : `Move ${this.files.length} items to…`);
 	}
 
+	/** Folders the items can go to: not inside a folder being moved, nor (for one item) its own folder. */
 	getItems(): TFolder[] {
 		return this.app.vault
 			.getAllFolders(true)
-			.filter((folder) => folder !== this.file.parent && !(this.file instanceof TFolder && isInside(folder, this.file)))
+			.filter((folder) => !(this.files.length === 1 && folder === this.files[0]!.parent) && !this.files.some((f) => f instanceof TFolder && isInside(folder, f)))
 			.sort((a, b) => collator.compare(a.path, b.path));
 	}
 

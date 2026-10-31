@@ -27,6 +27,8 @@ end-to-end tests; the rest is in priority order within each section.
       `audio`, `video` and `pdf` views; PDFs in the system's viewer) and
       embed in notes as images, players and PDF frames (`#page=`, `#height=`),
       in the reading view and Live Preview (checked in the app)
+- [x] Several items selected in the file tree (⌥-click, ⇧-click), dragged,
+      moved or deleted at once (one confirmation), `files-menu` for plugins
 - [x] File tree: drag-and-drop move, context menu (new note here, rename,
       move to, delete, reveal in Finder, copy path) extended by plugins
       (`file-menu`), rename in place; links are rewritten when notes move
